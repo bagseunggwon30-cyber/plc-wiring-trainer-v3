@@ -1,0 +1,12 @@
+node_modules/
+build/
+release/
+dist/
+coverage/
+output/
+.playwright-mcp/
+.worktrees/
+.superpowers/
+*.log
+*.tmp
+

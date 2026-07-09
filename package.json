@@ -1,0 +1,39 @@
+{
+  "name": "wiring-trainer",
+  "version": "1.0.0",
+  "description": "박승권의 결선 작업장 - PLC/HMI/인버터 결선 연습 데스크톱 앱",
+  "main": "main.js",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "electron .",
+    "build": "electron-builder --win portable --x64",
+    "build:installer": "electron-builder --win nsis --x64"
+  },
+  "author": "bark",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.bark.wiring-trainer",
+    "productName": "결선 작업장",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "icon.ico"
+    },
+    "portable": {
+      "artifactName": "결선작업장-${version}-portable.exe"
+    }
+  }
+}
