@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>박승권의 결선 작업장 v2.1 · 제어반 레일/배전</title>
+<title>박승권의 결선 작업장</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'">
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:'Segoe UI','Malgun Gothic',sans-serif;background:#1a1a1a;color:#ddd;font-size:13px}
@@ -255,8 +256,9 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
   font-family:Consolas,monospace;font-size:11px;color:#8f8;line-height:1.6
 }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/rbush@4.0.1/rbush.min.js"></script>
-<script src="safety-policy.js"></script>
+<script src="/vendor/rbush.min.js"></script>
+<script src="/safety-policy.js"></script>
+<script type="module" src="/src/renderer/main.ts"></script>
 </head>
 <body>
 <div id="calib-hint">
@@ -265,7 +267,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 </div>
 <header>
 <button id="t-left" title="좌측 패널 (L)">◧</button>
-<b>⚡ 결선 작업장 v2</b>
+<b>⚡ 결선 작업장 <span data-app-version></span></b>
 <span class="edu-badge" title="실제 장비 제어 기능 없음">교육용 시뮬레이터 · 실제 장비 제어 아님</span>
 
 <span class="hgroup">
@@ -373,7 +375,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <button id="b-clear">🗑</button>
 </span>
 
-<span style="margin-left:auto;color:#666;font-size:10px">v2.1 · <span id="counter">0</span> 부품 · <span id="wcounter">0</span> 와이어 · <span id="jcounter">0</span> 점퍼 · <span id="zoomlbl">100%</span> · <span id="boardlbl">제어반</span></span>
+<span style="margin-left:auto;color:#666;font-size:10px"><span data-app-version></span> · <span id="counter">0</span> 부품 · <span id="wcounter">0</span> 와이어 · <span id="jcounter">0</span> 점퍼 · <span id="zoomlbl">100%</span> · <span id="boardlbl">제어반</span></span>
 <button id="t-right" title="우측 패널 (R)">◨</button>
 </header>
 <aside id="palette"></aside>
@@ -8011,6 +8013,7 @@ function generateTrainerReport(){
       boardMode: S.boardMode,
       deviceCount: devices.length,
       wireCount: (S.wires||[]).length,
+      appVersion: window.APP_VERSION||'unknown',
       practice:'field-control-panel'
     },
     mission: goal ? {

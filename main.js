@@ -1,6 +1,7 @@
 // 결선 작업장 Electron 메인 프로세스
 const { app, BrowserWindow, Menu, dialog } = require('electron');
 const path = require('path');
+const { version } = require('./package.json');
 
 let mainWindow;
 
@@ -10,7 +11,7 @@ function createWindow() {
     height: 1000,
     minWidth: 1024,
     minHeight: 700,
-    title: '결선 작업장 v2',
+    title: `결선 작업장 v${version}`,
     backgroundColor: '#1a1a1a',
     webPreferences: {
       contextIsolation: true,
@@ -18,7 +19,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, 'build', 'renderer', 'index.html'));
 
   // 앱 메뉴
   const template = [
@@ -50,9 +51,9 @@ function createWindow() {
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: '결선 작업장 v2',
+              title: `결선 작업장 v${version}`,
               message: '박승권의 결선 작업장',
-              detail: 'PLC/HMI/인버터 결선 연습 도구\n\n• XBC-DR32H, SV-iG5A, XBF-AH04A, EXP2-700, MD02 등 실장비 단자 매뉴얼 기반\n• 자동 라우팅, 시뮬레이션, 미션 학습 지원\n\nv1.0.0',
+              detail: `PLC/HMI/인버터 결선 연습 도구\n\n• XBC-DR32H, SV-iG5A, XBF-AH04A, EXP2-700, MD02 등 실장비 단자 매뉴얼 기반\n• 자동 라우팅, 시뮬레이션, 미션 학습 지원\n\nv${version}`,
               buttons: ['확인']
             });
           }
