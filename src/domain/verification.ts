@@ -22,6 +22,7 @@ export async function canIssueVerifiedReport(
     if (
       !profile
       || instance.missingProfile
+      || instance.profileVersion !== profile.version
       || (!profile.boundary && (profile.evidence.level === 'educational' || instance.evidenceLevel === 'educational'))
     ) {
       return { eligible: false, status: 'BLOCKED', reason: `Profile ${instance.profileId} is not verified.` };

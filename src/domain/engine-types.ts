@@ -37,6 +37,7 @@ export interface CircuitGraph {
 export interface RuntimeState {
   contactStates?: Record<string, boolean>;
   forcedOutputs?: Record<string, string[]>;
+  poweredDevices?: string[];
 }
 
 export interface ContactRule {
@@ -71,6 +72,7 @@ export interface ValidationResult {
 }
 
 export interface SimulationResult {
+  scenarioId: string;
   status: VerificationStatus;
   converged: boolean;
   iterations: number;
@@ -85,4 +87,3 @@ export interface ReportEligibility {
   status: VerificationStatus | 'STALE';
   reason: string | null;
 }
-

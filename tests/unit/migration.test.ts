@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { migrateLegacyLocalStorage, migrateWorkshop } from '../../src/domain/migration';
+import { canonicalStringify, migrateLegacyLocalStorage, migrateWorkshop } from '../../src/domain/migration';
 import { WorkshopDocumentV2Schema } from '../../src/domain/schema';
 
 const legacy = {
@@ -16,6 +16,11 @@ const legacy = {
 };
 
 describe('legacy workshop migration', () => {
+  it('canonicalizes non-ASCII keys with locale-independent UTF-16 ordering', () => {
+    const value = { '😀': 5, 가: 4, é: 3, a: 2, Z: 1 };
+    expect(canonicalStringify(value)).toBe('{"Z":1,"a":2,"é":3,"가":4,"😀":5}');
+  });
+
   it('is deterministic, idempotent, non-destructive, and never auto-promotes profiles', async () => {
     const original = structuredClone(legacy);
     const first = await migrateWorkshop(legacy, { knownLegacyTypes: new Set(['XBC-DR32H']) });

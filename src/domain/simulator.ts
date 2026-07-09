@@ -6,7 +6,9 @@ import { sha256 } from './migration';
 import { validateWorkshop } from './validator';
 
 const stateSignature = (states: Record<string, boolean>): string =>
-  Object.entries(states).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value ? 1 : 0}`).join('|');
+  Object.entries(states)
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([key, value]) => `${key}:${value ? 1 : 0}`).join('|');
 
 function plcStates(
   document: WorkshopDocumentV2,
@@ -19,16 +21,19 @@ function plcStates(
   for (const instance of document.devices) {
     const profile = catalog[instance.profileId];
     if (profile?.behavior?.kind !== 'plc-relay') continue;
+    const powered = power.activeDevices.has(instance.id);
     const common = terminalPotentials(terminalKey(instance.id, 'COMI'), power);
     inputStates[instance.id] = {};
     for (const terminal of profile.terminals.filter((entry) => entry.role === 'input')) {
       const signal = terminalPotentials(terminalKey(instance.id, terminal.id), power);
-      inputStates[instance.id][terminal.id] =
-        (signal.has('+24V') && common.has('0V')) || (signal.has('0V') && common.has('+24V'));
+      inputStates[instance.id][terminal.id] = powered && (
+        (signal.has('+24V') && common.has('0V')) || (signal.has('0V') && common.has('+24V'))
+      );
     }
     outputStates[instance.id] = {};
     for (const terminal of profile.terminals.filter((entry) => entry.role === 'output')) {
-      outputStates[instance.id][terminal.id] = (scenario.forcedOutputs?.[instance.id] ?? []).includes(terminal.id);
+      outputStates[instance.id][terminal.id] = powered
+        && (scenario.forcedOutputs?.[instance.id] ?? []).includes(terminal.id);
     }
   }
   return { inputStates, outputStates };
@@ -55,14 +60,21 @@ export async function simulateScenario(
         documentHash: await sha256(document), checkedAt: new Date().toISOString(),
       };
       return {
-        status: 'BLOCKED', converged: false, iterations: iteration,
+        scenarioId: scenario.id, status: 'BLOCKED', converged: false, iterations: iteration,
         energizedTerminals: [...(lastPower?.energizedTerminals ?? [])].sort(),
         inputStates: {}, outputStates: {}, validation,
       };
     }
     seen.add(signature);
 
-    const graph = buildCircuitGraph(document, catalog, { contactStates: contacts, forcedOutputs: scenario.forcedOutputs });
+    const supplyGraph = buildCircuitGraph(document, catalog, { contactStates: contacts });
+    const supplyPower = resolvePower(document, catalog, supplyGraph);
+    const poweredDevices = [...supplyPower.activeDevices];
+    const graph = buildCircuitGraph(document, catalog, {
+      contactStates: contacts,
+      forcedOutputs: scenario.forcedOutputs,
+      poweredDevices,
+    });
     const power = resolvePower(document, catalog, graph);
     lastPower = power;
     const nextContacts = { ...contacts };
@@ -77,11 +89,12 @@ export async function simulateScenario(
 
     if (stateSignature(nextContacts) === signature) {
       const validation = await validateWorkshop(document, catalog, {
-        runtime: { contactStates: contacts, forcedOutputs: scenario.forcedOutputs },
+        runtime: { contactStates: contacts, forcedOutputs: scenario.forcedOutputs, poweredDevices },
         scenarioId: scenario.id,
       });
       const states = plcStates(document, catalog, power, scenario);
       return {
+        scenarioId: scenario.id,
         status: validation.status,
         converged: true,
         iterations: iteration,

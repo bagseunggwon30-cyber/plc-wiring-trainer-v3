@@ -75,6 +75,7 @@ describe('shared circuit graph and validation', () => {
   it('energizes MDR output only after valid L and N input are present', async () => {
     const devices = [device('ac', 'boundary:ac-supply'), device('psu', 'mean-well:mdr-100-24')];
     const off = await simulateScenario(workshop(devices, [wire('w1', 'ac', 'L1', 'psu', 'L')]), DEVICE_PROFILES, { id: 'off' });
+    expect(off.scenarioId).toBe('off');
     expect(off.energizedTerminals).not.toContain('psu:V+1');
 
     const on = await simulateScenario(
@@ -146,8 +147,11 @@ describe('PLC force and deterministic simulation', () => {
     ['sink', '+', 'COMI', '-', 'P00'],
   ])('recognizes XBC %s input wiring', async (_label, plus, plusTerm, minus, minusTerm) => {
     const doc = workshop(
-      [device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h')],
-      [wire('w1', 'dc', plus, 'plc', plusTerm), wire('w2', 'dc', minus, 'plc', minusTerm)],
+      [device('ac', 'boundary:ac-supply'), device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h')],
+      [
+        wire('w1', 'dc', plus, 'plc', plusTerm), wire('w2', 'dc', minus, 'plc', minusTerm),
+        wire('w3', 'ac', 'L1', 'plc', 'L'), wire('w4', 'ac', 'N', 'plc', 'N'),
+      ],
     );
     const result = await simulateScenario(doc, DEVICE_PROFILES, { id: 'input' });
     expect(result.inputStates.plc.P00).toBe(true);
@@ -155,8 +159,11 @@ describe('PLC force and deterministic simulation', () => {
 
   it('opens and closes an XBC relay output from forced output state', async () => {
     const doc = workshop(
-      [device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h'), device('load', 'boundary:load')],
-      [wire('w1', 'dc', '+', 'plc', 'COM0'), wire('w2', 'plc', 'P20', 'load', '+')],
+      [device('ac', 'boundary:ac-supply'), device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h'), device('load', 'boundary:load')],
+      [
+        wire('w1', 'dc', '+', 'plc', 'COM0'), wire('w2', 'plc', 'P20', 'load', '+'),
+        wire('w3', 'ac', 'L1', 'plc', 'L'), wire('w4', 'ac', 'N', 'plc', 'N'),
+      ],
     );
     const off = await simulateScenario(doc, DEVICE_PROFILES, { id: 'off' });
     expect(off.energizedTerminals).not.toContain('plc:P20');
@@ -165,10 +172,30 @@ describe('PLC force and deterministic simulation', () => {
     expect(on.outputStates.plc.P20).toBe(true);
   });
 
+  it('keeps XBC inputs and forced relay contacts inactive without PLC AC power', async () => {
+    const inputDoc = workshop(
+      [device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h')],
+      [wire('w1', 'dc', '+', 'plc', 'P00'), wire('w2', 'dc', '-', 'plc', 'COMI')],
+    );
+    const input = await simulateScenario(inputDoc, DEVICE_PROFILES, { id: 'unpowered-input' });
+    expect(input.inputStates.plc.P00).toBe(false);
+
+    const outputDoc = workshop(
+      [device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h'), device('load', 'boundary:load')],
+      [wire('w1', 'dc', '+', 'plc', 'COM0'), wire('w2', 'plc', 'P20', 'load', '+')],
+    );
+    const output = await simulateScenario(outputDoc, DEVICE_PROFILES, { id: 'unpowered-output', forcedOutputs: { plc: ['P20'] } });
+    expect(output.outputStates.plc.P20).toBe(false);
+    expect(output.energizedTerminals).not.toContain('plc:P20');
+  });
+
   it('validates the default state and every declared scenario state', async () => {
     const doc = workshop(
-      [device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h')],
-      [wire('w1', 'dc', '+', 'plc', 'COM0'), wire('w2', 'dc', '-', 'plc', 'P20')],
+      [device('ac', 'boundary:ac-supply'), device('dc', 'boundary:dc-supply'), device('plc', 'ls-electric:xbc-dr32h')],
+      [
+        wire('w1', 'dc', '+', 'plc', 'COM0'), wire('w2', 'dc', '-', 'plc', 'P20'),
+        wire('w3', 'ac', 'L1', 'plc', 'L'), wire('w4', 'ac', 'N', 'plc', 'N'),
+      ],
     );
     expect((await validateWorkshop(doc, DEVICE_PROFILES)).status).toBe('PASS');
 

@@ -34,6 +34,15 @@ function prewire(profileId = 'mean-well:mdr-100-24'): WorkshopDocumentV2 {
 }
 
 describe('verified report eligibility', () => {
+  it('blocks an empty prewire review scope', async () => {
+    const doc = prewire();
+    doc.devices = [];
+    const validation = await validateWorkshop(doc, DEVICE_PROFILES);
+    expect(validation.status).toBe('BLOCKED');
+    expect(validation.issues.map((issue) => issue.code)).toContain('EMPTY_REVIEW_SCOPE');
+    expect((await canIssueVerifiedReport(doc, validation, DEVICE_PROFILES)).eligible).toBe(false);
+  });
+
   it('passes only a fresh PASS result with eligible profiles', async () => {
     const doc = prewire();
     const validation = await validateWorkshop(doc, DEVICE_PROFILES);

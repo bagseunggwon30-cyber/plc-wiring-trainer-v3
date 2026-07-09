@@ -86,7 +86,7 @@ export function buildCircuitGraph(
           kind: 'dynamic-contact',
           from: terminalKey(instance.id, output.comGroup),
           to: terminalKey(instance.id, outputId),
-          active: true,
+          active: runtime.poweredDevices?.includes(instance.id) === true,
         });
       }
     }

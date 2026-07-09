@@ -18,6 +18,16 @@ export async function validateWorkshop(
   const power = resolvePower(document, catalog, graph);
   const issues: ValidationIssue[] = [...graph.issues, ...validateElectrical(graph, power)];
 
+  if (
+    document.mode === 'prewire'
+    && !document.devices.some((instance) => catalog[instance.profileId] && !catalog[instance.profileId].boundary)
+  ) {
+    issues.push({
+      code: 'EMPTY_REVIEW_SCOPE', severity: 'blocked', blocking: true,
+      message: 'Prewire review requires at least one installed equipment profile.', refs: [],
+    });
+  }
+
   for (const instance of document.devices) {
     const profile = catalog[instance.profileId];
     if (!profile || instance.missingProfile) continue;

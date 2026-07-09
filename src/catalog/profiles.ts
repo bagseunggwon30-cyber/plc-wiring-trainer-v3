@@ -154,12 +154,44 @@ const profiles: DeviceProfile[] = [
   {
     profileId: 'ls-electric:sv-ig5a', version: '0.1.0', manufacturer: 'LS ELECTRIC', model: 'SV-iG5A family',
     evidence: { level: 'educational', documents: [], note: 'Full order code and supply variant are not fixed.' },
-    boundary: false, includeInBom: true, terminals: [], internalLinks: [], behavior: { kind: 'vfd-practice' },
+    boundary: false, includeInBom: true,
+    terminals: [
+      terminal('24', '24', 'dc', '+24V', 'source'),
+      terminal('CM', 'CM', 'floating', 'floating', 'common', { comGroup: 'digital-input' }),
+      terminal('P1', 'P1 / FX', 'signal', 'signal', 'input', { channel: 'forward' }),
+      terminal('P2', 'P2 / RX', 'signal', 'signal', 'input', { channel: 'reverse' }),
+      terminal('S+', 'S+', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'A' }),
+      terminal('S-', 'S-', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'B' }),
+    ],
+    internalLinks: [], behavior: { kind: 'vfd-practice' },
   },
   {
     profileId: 'generic:xy-md02', version: '0.1.0', manufacturer: 'Unverified', model: 'XY-MD02',
     evidence: { level: 'educational', documents: [], note: 'No official manufacturer evidence is recorded.' },
-    boundary: false, includeInBom: true, terminals: [], internalLinks: [], behavior: { kind: 'modbus-practice' },
+    boundary: false, includeInBom: true,
+    terminals: [
+      terminal('V+', 'V+', 'dc', '+24V', 'supply-input'),
+      terminal('V-', 'V-', 'dc', '0V', 'supply-input'),
+      terminal('A+', 'A+', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'A' }),
+      terminal('B-', 'B-', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'B' }),
+    ],
+    internalLinks: [], behavior: { kind: 'modbus-practice' },
+  },
+  {
+    profileId: 'educational:terminal-block-10', version: '0.1.0', manufacturer: 'Generic', model: '10-position terminal block',
+    evidence: { level: 'educational', documents: [], note: 'Generic practice terminal block; exact product is not fixed.' },
+    boundary: false, includeInBom: true,
+    terminals: Array.from({ length: 10 }, (_, index) => {
+      const id = String(index + 1);
+      return [
+        terminal(id, id, 'floating', 'floating', 'common', { channel: id }),
+        terminal(`${id}'`, `${id}'`, 'floating', 'floating', 'common', { channel: id }),
+      ];
+    }).flat(),
+    internalLinks: Array.from({ length: 10 }, (_, index) => {
+      const id = String(index + 1);
+      return { from: id, to: `${id}'`, kind: 'conductive' as const };
+    }),
   },
   boundaryProfile('boundary:ac-supply', 'AC supply', [
     terminal('L1', 'L1', 'ac', 'L1', 'source', { phase: 'L1' }),
