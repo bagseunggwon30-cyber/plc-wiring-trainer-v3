@@ -71,8 +71,8 @@ const profiles: DeviceProfile[] = [
       terminal('RX', 'RX', 'communication', 'signal', 'communication', { protocol: 'RS232' }),
       terminal('TX', 'TX', 'communication', 'signal', 'communication', { protocol: 'RS232' }),
       terminal('SG', 'SG', 'communication', 'signal', 'common', { protocol: 'RS232' }),
-      terminal('485+', '485+', 'communication', 'signal', 'communication', { protocol: 'RS485' }),
-      terminal('485-', '485-', 'communication', 'signal', 'communication', { protocol: 'RS485' }),
+      terminal('485+', '485+', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'A' }),
+      terminal('485-', '485-', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'B' }),
     ],
     internalLinks: [],
     behavior: { kind: 'plc-relay', internal24VCurrentA: 0.4, inputComGroup: 'COMI', outputGroupSize: 4 },
@@ -163,6 +163,8 @@ const profiles: DeviceProfile[] = [
   },
   boundaryProfile('boundary:ac-supply', 'AC supply', [
     terminal('L1', 'L1', 'ac', 'L1', 'source', { phase: 'L1' }),
+    terminal('L2', 'L2', 'ac', 'L2', 'source', { phase: 'L2' }),
+    terminal('L3', 'L3', 'ac', 'L3', 'source', { phase: 'L3' }),
     terminal('N', 'N', 'ac', 'N', 'source', { phase: 'N' }),
     terminal('PE', 'PE', 'pe', 'PE', 'source'),
   ]),
@@ -179,11 +181,14 @@ const profiles: DeviceProfile[] = [
     terminal('-', '-', 'floating', 'floating', 'common'),
   ]),
   boundaryProfile('boundary:communication-peer', 'Communication peer', [
-    terminal('A', 'A/+', 'communication', 'signal', 'communication', { protocol: 'RS485' }),
-    terminal('B', 'B/-', 'communication', 'signal', 'communication', { protocol: 'RS485' }),
+    terminal('A', 'A/+', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'A' }),
+    terminal('B', 'B/-', 'communication', 'signal', 'communication', { protocol: 'RS485', channel: 'B' }),
     terminal('SG', 'SG', 'communication', 'signal', 'common'),
   ]),
 ];
+
+const dryContact = profiles.find((profile) => profile.profileId === 'boundary:dry-contact');
+if (dryContact) dryContact.internalLinks.push({ from: 'A', to: 'B', kind: 'dynamic-contact', stateKey: 'contact' });
 
 export const DEVICE_PROFILES: Readonly<Record<string, DeviceProfile>> = Object.freeze(
   Object.fromEntries(profiles.map((profile) => [profile.profileId, profile])),
@@ -192,4 +197,3 @@ export const DEVICE_PROFILES: Readonly<Record<string, DeviceProfile>> = Object.f
 export function verifiedProfiles(): DeviceProfile[] {
   return Object.values(DEVICE_PROFILES).filter((profile) => profile.evidence.level !== 'educational' && !profile.boundary);
 }
-
