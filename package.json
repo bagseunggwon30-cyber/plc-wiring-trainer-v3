@@ -12,8 +12,10 @@
     "verify": "npm run test && npm run typecheck && npm run build:renderer",
     "start": "npm run build:renderer && electron .",
     "test:e2e": "playwright test",
-    "build": "npm run verify && electron-builder --win portable --x64",
-    "build:installer": "npm run verify && electron-builder --win nsis --x64"
+    "test:performance": "vitest run tests/unit/performance-release-gate.test.ts",
+    "verify:release": "npm run verify && npm run test:e2e",
+    "build": "npm run verify:release && electron-builder --win portable --x64",
+    "build:installer": "npm run verify:release && electron-builder --win nsis --x64"
   },
   "author": "bark",
   "license": "MIT",
@@ -22,8 +24,8 @@
     "@playwright/test": "1.61.1",
     "@types/node": "26.1.1",
     "@types/rbush": "4.0.0",
-    "electron": "32.3.3",
-    "electron-builder": "25.1.8",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3",
     "typescript": "7.0.2",
     "vite": "8.1.4",
     "vitest": "4.1.10"

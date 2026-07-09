@@ -5,6 +5,7 @@ dist/
 coverage/
 output/
 .playwright-mcp/
+.playwright-cli/
 .worktrees/
 .superpowers/
 *.log

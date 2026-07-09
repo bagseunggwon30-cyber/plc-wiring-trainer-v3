@@ -1,9 +1,55 @@
 // 결선 작업장 Electron 메인 프로세스
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog, session } = require('electron');
 const path = require('path');
 const { version } = require('./package.json');
 
 let mainWindow;
+const networkAudit = { externalRequests: [], failedRequests: [] };
+globalThis.__WIRING_NETWORK_AUDIT__ = networkAudit;
+
+function installMainProcessNetworkAudit() {
+  if (process.env.WIRING_E2E_NETWORK_AUDIT !== '1') return;
+  const blocked = (url) => {
+    networkAudit.externalRequests.push(`main:${url}`);
+    throw new Error(`Offline policy blocked main-process network request: ${url}`);
+  };
+  const requestUrl = (protocol, input) => {
+    if (typeof input === 'string' || input instanceof URL) return String(input);
+    const host = input?.hostname || input?.host || 'unknown-host';
+    const port = input?.port ? `:${input.port}` : '';
+    return `${input?.protocol || protocol}//${host}${port}${input?.path || '/'}`;
+  };
+  for (const [name, protocol] of [['http', 'http:'], ['https', 'https:']]) {
+    const client = require(name);
+    for (const method of ['request', 'get']) {
+      const original = client[method];
+      client[method] = function auditedRequest(...args) {
+        blocked(requestUrl(protocol, args[0]));
+        return original.apply(this, args);
+      };
+    }
+  }
+  if (typeof globalThis.fetch === 'function') {
+    const originalFetch = globalThis.fetch.bind(globalThis);
+    globalThis.fetch = (...args) => {
+      blocked(String(args[0]));
+      return originalFetch(...args);
+    };
+  }
+}
+
+function installOfflineSessionPolicy() {
+  const networkFilter = { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] };
+  session.defaultSession.webRequest.onBeforeRequest(networkFilter, (details, callback) => {
+    networkAudit.externalRequests.push(`session:${details.url}`);
+    callback({ cancel: true });
+  });
+  session.defaultSession.webRequest.onErrorOccurred((details) => {
+    networkAudit.failedRequests.push(`session:${details.url} · ${details.error}`);
+  });
+}
+
+installMainProcessNetworkAudit();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -77,7 +123,10 @@ function createWindow() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  installOfflineSessionPolicy();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
