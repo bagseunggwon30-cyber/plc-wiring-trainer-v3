@@ -24,6 +24,7 @@
     "files": [
       "main.js",
       "index.html",
+      "safety-policy.js",
       "assets/**/*"
     ],
     "win": {

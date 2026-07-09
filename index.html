@@ -256,6 +256,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/rbush@4.0.1/rbush.min.js"></script>
+<script src="safety-policy.js"></script>
 </head>
 <body>
 <div id="calib-hint">
@@ -510,6 +511,17 @@ DIN 레일/도어에만 장비 배치<br>
 </div></div>
 </aside>
 <script>
+const {
+  PUBLIC_MISSION_IDS,
+  isPublishedMission,
+  captureLegacyState,
+  restoreLegacyState,
+} = window.LegacySafety;
+
+function hasBlockingIssues(issues=lastIssues){
+  return window.LegacySafety.hasBlockingIssues(issues);
+}
+
 /* ===================================================================
    부품 라이브러리 — 각 제조사 매뉴얼 기준 단자 배치
    pol(극성/타입): AC-L | AC-N | DC+ | DC- | PE | DI | DO | AI | AO | COMM | NEUTRAL | SW
@@ -8171,6 +8183,7 @@ function autoPlaceGoalDevices(types){
 function renderGoals(){
   const el=$('#goals'); el.innerHTML='';
   for(const g of GOALS){
+    if(!isPublishedMission(g.id))continue;
     const div=document.createElement('div');
     div.className='goal'+(S.goal===g.id?' active':'');
     let stepHtml='';
@@ -8204,7 +8217,7 @@ function renderGoals(){
       if(undoneCount>0){
         stepHtml+=`<button class="auto-wire-btn" data-goal="${g.id}" style="margin-top:6px;width:100%;padding:6px;background:#2a4060;color:#fff;border:1px solid #5a8;border-radius:3px;cursor:pointer;font-size:11px">🔧 남은 ${undoneCount}개 자동 결선</button>`;
       }
-      if(allDone)stepHtml+=`<div class="goal-step done" style="margin-top:4px"><b>🎉 미션 클리어!</b></div>`;
+      if(allDone && !hasBlockingIssues())stepHtml+=`<div class="goal-step done" style="margin-top:4px"><b>🎉 미션 클리어!</b></div>`;
     }
     div.innerHTML=`<h4>${g.title}</h4><div class="muted">${g.desc}</div>${stepHtml}`;
     div.addEventListener('click',e=>{
@@ -8254,8 +8267,18 @@ function getDiagnosisHint(iss){
 
 /* 미션 자동 결선 */
 function autoWireGoal(goalId){
+  if(!isPublishedMission(goalId)){
+    const reason='안전 검토 전 미션은 자동 결선을 사용할 수 없습니다.';
+    status(`⚠ ${reason}`);
+    return {ok:false,added:0,reason};
+  }
   const goal=GOALS.find(g=>g.id===goalId);
-  if(!goal)return;
+  if(!goal){
+    const reason='미션을 찾을 수 없습니다.';
+    status(`⚠ ${reason}`);
+    return {ok:false,added:0,reason};
+  }
+  const transactionSnapshot=captureLegacyState(S);
   snapshot();
   let added=0;
   for(const c of goal.checks){
@@ -8290,7 +8313,15 @@ function autoWireGoal(goalId){
     added++;
   }
   render();
+  if((lastIssues||[]).some(issue=>issue.category==='danger')){
+    restoreLegacyState(S,transactionSnapshot);
+    render();
+    const reason='자동 결선이 위험 오류를 만들어 변경을 취소했습니다.';
+    status(`⚠ ${reason}`);
+    return {ok:false,added:0,reason};
+  }
   status(`🔧 자동 결선 완료: ${added}개 와이어 추가됨`);
+  return {ok:true,added,reason:null};
 }
 
 /* ===================================================================
