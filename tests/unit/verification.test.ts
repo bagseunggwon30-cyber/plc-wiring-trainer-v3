@@ -43,14 +43,14 @@ describe('verified report eligibility', () => {
     expect((await canIssueVerifiedReport(doc, validation, DEVICE_PROFILES)).eligible).toBe(false);
   });
 
-  it('passes only a fresh PASS result with eligible profiles', async () => {
+  it('never promotes a legacy v2 PASS result to a verified prewire report', async () => {
     const doc = prewire();
     const validation = await validateWorkshop(doc, DEVICE_PROFILES);
     expect(validation.status).toBe('PASS');
     expect(await canIssueVerifiedReport(doc, validation, DEVICE_PROFILES)).toEqual({
-      eligible: true,
-      status: 'PASS',
-      reason: null,
+      eligible: false,
+      status: 'BLOCKED',
+      reason: 'Legacy v2 validation is diagnostic-only; rerun the review with the v3 closed-loop engine.',
     });
   });
 

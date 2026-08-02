@@ -59,3 +59,71 @@ test('calibration and workshop save/load helpers exist', () => {
   assert.match(html, /id="m-calib-save"/);
   assert.match(html, /id="m-calib-load"/);
 });
+
+test('XBC input overlay exposes only the 24 manual terminals and marks the fabricated spare screw unused', () => {
+  assert.match(html, /id:'P0F',x:468\.9,y:86[^\n]*hit:\{x:468\.9,y:86,r:14\}/);
+  assert.match(html, /id:'24V',x:584\.5,y:86/);
+  assert.match(html, /id:'24G',x:584\.5,y:140/);
+  assert.match(html, /id:'PE',x:182\.5,y:466[^\n]*hit:\{x:182\.5,y:466,r:14\}/);
+  assert.match(html, /disabledTerminalSpots:\[\s*\{x:506\.4,y:86,label:'미사용'/);
+  assert.match(html, /\{x:545\.9,y:86,label:'미사용'/);
+  assert.match(html, /\{x:193,y:141,label:'미사용'/);
+  assert.match(html, /imageLabelCorrections:\[\s*\{x:121,y:164,label:'485\+'/);
+  assert.doesNotMatch(html, /id:'24G-TOP'/);
+  assert.doesNotMatch(html, /id:'PE2'/);
+  assert.match(html, /const REVIEW_PROFILE_TERMINAL_TYPES=new Set\(\['XBC-DR32H','XBF-AH04A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2\.5','UT-2\.5-PE','UT-4-HESI'\]\)/);
+  assert.match(html, /fuseLinkOrderCode/);
+  assert.match(html, /LIB\[type\]\.assetId&&LIB\[type\]\.geometryHash/);
+  assert.match(html, /function geometryOnlyCalibrationEntry\(type,entry\)/);
+});
+
+test('image rendering preserves an explicit device aspect ratio without replacing its asset', () => {
+  assert.match(html, /imagePreserveAspectRatio:'xMidYMid meet'/);
+  assert.match(html, /def\.imagePreserveAspectRatio\|\|'none'/);
+  assert.match(html, /image:CODEX\+'md02-imagen-v2\.png'/);
+  assert.match(html, /terminals:row\(\['B-','A\+','V-','V\+'\], 299, 82\.7, 137\.9/);
+});
+
+test('typed terminal semantics drive COM, NC, and analog return wiring guidance', () => {
+  assert.match(html, /applyTerminalSemantics\(/);
+  assert.match(html, /terminalCompatibilityAssessor/);
+  assert.match(html, /polarity==='configurable'/);
+  assert.match(html, /\{id:'I0-',[\s\S]*?pol:'AI'/);
+  assert.match(html, /\{id:'O0-',[\s\S]*?pol:'AO'/);
+});
+
+test('visible practice power, loads, solenoid and terminal blocks receive typed profile identities', () => {
+  assert.match(html, /'PSU24':'educational:dc24-source-box'/);
+  assert.match(html, /'LAMP-G':'educational:dc24-load'/);
+  assert.match(html, /'BUZZER':'educational:dc24-load'/);
+  assert.match(html, /'SOL-Y':'educational:dc24-solenoid'/);
+  assert.match(html, /'TB4':'educational:terminal-block-4'/);
+  assert.match(html, /'TB10':'educational:terminal-block-10'/);
+  assert.match(html, /Object\.assign\(LIB\['PSU24'\],[\s\S]*?\{id:'L',[^\n]*pol:'AC-L'/);
+  assert.match(html, /Object\.assign\(LIB\['PSU24'\],[\s\S]*?\{id:'N',[^\n]*pol:'AC-N'/);
+});
+
+test('exact manual-backed additions use separate Imagen assets and preserve legacy device skins', () => {
+  assert.match(html, /'MC-22B-DC24':\{[\s\S]*?orderCode:'MC-22b \/ DC24 \/ 1a1b'/);
+  assert.match(html, /image:CODEX_EXACT\+'mc-22b-dc24-imagen-v2\.png'/);
+  assert.match(html, /'EOCR3DE-05DUH':\{[\s\S]*?orderCode:'EOCR3DE-05DUH'/);
+  assert.match(html, /\{id:'A1',x:56,y:246[^\n]*pol:'AC-L'/);
+  assert.match(html, /\{id:'A2',x:84,y:246[^\n]*pol:'AC-N'/);
+  assert.match(html, /'UT-2\.5':\{[\s\S]*?orderCode:'3044076'/);
+  assert.match(html, /'UT-2\.5-PE':\{[\s\S]*?orderCode:'3044092'/);
+  assert.match(html, /'UT-4-HESI':\{[\s\S]*?orderCode:'3046032'/);
+  assert.match(html, /image:IMG\+'trimmed\/mc-22b-trim\.png'/);
+  assert.match(html, /image:IMG\+'trimmed\/eocr-trim\.png'/);
+});
+
+test('MY2N-D2 keeps its existing skin but uses the official diode polarity and a/b contact state', () => {
+  assert.match(html, /'MY2N':\{[\s\S]*?orderCode:'MY2N-D2 DC24V'/);
+  assert.match(html, /\{id:'13'[^\n]*label:'13 \(- \/ 0V\)'[^\n]*pol:'DC-'/);
+  assert.match(html, /\{id:'14'[^\n]*label:'14 \(\+24V\)'[^\n]*pol:'DC\+'/);
+  assert.match(html, /\{from:'9',to:'1',normally:'closed',stateKey:'pole-1'\}/);
+  assert.match(html, /\{from:'9',to:'5',normally:'open',stateKey:'pole-1'\}/);
+  assert.match(html, /coil:\['14','13'\]/);
+  assert.match(html, /image:FLAT\+'my2n-flat\.png'/);
+  assert.match(html, /assetId:'existing:my2n-flat-v1'/);
+  assert.doesNotMatch(html, /코일:\s*13\(\+\),\s*14\(-\)/);
+});

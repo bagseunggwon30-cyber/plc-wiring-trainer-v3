@@ -54,6 +54,18 @@ describe('legacy workshop migration', () => {
     }
   });
 
+  it('accepts old cleared routes as null and canonicalizes them to an omitted waypoint list', async () => {
+    const withClearedRoute = structuredClone(legacy) as typeof legacy & {
+      w: Array<(typeof legacy.w)[number] & { waypoints?: null }>;
+    };
+    withClearedRoute.w[0].waypoints = null;
+
+    const result = await migrateWorkshop(withClearedRoute);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.document.wires[0].waypoints).toBeUndefined();
+  });
+
   it('copies v1 localStorage to v2 without deleting or rewriting the source', async () => {
     const values = new Map<string, string>([['wiring-workshop-v2', JSON.stringify(legacy)]]);
     const storage = {

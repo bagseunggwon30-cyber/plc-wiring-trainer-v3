@@ -1,0 +1,24 @@
+{
+  "assetId": "educational:xy-md02:imagen-v2:front",
+  "model": "XY-MD02",
+  "view": "front",
+  "path": "assets/devices/codex/md02-imagen-v2.png",
+  "sha256": "6f88bb3a9b2c4e9beb2e42a08e93bc37dcb4452e03521661e7fc2e103fb0544d",
+  "pixelDimensions": {
+    "width": 1024,
+    "height": 1536
+  },
+  "physicalDimensionsMm": {
+    "width": 46,
+    "height": 65,
+    "depth": 28.5
+  },
+  "prompt": "Front orthographic XY-MD02-style sensor skin, white vented enclosure, red mounting tab, four-position green screw terminal, no terminal-function text, flat magenta chroma-key background.",
+  "generatedAt": "2026-07-22T01:52:30.6522265+09:00",
+  "approval": {
+    "status": "pending"
+  },
+  "reviewNote": "Educational-only generic device; manufacturer provenance and bench geometry verification are not complete.",
+  "geometryHash": "7fc1d698595d8f566fe7451c27356138e769b013d49e632cadd2b49e50714345",
+  "terminalOrderFrontLeftToRight": ["B-", "A+", "V-", "V+"]
+}

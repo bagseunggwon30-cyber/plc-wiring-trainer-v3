@@ -1,9 +1,22 @@
 // 결선 작업장 Electron 메인 프로세스
-const { app, BrowserWindow, Menu, dialog, session } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, session } = require('electron');
+const { writeFile } = require('fs/promises');
 const path = require('path');
 const { version } = require('./package.json');
+const { XgSimSessionService } = require('./src/main/xgsim-session-service');
 
 let mainWindow;
+const SAVE_REVIEW_PDF_CHANNEL = 'review-report:save-pdf';
+const XGSIM_CHANNELS = Object.freeze({
+  probe: 'xgsim:probe',
+  connect: 'xgsim:connect',
+  readSnapshot: 'xgsim:read-snapshot',
+  writeInputImage: 'xgsim:write-input-image',
+  getStatus: 'xgsim:get-status',
+  disconnect: 'xgsim:disconnect',
+});
+let xgSimService;
+let xgSimShutdownStarted = false;
 const networkAudit = { externalRequests: [], failedRequests: [] };
 globalThis.__WIRING_NETWORK_AUDIT__ = networkAudit;
 
@@ -62,6 +75,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -99,7 +113,7 @@ function createWindow() {
               type: 'info',
               title: `결선 작업장 v${version}`,
               message: '박승권의 결선 작업장',
-              detail: `PLC/HMI/인버터 결선 연습 도구\n\n• XBC-DR32H, SV-iG5A, XBF-AH04A, EXP2-700, MD02 등 실장비 단자 매뉴얼 기반\n• 자동 라우팅, 시뮬레이션, 미션 학습 지원\n\nv${version}`,
+              detail: `PLC 제어반 결선 연습·사전 검토 도구\n\n• 전원과 귀로가 모두 완성된 폐회로 판정\n• 연습과 검토에 동일한 v3 회로 엔진 사용\n• 검토 통과는 입력된 범위의 사전 결선 검토이며 통전 승인이 아님\n\nv${version}`,
               buttons: ['확인']
             });
           }
@@ -123,9 +137,65 @@ function createWindow() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+function installReviewReportPdfHandler() {
+  ipcMain.handle(SAVE_REVIEW_PDF_CHANNEL, async (event, request) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('Untrusted PDF export sender.');
+    const html = typeof request?.html === 'string' ? request.html : '';
+    if (!html.startsWith('<!doctype html>') || html.length > 5_000_000) throw new Error('Invalid review report HTML.');
+    const requestedName = typeof request?.filename === 'string' ? request.filename : 'prewire-review.pdf';
+    const filename = requestedName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\.+$/g, '').slice(0, 120) || 'prewire-review.pdf';
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '사전 결선 검토 PDF 저장',
+      defaultPath: path.join(app.getPath('documents'), filename.endsWith('.pdf') ? filename : `${filename}.pdf`),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled || !result.filePath) return { saved: false };
+
+    const reportWindow = new BrowserWindow({
+      show: false,
+      parent: mainWindow,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, javascript: false },
+    });
+    reportWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    try {
+      await reportWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      const pdf = await reportWindow.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });
+      await writeFile(result.filePath, pdf);
+      return { saved: true, filePath: result.filePath };
+    } finally {
+      if (!reportWindow.isDestroyed()) reportWindow.destroy();
+    }
+  });
+}
+
+function installXgSimRuntimeHandlers() {
+  const hostPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'native', 'xgsim-host', 'xgsim-host-x86.exe')
+    : path.join(__dirname, 'native', 'xgsim-host', 'bin', 'Release', 'xgsim-host-x86.exe');
+  xgSimService = new XgSimSessionService({ hostPath });
+  const trusted = (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('Untrusted XG-SIM IPC sender.');
+  };
+  ipcMain.handle(XGSIM_CHANNELS.probe, async (event, payload) => { trusted(event); return xgSimService.probe(payload); });
+  ipcMain.handle(XGSIM_CHANNELS.connect, async (event, payload) => { trusted(event); return xgSimService.connect(payload); });
+  ipcMain.handle(XGSIM_CHANNELS.readSnapshot, async (event) => { trusted(event); return xgSimService.readSnapshot(); });
+  ipcMain.handle(XGSIM_CHANNELS.writeInputImage, async (event, payload) => { trusted(event); return xgSimService.writeInputImage(payload); });
+  ipcMain.handle(XGSIM_CHANNELS.getStatus, async (event) => { trusted(event); return xgSimService.getStatus(); });
+  ipcMain.handle(XGSIM_CHANNELS.disconnect, async (event) => { trusted(event); return xgSimService.disconnect(); });
+}
+
 app.whenReady().then(() => {
   installOfflineSessionPolicy();
+  installReviewReportPdfHandler();
+  installXgSimRuntimeHandlers();
   createWindow();
+});
+
+app.on('before-quit', (event) => {
+  if (!xgSimService || xgSimShutdownStarted) return;
+  event.preventDefault();
+  xgSimShutdownStarted = true;
+  void xgSimService.close().finally(() => app.quit());
 });
 
 app.on('window-all-closed', () => {

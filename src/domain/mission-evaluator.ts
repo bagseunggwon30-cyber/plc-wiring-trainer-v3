@@ -1,6 +1,7 @@
 import { resolvePower } from './electrical';
 import type { SimulationResult, ValidationIssue, ValidationResult } from './engine-types';
 import { buildCircuitGraph, terminalKey } from './graph';
+import { effectiveTerminalProtocol } from './terminal-configuration';
 import {
   prepareMissionEvaluation,
   type MissionConnectionSet,
@@ -65,6 +66,8 @@ const VALIDATOR_FORBIDDEN_CODES = new Set([
   'PARALLEL_SOURCE',
   'UNKNOWN_FORCED_OUTPUT',
   'ANALOG_MODE_MISMATCH',
+  'CURRENT_LOOP_POLARITY_REVERSED',
+  'CURRENT_LOOP_RETURN_PATH_OPEN',
   'RS485_POLARITY_MISMATCH',
 ]);
 
@@ -243,8 +246,10 @@ function expectedProtocol(
   const deviceId = bindings[state.target.role];
   const instance = document.devices.find((device) => device.id === deviceId);
   const terminal = instance && catalog[instance.profileId]?.terminals.find((entry) => entry.id === state.target.terminalId);
-  if (!terminal?.protocol) return null;
-  return terminal.protocol === 'RS485' && terminal.channel ? `RS485-${terminal.channel}` : terminal.protocol;
+  if (!instance || !terminal) return null;
+  const protocol = effectiveTerminalProtocol(document, instance, terminal);
+  if (!protocol) return null;
+  return protocol === 'RS485' && terminal.channel ? `RS485-${terminal.channel}` : protocol;
 }
 
 function operatingModeMatches(

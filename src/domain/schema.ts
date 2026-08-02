@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const EvidenceLevelSchema = z.enum(['educational', 'manual-verified', 'bench-verified']);
-export const VerificationStatusSchema = z.enum(['PASS', 'FAIL', 'BLOCKED']);
+export const VerificationStatusSchema = z.enum(['PASS', 'FAIL', 'BLOCKED', 'STALE']);
 
 export const EvidenceDocumentSchema = z.object({
   documentId: z.string().min(1),
@@ -27,14 +27,52 @@ export const TerminalSpecSchema = z.object({
     'communication',
     'not-connected',
   ]),
-  phase: z.enum(['L1', 'L2', 'L3', 'N']).optional(),
+  polarity: z.enum([
+    'line',
+    'neutral',
+    'positive',
+    'return',
+    'protective-earth',
+    'configurable',
+    'nonpolar',
+    'signal-positive',
+    'signal-return',
+    'data-positive',
+    'data-negative',
+    'reference',
+    'none',
+  ]),
+  commonType: z.enum([
+    'configurable-dc',
+    'dc-control-common',
+    'dc-output-common',
+    'dry-contact',
+    'analog-reference',
+    'communication-reference',
+    'power-pass-through',
+    'fused-power',
+  ]).optional(),
+  phase: z.enum(['L1', 'L2', 'L3', 'N', 'U', 'V', 'W']).optional(),
   comGroup: z.string().optional(),
   channel: z.string().optional(),
   protocol: z.enum(['RS232', 'RS485', 'analog-voltage', 'analog-current']).optional(),
+  outputMode: z.enum(['relay', 'sinking-transistor', 'sourcing-transistor']).optional(),
+  inputLogicMode: z.enum(['configurable', 'npn-internal-24v', 'pnp-external-24v']).optional(),
+  inputActivationPotential: z.enum(['+24V', '0V']).optional(),
   ratedVoltage: z
     .object({ min: z.number(), max: z.number(), unit: z.enum(['VAC', 'VDC']) })
     .refine((range) => range.max >= range.min, 'rated voltage max must be >= min')
     .optional(),
+  maxConductors: z.number().int().positive().optional(),
+  conductorRangeMm2: z
+    .object({ min: z.number().positive(), max: z.number().positive() })
+    .refine((range) => range.max >= range.min, 'conductor range max must be >= min')
+    .optional(),
+  tighteningTorqueNm: z
+    .object({ min: z.number().positive(), max: z.number().positive() })
+    .refine((range) => range.max >= range.min, 'tightening torque max must be >= min')
+    .optional(),
+  strippingLengthMm: z.number().positive().optional(),
 });
 
 export const DeviceProfileSchema = z.object({
@@ -59,6 +97,7 @@ export const DeviceProfileSchema = z.object({
       to: z.string().min(1),
       kind: z.enum(['conductive', 'dynamic-contact']),
       stateKey: z.string().optional(),
+      normally: z.enum(['open', 'closed']).optional(),
     }),
   ),
   behavior: z.record(z.string(), z.unknown()).optional(),
@@ -99,7 +138,9 @@ export const WorkshopDocumentV2Schema = z
         color: z.string().optional(),
         tag: z.string().optional(),
         gauge: z.string().optional(),
-        waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
+        waypoints: z.array(z.object({ x: z.number(), y: z.number() }))
+          .nullish()
+          .transform((value) => value ?? undefined),
       }),
     ),
     jumpers: z.array(
@@ -110,4 +151,3 @@ export const WorkshopDocumentV2Schema = z
     extensions: z.object({ legacy: z.record(z.string(), z.unknown()) }),
   })
   .passthrough();
-

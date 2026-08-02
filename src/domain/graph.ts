@@ -1,10 +1,27 @@
 import type { DeviceProfile, WorkshopDocumentV2 } from './types';
 import type { CircuitEdge, CircuitGraph, CircuitNode, RuntimeState, ValidationIssue } from './engine-types';
+import { assessTerminalCompatibility } from './terminal-semantics';
+import { effectiveTerminalSpec } from './terminal-configuration';
 
 export const terminalKey = (deviceId: string, terminalId: string): string => `${deviceId}:${terminalId}`;
 
 function blockedIssue(code: string, message: string, refs: string[]): ValidationIssue {
   return { code, severity: 'blocked', blocking: true, message, refs };
+}
+
+function terminalIssue(
+  code: string,
+  message: string,
+  refs: string[],
+  risk: 'function' | 'safety' = 'function',
+): ValidationIssue {
+  return {
+    code,
+    severity: risk === 'safety' ? 'danger' : 'function',
+    blocking: true,
+    message,
+    refs,
+  };
 }
 
 export function buildCircuitGraph(
@@ -24,7 +41,13 @@ export function buildCircuitGraph(
     }
     for (const terminal of profile.terminals) {
       const key = terminalKey(instance.id, terminal.id);
-      nodes.set(key, { key, deviceId: instance.id, terminalId: terminal.id, terminal, profile });
+      nodes.set(key, {
+        key,
+        deviceId: instance.id,
+        terminalId: terminal.id,
+        terminal: effectiveTerminalSpec(document, instance, terminal),
+        profile,
+      });
     }
   }
 
@@ -38,11 +61,26 @@ export function buildCircuitGraph(
   };
 
   for (const wire of document.wires) {
+    const fromKey = terminalKey(wire.from.deviceId, wire.from.terminalId);
+    const toKey = terminalKey(wire.to.deviceId, wire.to.terminalId);
+    const fromNode = nodes.get(fromKey);
+    const toNode = nodes.get(toKey);
+    if (fromNode && toNode) {
+      const assessment = assessTerminalCompatibility(fromNode.terminal, toNode.terminal);
+      if (!assessment.compatible) {
+        issues.push(terminalIssue(
+          assessment.code,
+          assessment.message,
+          [wire.id, fromKey, toKey],
+          assessment.risk,
+        ));
+      }
+    }
     addEdge({
       id: wire.id,
       kind: 'wire',
-      from: terminalKey(wire.from.deviceId, wire.from.terminalId),
-      to: terminalKey(wire.to.deviceId, wire.to.terminalId),
+      from: fromKey,
+      to: toKey,
       active: true,
     });
   }
@@ -70,7 +108,8 @@ export function buildCircuitGraph(
         kind: link.kind === 'conductive' ? 'internal' : 'dynamic-contact',
         from: terminalKey(instance.id, link.from),
         to: terminalKey(instance.id, link.to),
-        active: link.kind === 'conductive' || runtime.contactStates?.[stateKey] === true,
+        active: link.kind === 'conductive'
+          || (runtime.contactStates?.[stateKey] ?? link.normally === 'closed'),
       });
     }
 

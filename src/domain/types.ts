@@ -1,8 +1,31 @@
 export type EvidenceLevel = 'educational' | 'manual-verified' | 'bench-verified';
-export type VerificationStatus = 'PASS' | 'FAIL' | 'BLOCKED';
+export type VerificationStatus = 'PASS' | 'FAIL' | 'BLOCKED' | 'STALE';
 export type WorkshopMode = 'practice' | 'prewire';
 export type ElectricalDomain = 'ac' | 'dc' | 'pe' | 'signal' | 'communication' | 'floating';
 export type ElectricalPotential = 'L1' | 'L2' | 'L3' | 'N' | '+24V' | '0V' | 'PE' | 'floating' | 'signal';
+export type TerminalPolarity =
+  | 'line'
+  | 'neutral'
+  | 'positive'
+  | 'return'
+  | 'protective-earth'
+  | 'configurable'
+  | 'nonpolar'
+  | 'signal-positive'
+  | 'signal-return'
+  | 'data-positive'
+  | 'data-negative'
+  | 'reference'
+  | 'none';
+export type TerminalCommonType =
+  | 'configurable-dc'
+  | 'dc-control-common'
+  | 'dc-output-common'
+  | 'dry-contact'
+  | 'analog-reference'
+  | 'communication-reference'
+  | 'power-pass-through'
+  | 'fused-power';
 export type TerminalRole =
   | 'source'
   | 'supply-input'
@@ -13,6 +36,10 @@ export type TerminalRole =
   | 'dry-contact'
   | 'communication'
   | 'not-connected';
+export type DigitalInputLogicMode =
+  | 'configurable'
+  | 'npn-internal-24v'
+  | 'pnp-external-24v';
 
 export interface EvidenceDocument {
   documentId: string;
@@ -42,11 +69,25 @@ export interface TerminalSpec {
   domain: ElectricalDomain;
   potential: ElectricalPotential;
   role: TerminalRole;
-  phase?: 'L1' | 'L2' | 'L3' | 'N';
+  polarity: TerminalPolarity;
+  commonType?: TerminalCommonType;
+  phase?: 'L1' | 'L2' | 'L3' | 'N' | 'U' | 'V' | 'W';
   comGroup?: string;
   channel?: string;
   protocol?: 'RS232' | 'RS485' | 'analog-voltage' | 'analog-current';
+  outputMode?: 'relay' | 'sinking-transistor' | 'sourcing-transistor';
+  /**
+   * Physical selector-dependent input circuit. `inputActivationPotential`
+   * records the voltage that must reach this terminal after the selector is
+   * resolved; it is not inferred from a DI label.
+   */
+  inputLogicMode?: DigitalInputLogicMode;
+  inputActivationPotential?: '+24V' | '0V';
   ratedVoltage?: RatedVoltageRange;
+  maxConductors?: number;
+  conductorRangeMm2?: { min: number; max: number };
+  tighteningTorqueNm?: { min: number; max: number };
+  strippingLengthMm?: number;
 }
 
 export interface InternalLinkSpec {
@@ -54,6 +95,7 @@ export interface InternalLinkSpec {
   to: string;
   kind: 'conductive' | 'dynamic-contact';
   stateKey?: string;
+  normally?: 'open' | 'closed';
 }
 
 export interface DeviceProfile {
@@ -136,4 +178,3 @@ export type MigrationResult =
 export type ProfileOverride =
   | { kind: 'geometry'; terminalId: string; anchor: { x: number; y: number }; hitRadius: number }
   | { kind: 'terminal-add' | 'terminal-delete' | 'terminal-id' | 'electrical' | 'internal-link' };
-

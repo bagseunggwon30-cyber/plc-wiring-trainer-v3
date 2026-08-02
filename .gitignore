@@ -4,10 +4,17 @@ release/
 dist/
 coverage/
 output/
+tmp/
 .playwright-mcp/
 .playwright-cli/
 .worktrees/
 .superpowers/
 *.log
 *.tmp
+native/**/bin/
+native/**/obj/
+tools/**/bin/
+tools/**/obj/
+# Rejected Imagen draft: existing XBC device art remains the runtime asset.
+assets/devices/codex/xbc-dr32h-imagen-v3.png
 

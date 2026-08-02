@@ -107,8 +107,12 @@ describe('review report generation', () => {
     const { reportHash, ...reportPayload } = first;
     expect(reportHash).toMatch(/^[a-f0-9]{64}$/);
     expect(reportHash).toBe(await sha256(reportPayload));
-    expect(first.classification).toBe('VERIFIED');
-    expect(first.eligibility).toEqual({ eligible: true, status: 'PASS', reason: null });
+    expect(first.classification).toBe('LEGACY_DIAGNOSTIC');
+    expect(first.eligibility).toEqual({
+      eligible: false,
+      status: 'BLOCKED',
+      reason: 'Legacy v2 validation is diagnostic-only; rerun the review with the v3 closed-loop engine.',
+    });
     expect(first.document).toMatchObject({
       schemaVersion: 2,
       mode: 'prewire',
@@ -197,7 +201,7 @@ describe('review report generation', () => {
 
     const report: ReviewReport = await generateReviewReport(doc, value, DEVICE_PROFILES);
 
-    expect(report.classification).toBe('DIAGNOSTIC');
+    expect(report.classification).toBe('LEGACY_DIAGNOSTIC');
     expect(report.eligibility.eligible).toBe(false);
     expect(report.pinToPin).toBeDefined();
     expect(report.profileVersions).toBeDefined();

@@ -64,6 +64,25 @@ describe('legacy renderer to WorkshopDocument v2 adapter', () => {
     ]);
   });
 
+  it('normalizes cleared legacy wire routes instead of blocking v3 validation after layout edits', async () => {
+    const document = await adaptLegacyState({
+      devices: {
+        source: { type: 'BOUNDARY-DC', __v2ProfileId: 'boundary:dc-supply' },
+        load: { type: 'BOUNDARY-LOAD', __v2ProfileId: 'boundary:load' },
+      },
+      wires: [{
+        id: 'w1',
+        from: { dev: 'source', term: '+' },
+        to: { dev: 'load', term: '+' },
+        waypoints: null,
+      }],
+      jumpers: [],
+      revision: 3,
+    }, 'prewire', DEVICE_PROFILES);
+
+    expect(document.wires[0].waypoints).toBeUndefined();
+  });
+
   it('preserves jumpers, settings, layout, and opaque legacy fields', async () => {
     const document = await adaptLegacyState({
       devices: { psu: { type: 'MDR-100', x: 1, y: 2, locked: true } },

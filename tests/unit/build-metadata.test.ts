@@ -3,10 +3,10 @@ import { buildMetadata } from '../../src/renderer/build-metadata';
 
 describe('buildMetadata', () => {
   it('uses the package version for every renderer surface', () => {
-    expect(buildMetadata('2.2.0')).toEqual({
-      version: '2.2.0',
-      displayVersion: 'v2.2.0',
-      title: '박승권의 결선 작업장 v2.2.0',
+    expect(buildMetadata('3.0.0')).toEqual({
+      version: '3.0.0',
+      displayVersion: 'v3.0.0',
+      title: '박승권의 결선 작업장 v3.0.0',
     });
   });
 
@@ -14,4 +14,3 @@ describe('buildMetadata', () => {
     expect(() => buildMetadata('')).toThrow('App version is required');
   });
 });
-

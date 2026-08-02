@@ -1,5 +1,8 @@
 import { _electron as electron, expect, test as base } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export interface ElectronHarness {
   app: ElectronApplication;
@@ -9,6 +12,7 @@ export interface ElectronHarness {
   failedRequests: string[];
   consoleErrors: string[];
   pageErrors: string[];
+  userDataDir: string;
 }
 
 interface Fixtures {
@@ -29,16 +33,24 @@ function isExternalRequest(url: string): boolean {
 export const test = base.extend<Fixtures>({
   harness: async ({}, use) => {
     const executablePath = require('electron') as string;
+    // Never point release-gate automation at the production Electron profile.
+    // The suite intentionally clears localStorage to get deterministic tests.
+    const userDataDir = await mkdtemp(join(tmpdir(), 'wiring-trainer-e2e-'));
     const app = await electron.launch({
       executablePath,
-      args: ['.'],
+      args: [`--user-data-dir=${userDataDir}`, '.'],
       cwd: process.cwd(),
       env: {
         ...process.env,
         ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
         WIRING_E2E_NETWORK_AUDIT: '1',
       },
-      timeout: 30_000,
+      // A cold Electron start on Windows can spend more than 30 seconds in
+      // antivirus/code-signature inspection even after both debugger sockets
+      // are listening. Keep the isolated-profile launch bounded, but allow the
+      // application handshake to finish instead of turning that host delay
+      // into an unrelated release-gate failure.
+      timeout: 60_000,
     });
 
     const page = await app.firstWindow({ timeout: 10_000 });
@@ -81,9 +93,10 @@ export const test = base.extend<Fixtures>({
     ).__WIRING_NETWORK_AUDIT__ ?? null);
 
     try {
-      await use({ app, page, readMainNetworkAudit, externalRequests, failedRequests, consoleErrors, pageErrors });
+      await use({ app, page, readMainNetworkAudit, externalRequests, failedRequests, consoleErrors, pageErrors, userDataDir });
     } finally {
       await app.close().catch(() => undefined);
+      await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
     }
   },
 });

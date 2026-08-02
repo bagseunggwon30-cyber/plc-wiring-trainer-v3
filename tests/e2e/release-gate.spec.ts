@@ -7,8 +7,19 @@ const VERIFIED_PREWIRE_TYPES = [
   'BOUNDARY-CONTACT',
   'BOUNDARY-DC',
   'BOUNDARY-LOAD',
+  'BOUNDARY-ANALOG-I',
+  'BOUNDARY-ANALOG-I-IN',
+  'BOUNDARY-ANALOG-V',
+  'BOUNDARY-ANALOG-V-IN',
+  'BOUNDARY-2W-I',
   'BOUNDARY-RS485',
+  'EOCR3DE-05DUH',
+  'MC-22B-DC24',
   'MDR-100',
+  'MY2N',
+  'UT-2.5',
+  'UT-2.5-PE',
+  'UT-4-HESI',
   'XBC-DR32H',
   'XBF-AH04A',
 ].sort();
@@ -94,17 +105,136 @@ function mdrReferenceDocument() {
     ],
     jumpers: [],
     layout: {},
+    settings: {},
+    extensions: { legacy: { nextId: 100 } },
+  };
+}
+
+function relayReferenceDocument() {
+  const device = (
+    id: string,
+    profileId: string,
+    profileVersion: string,
+    evidenceLevel: 'manual-verified' | 'bench-verified',
+    x: number,
+  ) => ({
+    id, profileId, profileVersion, evidenceLevel, missingProfile: false, x, y: 320, rotation: 0, configuration: {},
+  });
+  return {
+    schemaVersion: 2 as const,
+    mode: 'prewire' as const,
+    revision: 21,
+    name: 'Electron E2E · relay OFF/ON',
+    source: { kind: 'native-v2' as const, hash: '1'.repeat(64) },
+    devices: [
+      device('ac-relay', 'boundary:ac-supply', '1.0.0', 'bench-verified', 240),
+      device('dc-relay', 'boundary:dc-supply', '1.0.0', 'bench-verified', 520),
+      device('plc-relay', 'ls-electric:xbc-dr32h', '1.0.0', 'manual-verified', 840),
+      device('load-relay', 'boundary:load', '1.0.0', 'bench-verified', 1300),
+    ],
+    wires: [
+      { id: 'relay-l', from: { deviceId: 'ac-relay', terminalId: 'L1' }, to: { deviceId: 'plc-relay', terminalId: 'L' } },
+      { id: 'relay-n', from: { deviceId: 'ac-relay', terminalId: 'N' }, to: { deviceId: 'plc-relay', terminalId: 'N' } },
+      { id: 'relay-pe', from: { deviceId: 'ac-relay', terminalId: 'PE' }, to: { deviceId: 'plc-relay', terminalId: 'PE' } },
+      { id: 'relay-com', from: { deviceId: 'dc-relay', terminalId: '+' }, to: { deviceId: 'plc-relay', terminalId: 'COM0' } },
+      { id: 'relay-output', from: { deviceId: 'plc-relay', terminalId: 'P20' }, to: { deviceId: 'load-relay', terminalId: '+' } },
+      { id: 'relay-return', from: { deviceId: 'load-relay', terminalId: '-' }, to: { deviceId: 'dc-relay', terminalId: '-' } },
+    ],
+    jumpers: [], layout: {},
     settings: {
-      missionId: 'mdr-ac-dc-distribution',
-      roleBindings: { acSupply: 'ac-e2e', powerSupply: 'mdr-e2e', dcLoad: 'load-e2e' },
+      missionId: 'xbc-forced-relay-output',
+      roleBindings: { acSupply: 'ac-relay', dcSupply: 'dc-relay', plc: 'plc-relay', load: 'load-relay' },
     },
     extensions: { legacy: { nextId: 100 } },
   };
 }
 
+function plusOnlyLoadDocument() {
+  return {
+    schemaVersion: 2 as const,
+    mode: 'prewire' as const,
+    revision: 31,
+    name: 'Electron E2E · +24V only load',
+    source: { kind: 'native-v2' as const, hash: '2'.repeat(64) },
+    devices: [
+      { id: 'dc-open', profileId: 'boundary:dc-supply', profileVersion: '1.0.0', evidenceLevel: 'bench-verified' as const, missingProfile: false, x: 300, y: 320, rotation: 0, configuration: {} },
+      { id: 'load-open', profileId: 'boundary:load', profileVersion: '1.0.0', evidenceLevel: 'bench-verified' as const, missingProfile: false, x: 820, y: 320, rotation: 0, configuration: {} },
+    ],
+    wires: [{ id: 'positive-only', from: { deviceId: 'dc-open', terminalId: '+' }, to: { deviceId: 'load-open', terminalId: '+' } }],
+    jumpers: [], layout: {}, settings: {}, extensions: { legacy: { nextId: 100 } },
+  };
+}
+
+function xbcMd02VisualDocument() {
+  return {
+    schemaVersion: 2 as const,
+    mode: 'practice' as const,
+    revision: 41,
+    name: 'Electron E2E · XBC terminal and MD02 geometry',
+    source: { kind: 'native-v2' as const, hash: '3'.repeat(64) },
+    devices: [
+      { id: 'plc-visual', profileId: 'ls-electric:xbc-dr32h', profileVersion: '1.0.0', evidenceLevel: 'manual-verified' as const, missingProfile: false, x: 260, y: 220, rotation: 0, configuration: {} },
+      { id: 'md02-visual', profileId: 'generic:xy-md02', profileVersion: '1.0.0', evidenceLevel: 'educational' as const, missingProfile: false, x: 1120, y: 380, rotation: 0, configuration: {} },
+    ],
+    wires: [], jumpers: [], layout: {}, settings: {}, extensions: { legacy: { nextId: 100 } },
+  };
+}
+
+async function applyDocument(page: Page, documentV2: unknown): Promise<void> {
+  await page.evaluate((document) => {
+    const target = window as unknown as {
+      LegacyTrainerBridge: { applyDocumentV2(value: unknown): void };
+      WorkshopV2Controller: { renderMissions(): void };
+    };
+    target.LegacyTrainerBridge.applyDocumentV2(document);
+    target.WorkshopV2Controller.renderMissions();
+  }, documentV2);
+  await expect(page.locator('#v3-workflow-panel')).toBeVisible();
+}
+
+async function completeVisibleV3Workflow(page: Page, orderCode?: string): Promise<void> {
+  await page.getByRole('combobox', { name: '공급 SourceSystem 선택' }).selectOption('ac-1ph-220v');
+  await page.getByRole('combobox', { name: 'PE 및 0V 정책 선택' }).selectOption('PE_SEPARATE_0V_FLOATING');
+  await page.getByRole('spinbutton', { name: '밀리미터당 캔버스 단위' }).fill('2');
+  await page.getByRole('combobox', { name: '검토 범위 템플릿 선택' }).selectOption('control-panel-prewire');
+  await page.getByRole('spinbutton', { name: '예상 단락전류 A' }).fill('1500');
+  await page.getByRole('textbox', { name: '보호기기 차단곡선' }).fill('C16');
+  for (const checkbox of await page.getByRole('checkbox', { name: /검토 범위 포함/ }).all()) {
+    if (!(await checkbox.isChecked())) {
+      await checkbox.scrollIntoViewIfNeeded();
+      await checkbox.check();
+    }
+  }
+  if (orderCode) {
+    const candidates = page.locator('input[aria-label$="전체 주문코드"]');
+    for (let index = 0; index < await candidates.count(); index += 1) {
+      const candidate = candidates.nth(index);
+      const label = await candidate.getAttribute('aria-label');
+      if (label?.includes(orderCode.startsWith('XBC') ? 'XBC' : 'MDR')) await candidate.fill(orderCode);
+    }
+    const designations = page.locator('input[aria-label$="설비 명칭"]');
+    for (let index = 0; index < await designations.count(); index += 1) {
+      const candidate = designations.nth(index);
+      const label = await candidate.getAttribute('aria-label');
+      if (label?.includes(orderCode.startsWith('XBC') ? 'XBC' : 'MDR')) await candidate.fill(orderCode.startsWith('XBC') ? 'PLC1' : 'PS1');
+    }
+  }
+  const wireNumbers = page.locator('input[aria-label$="선번"]');
+  for (let index = 0; index < await wireNumbers.count(); index += 1) await wireNumbers.nth(index).fill(`W-${index + 1}`);
+  const gauges = page.locator('input[aria-label$="mm²/AWG"]');
+  for (let index = 0; index < await gauges.count(); index += 1) await gauges.nth(index).fill('0.75 mm²');
+  await page.keyboard.press('Tab');
+}
+
 async function bridgeState(page: Page): Promise<{
   devices: Record<string, { type: string; x: number; y: number }>;
-  wires: Array<{ from: { dev: string; term: string }; to: { dev: string; term: string } }>;
+  revision: number;
+  wires: Array<{
+    id: string;
+    from: { dev: string; term: string };
+    to: { dev: string; term: string };
+    waypoints?: Array<{ x: number; y: number }>;
+  }>;
 }> {
   return page.evaluate(() => {
     const bridge = (window as unknown as {
@@ -112,7 +242,13 @@ async function bridgeState(page: Page): Promise<{
     }).LegacyTrainerBridge;
     return bridge.readState() as {
       devices: Record<string, { type: string; x: number; y: number }>;
-      wires: Array<{ from: { dev: string; term: string }; to: { dev: string; term: string } }>;
+      revision: number;
+      wires: Array<{
+        id: string;
+        from: { dev: string; term: string };
+        to: { dev: string; term: string };
+        waypoints?: Array<{ x: number; y: number }>;
+      }>;
     };
   });
 }
@@ -127,6 +263,28 @@ async function clickSvgTerminal(page: Page, deviceId: string, terminalId: string
   // intentionally keys the terminal by data-id/data-term and bubbles to #canvas.
   await terminal.dispatchEvent('mousedown', { button: 0, clientX: 10, clientY: 10 });
   await terminal.dispatchEvent('mouseup', { button: 0, clientX: 10, clientY: 10 });
+}
+
+async function pointerClickSvgTerminal(page: Page, deviceId: string, terminalId: string): Promise<void> {
+  const terminal = page.locator(
+    `#g-terminals .terminal-hit[data-id="${deviceId}"][data-term="${terminalId}"]`,
+  );
+  await expect(terminal).toHaveCount(1);
+  await terminal.scrollIntoViewIfNeeded();
+  const box = await terminal.boundingBox();
+  expect(box, `${deviceId}.${terminalId} must be visible for real-pointer wiring`).not.toBeNull();
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+}
+
+async function pointerClickSvgDeviceBody(page: Page, deviceId: string, addToSelection = false): Promise<void> {
+  const body = page.locator(`#g-devices > .device[data-id="${deviceId}"] .device-body`);
+  await expect(body).toHaveCount(1);
+  await body.scrollIntoViewIfNeeded();
+  const box = await body.boundingBox();
+  expect(box, `${deviceId} body must be visible for real-pointer selection`).not.toBeNull();
+  if (addToSelection) await page.keyboard.down('Control');
+  await page.mouse.click(box!.x + Math.min(12, box!.width / 2), box!.y + Math.min(12, box!.height / 2));
+  if (addToSelection) await page.keyboard.up('Control');
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -167,10 +325,12 @@ test('offline policy blocks main-process and session network before transmission
   expect(pageErrors).toEqual([]);
 });
 
-test('startup keyboard flow separates practice and verified prewire modes', async ({ harness }) => {
-  const { page, readMainNetworkAudit, externalRequests, failedRequests, consoleErrors, pageErrors } = harness;
+test('startup keyboard flow separates practice and prewire review modes', async ({ harness }) => {
+  const { app, page, readMainNetworkAudit, externalRequests, failedRequests, consoleErrors, pageErrors, userDataDir } = harness;
 
   await expect(page).toHaveURL(/^file:\/\/\//);
+  const activeUserDataDir = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
+  expect(activeUserDataDir.toLocaleLowerCase()).toBe(userDataDir.toLocaleLowerCase());
   const dialog = page.locator('#workshop-mode-selector');
   await expect(dialog).toHaveAttribute('role', 'dialog');
   await expect(dialog).toHaveAttribute('aria-modal', 'true');
@@ -244,12 +404,100 @@ test('startup keyboard flow separates practice and verified prewire modes', asyn
   expect(pageErrors).toEqual([]);
 });
 
-test('Electron UI places and wires devices, then validates, simulates, restores and reports a reference circuit', async ({ harness }) => {
+test('startup automatically restores the saved workshop and fits every device on screen', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  const saved = mdrReferenceDocument();
+  saved.layout = {
+    boardMode: 'free',
+    cabinet: { x: 50, y: 50, w: 3900, h: 1800, label: 'legacy cabinet' },
+    panelConfig: { rows: 3, cols: 1, door: true },
+  };
+  await page.evaluate(({ key, value }) => {
+    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('plc-wiring-trainer:workshop-mode', value.mode);
+  }, { key: WORKSHOP_V2_KEY, value: saved });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#workshop-mode-selector')).toHaveCount(0);
+  await expect(page.locator('body')).toHaveAttribute('data-workshop-mode', 'prewire');
+  await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(3);
+  await expect.poll(async () => (await bridgeState(page)).wires.length).toBe(5);
+  await expect(page.locator('#stat')).toContainText(/자동 복원|복원 완료/);
+  // The empty-workspace bootstrap also schedules a two-frame fit. Wait beyond
+  // that point so it cannot overwrite the restored document's device fit.
+  await page.waitForTimeout(250);
+  expect(Number((await page.locator('#zoomlbl').textContent())?.replace('%', ''))).toBeGreaterThanOrEqual(60);
+  for (const device of saved.devices) {
+    const rendered = page.locator(`#g-devices > .device[data-id="${device.id}"]`);
+    await expect(rendered).toBeVisible();
+    const box = await rendered.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeGreaterThan(0);
+    expect(box!.x).toBeLessThan(await page.evaluate(() => innerWidth));
+    expect(box!.y + box!.height).toBeGreaterThan(0);
+    expect(box!.y).toBeLessThan(await page.evaluate(() => innerHeight));
+  }
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('XBC terminal overlay keeps 24V above 24G, disables the spare screw, and preserves MD02 aspect ratio', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'practice');
+  await applyDocument(page, xbcMd02VisualDocument());
+
+  const xbcTerminals = page.locator('#g-terminals .terminal-hit[data-id="plc-visual"]');
+  await expect(xbcTerminals).toHaveCount(48);
+  await expect(page.locator('#g-terminals [data-id="plc-visual"][data-term="24G-TOP"]')).toHaveCount(0);
+  await expect(page.locator('#g-terminals [data-id="plc-visual"][data-term="PE2"]')).toHaveCount(0);
+  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .disabled-terminal-mark')).toHaveCount(4);
+  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .disabled-terminal-label')).toHaveText([
+    '미사용', '미사용', '미사용', '미사용',
+  ]);
+  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .image-label-correction')).toHaveText(['485+', '485-']);
+
+  const positions = await page.locator('#g-terminals .terminal-hit[data-id="plc-visual"]').evaluateAll((items) =>
+    Object.fromEntries(items.map((item) => [
+      (item as SVGCircleElement).dataset.term,
+      { x: Number(item.getAttribute('cx')), y: Number(item.getAttribute('cy')), r: Number(item.getAttribute('r')) },
+    ])),
+  );
+  expect(positions['24V']).toMatchObject({ x: 584.5, y: 86 });
+  expect(positions['24G']).toMatchObject({ x: 584.5, y: 140 });
+  expect(positions['P0F'].r).toBeGreaterThanOrEqual(14);
+  expect(positions.PE.r).toBeGreaterThanOrEqual(14);
+
+  await pointerClickSvgTerminal(page, 'plc-visual', 'P0F');
+  await expect(page.locator('#stat')).toContainText('끝 단자');
+  await pointerClickSvgTerminal(page, 'plc-visual', 'P0F');
+  await pointerClickSvgTerminal(page, 'plc-visual', 'PE');
+  await expect(page.locator('#stat')).toContainText('끝 단자');
+  await pointerClickSvgTerminal(page, 'plc-visual', 'PE');
+
+  const md02Image = page.locator('#g-devices .device[data-id="md02-visual"] .device-image');
+  await expect(md02Image).toHaveAttribute('href', 'assets/devices/codex/md02-imagen-v2.png');
+  await expect(md02Image).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const md02Box = await md02Image.boundingBox();
+  expect(md02Box).not.toBeNull();
+  expect(md02Box!.width / md02Box!.height).toBeCloseTo(220 / 330, 2);
+  const md02Terminals = await page.locator('#g-terminals .terminal-hit[data-id="md02-visual"]').evaluateAll((items) =>
+    items.map((item) => ({ id: (item as SVGCircleElement).dataset.term, x: Number(item.getAttribute('cx')) })),
+  );
+  expect(md02Terminals).toEqual([
+    { id: 'B-', x: 82.7 }, { id: 'A+', x: 101.1 }, { id: 'V-', x: 119.5 }, { id: 'V+', x: 137.9 },
+  ]);
+
+  await page.screenshot({ path: 'output/xbc-md02-terminal-fix.png', fullPage: true });
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('Electron UI keeps a prewire reference fail-closed through validate, restore, and report export', async ({ harness }) => {
   const { page, readMainNetworkAudit, externalRequests, failedRequests, consoleErrors, pageErrors } = harness;
   await chooseMode(page, 'prewire');
 
   // Exercise the real SVG editor before deterministic seeding: palette placement
-  // followed by two terminal clicks must produce a physical wire.
+  // followed by explicit wire mode and two terminal clicks must produce a physical wire.
   await page.locator('#palette .pal[data-type="BOUNDARY-AC"]').click();
   await page.locator('#palette .pal[data-type="MDR-100"]').click();
   const placed = await bridgeState(page);
@@ -257,37 +505,48 @@ test('Electron UI places and wires devices, then validates, simulates, restores 
   const mdrId = Object.entries(placed.devices).find(([, entry]) => entry.type === 'MDR-100')?.[0];
   expect(acId).toBeTruthy();
   expect(mdrId).toBeTruthy();
+  await page.locator('#m-wire').click();
   await clickSvgTerminal(page, acId!, 'L1');
   await clickSvgTerminal(page, mdrId!, 'L');
   await expect.poll(async () => (await bridgeState(page)).wires.length).toBe(1);
 
   const reference = mdrReferenceDocument();
-  await page.evaluate((documentV2) => {
-    const target = window as unknown as {
-      LegacyTrainerBridge: { applyDocumentV2(document: unknown): void };
-      WorkshopV2Controller: { renderMissions(): void };
-    };
-    target.LegacyTrainerBridge.applyDocumentV2(documentV2);
-    target.WorkshopV2Controller.renderMissions();
-  }, reference);
+  await applyDocument(page, reference);
   await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(3);
+  await completeVisibleV3Workflow(page, 'MDR-100-24');
+  const existingImagePaths = await page.locator('#g-devices .device-image').evaluateAll((images) =>
+    images.map((image) => image.getAttribute('href')),
+  );
 
-  await page.getByRole('button', { name: new RegExp(`^${PREWIRE_MISSIONS[0]}`) }).click();
-  await page.getByRole('combobox', { name: /AC 공급원/ }).selectOption('ac-e2e');
-  await page.getByRole('combobox', { name: /MDR 전원공급장치/ }).selectOption('mdr-e2e');
-  await page.getByRole('combobox', { name: /DC 부하 경계/ }).selectOption('load-e2e');
-  await page.getByRole('button', { name: '이 미션 검증' }).click();
-  await expect(page.locator('#validation .core-validation-status')).toContainText('PASS');
+  await page.locator('#b-validate').click();
+  await expect(page.locator('#validation .core-validation-status')).toContainText('BLOCKED');
+  await expect(page.locator('#validation')).toContainText('TERMINAL_GEOMETRY_MISMATCH');
+  await expect(page.locator('#g-devices .device-image').evaluateAll((images) =>
+    images.map((image) => image.getAttribute('href')),
+  )).resolves.toEqual(existingImagePaths);
+
+  const protectionCurve = page.getByRole('textbox', { name: '보호기기 차단곡선' });
+  await protectionCurve.fill('D16');
+  await expect(page.locator('#validation .core-validation-status')).toContainText('STALE');
+  await expect(page.locator('#validation')).toContainText('revision');
+  await page.keyboard.press('Control+Z');
+  await expect(page.getByRole('textbox', { name: '보호기기 차단곡선' })).toHaveValue('C16');
+  await page.locator('#b-validate').click();
+  await expect(page.locator('#validation .core-validation-status')).toContainText('BLOCKED');
 
   await page.locator('#b-simulate').click();
-  await expect(page.locator('#sim-monitor')).toContainText('결정적 I/O 시험 · PASS');
-  await expect(page.locator('#sim-monitor > div')).toHaveCount(3);
-  await expect(page.locator('#sim-monitor')).toContainText('ac-input-valid');
-  await expect(page.locator('#sim-monitor')).toContainText('dc-output-loaded');
-  await expect(page.locator('#sim-monitor > div').nth(1)).toContainText('통전단자 14');
+  await expect(page.locator('#sim-monitor')).toContainText('v3 폐회로 해');
 
   await page.locator('#b-save').click();
   await expect.poll(async () => page.evaluate((key) => localStorage.getItem(key), WORKSHOP_V2_KEY)).not.toBeNull();
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').settings?.v3Workflow?.sourceSystem?.id, WORKSHOP_V2_KEY)).toBe('ac-1ph-220v');
+  await expect.poll(async () => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}').settings?.v3Workflow?.sourceProtection, WORKSHOP_V2_KEY)).toEqual({
+    phaseSequence: null,
+    prospectiveShortCircuitCurrentA: 1500,
+    protectiveDeviceCurve: 'C16',
+  });
+  const savedRevision = await page.evaluate((key) => Number(JSON.parse(localStorage.getItem(key) ?? '{}').revision), WORKSHOP_V2_KEY);
+  expect(savedRevision).toBeGreaterThan(reference.revision);
 
   await page.evaluate((emptyDocument) => {
     (window as unknown as {
@@ -295,12 +554,18 @@ test('Electron UI places and wires devices, then validates, simulates, restores 
     }).LegacyTrainerBridge.applyDocumentV2(emptyDocument);
   }, { ...reference, revision: 12, devices: [], wires: [], settings: {} });
   await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(0);
+  await page.keyboard.press('Control+Z');
+  await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(0);
 
   await page.locator('#advanced-tools > summary').click();
   await page.locator('#b-load').click();
   await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(3);
   await expect.poll(async () => (await bridgeState(page)).wires.length).toBe(5);
   await expect(page.locator('body')).toHaveAttribute('data-workshop-mode', 'prewire');
+  await expect(page.getByRole('combobox', { name: '공급 SourceSystem 선택' })).toHaveValue('ac-1ph-220v');
+  await expect(page.getByRole('spinbutton', { name: '밀리미터당 캔버스 단위' })).toHaveValue('2');
+  await expect(page.getByRole('spinbutton', { name: '예상 단락전류 A' })).toHaveValue('1500');
+  await expect(page.getByRole('textbox', { name: '보호기기 차단곡선' })).toHaveValue('C16');
 
   await page.evaluate(() => {
     const target = window as unknown as {
@@ -322,23 +587,270 @@ test('Electron UI places and wires devices, then validates, simulates, restores 
       __capturedReviewReport: { value: unknown; filename: string };
     }).__capturedReviewReport,
   );
-  expect(reportCapture.filename).toBe('prewire-verified-r11.json');
+  expect(reportCapture.filename).toBe(`prewire-diagnostic-r${savedRevision}.json`);
   const report = reportCapture.value as {
     classification: string;
     document: { validationStatus: string; revision: number };
+    sourceProtection: { prospectiveShortCircuitCurrentA: number; protectiveDeviceCurve: string };
     pinToPin: unknown[];
-    bom: Array<{ profileId: string; quantity: number }>;
+    bom: Array<{ partNumber: string; quantity: number }>;
   };
-  expect(report.classification).toBe('VERIFIED');
-  expect(report.document).toMatchObject({ validationStatus: 'PASS', revision: 11 });
+  expect(report.classification).toBe('DIAGNOSTIC');
+  expect(report.document).toMatchObject({ validationStatus: 'BLOCKED', revision: savedRevision });
+  expect(report.sourceProtection).toMatchObject({ prospectiveShortCircuitCurrentA: 1500, protectiveDeviceCurve: 'C16' });
   expect(report.pinToPin).toHaveLength(5);
   expect(report.bom).toEqual([
-    expect.objectContaining({ profileId: 'mean-well:mdr-100-24', quantity: 1 }),
+    expect.objectContaining({ partNumber: 'MDR-100-24', quantity: 1 }),
   ]);
+
+  const textArtifacts: Array<{ filename: string; value: string }> = [];
+  await page.evaluate(() => {
+    const target = window as unknown as {
+      LegacyTrainerBridge: { downloadText(value: string, filename: string): void };
+      __capturedTextReports?: Array<{ filename: string; value: string }>;
+    };
+    target.__capturedTextReports = [];
+    target.LegacyTrainerBridge.downloadText = (value, filename) => target.__capturedTextReports?.push({ value, filename });
+  });
+  await page.getByRole('heading', { name: /시뮬 모니터/ }).click();
+  await expect(page.getByRole('button', { name: 'HTML·CSV 내보내기' })).toBeVisible();
+  await page.getByRole('button', { name: 'HTML·CSV 내보내기' }).click();
+  await expect.poll(async () => page.evaluate(() =>
+    (window as unknown as { __capturedTextReports?: Array<{ filename: string; value: string }> }).__capturedTextReports ?? [],
+  )).toHaveLength(5);
+  textArtifacts.push(...await page.evaluate(() =>
+    (window as unknown as { __capturedTextReports: Array<{ filename: string; value: string }> }).__capturedTextReports,
+  ));
+  expect(textArtifacts.map((artifact) => artifact.filename)).toEqual(expect.arrayContaining([
+    `prewire-diagnostic-r${savedRevision}.html`,
+    `prewire-diagnostic-r${savedRevision}-pin-to-pin.csv`,
+    `prewire-diagnostic-r${savedRevision}-cable-cores.csv`,
+    `prewire-diagnostic-r${savedRevision}-terminal-plan.csv`,
+    `prewire-diagnostic-r${savedRevision}-bom.csv`,
+  ]));
 
   expect(await readMainNetworkAudit()).toEqual({ externalRequests: [], failedRequests: [] });
   expect(externalRequests).toEqual([]);
   expect(failedRequests).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('real-pointer terminal click starts wiring, previews a routed pending wire, and invalidates v3 validation', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'prewire');
+  await applyDocument(page, plusOnlyLoadDocument());
+  await completeVisibleV3Workflow(page);
+  await page.keyboard.press('f');
+
+  const positiveSource = { deviceId: 'dc-open', terminalId: '+' };
+  const positiveDestination = { deviceId: 'load-open', terminalId: '+' };
+  const negativeSource = { deviceId: 'dc-open', terminalId: '-' };
+  const negativeDestination = { deviceId: 'load-open', terminalId: '-' };
+  const initial = await bridgeState(page);
+  await page.locator('#b-validate').click();
+  await expect(page.locator('#validation .core-validation-status')).toContainText('FAIL');
+  await expect(page.locator('#validation')).toContainText('OPEN_RETURN_PATH');
+
+  // A terminal click is the user's clearest expression of wiring intent. It
+  // enters wire mode and starts a preview, but does not mutate the document
+  // until a different destination terminal is chosen.
+  await page.locator('#m-select').click();
+  await pointerClickSvgTerminal(page, positiveSource.deviceId, positiveSource.terminalId);
+  await expect(page.locator(
+    `#g-terminals .terminal:not(.terminal-hit)[data-id="${positiveSource.deviceId}"][data-term="${positiveSource.terminalId}"]`,
+  )).toHaveClass(/pending/);
+  await expect(page.locator('#m-wire')).toHaveClass(/active/);
+  await expect(page.locator('#stat')).toContainText('끝 단자');
+  expect(await bridgeState(page)).toMatchObject({ revision: initial.revision, wires: initial.wires });
+
+  await pointerClickSvgTerminal(page, positiveSource.deviceId, positiveSource.terminalId);
+  await expect(page.locator('#stat')).toContainText(/취소|같은/);
+
+  await page.locator('#m-wire').click();
+  await expect(page.locator('#m-wire')).toHaveClass(/active/);
+
+  // Start through the actual hit target, then move a real pointer so the user
+  // gets both the pending-terminal cue and a live ghost route before commit.
+  // A same-terminal second click is a no-op, too.
+  await pointerClickSvgTerminal(page, negativeSource.deviceId, negativeSource.terminalId);
+  await pointerClickSvgTerminal(page, negativeSource.deviceId, negativeSource.terminalId);
+  await expect(page.locator('#stat')).toContainText(/취소|같은/);
+  expect(await bridgeState(page)).toMatchObject({ revision: initial.revision, wires: initial.wires });
+
+  // An existing pair cannot silently become a parallel duplicate.
+  await pointerClickSvgTerminal(page, positiveSource.deviceId, positiveSource.terminalId);
+  await pointerClickSvgTerminal(page, positiveDestination.deviceId, positiveDestination.terminalId);
+  await expect(page.locator('#stat')).toContainText(/이미|중복|duplicate/i);
+  expect(await bridgeState(page)).toMatchObject({ revision: initial.revision, wires: initial.wires });
+
+  await pointerClickSvgTerminal(page, negativeSource.deviceId, negativeSource.terminalId);
+  await expect(page.locator('#stat')).toContainText('시작:');
+  await expect(page.locator(
+    `#g-terminals .terminal:not(.terminal-hit)[data-id="${negativeSource.deviceId}"][data-term="${negativeSource.terminalId}"]`,
+  )).toHaveClass(/pending/);
+  const destination = page.locator(
+    `#g-terminals .terminal-hit[data-id="${negativeDestination.deviceId}"][data-term="${negativeDestination.terminalId}"]`,
+  );
+  const destinationBox = await destination.boundingBox();
+  expect(destinationBox).not.toBeNull();
+  await page.mouse.move(destinationBox!.x + destinationBox!.width / 2 - 12, destinationBox!.y + destinationBox!.height / 2);
+  await expect(page.locator('#ghost')).toBeVisible();
+  await expect(page.locator('#ghost')).toHaveAttribute('d', /.+/);
+  const initialGhostPath = await page.locator('#ghost').getAttribute('d');
+
+  // A click on a blank part of the canvas records a route waypoint while the
+  // wire is still pending. It is not a document edit until a destination is
+  // chosen, so neither wire count nor revision may change here.
+  const source = page.locator(
+    `#g-terminals .terminal-hit[data-id="${negativeSource.deviceId}"][data-term="${negativeSource.terminalId}"]`,
+  );
+  const sourceBox = await source.boundingBox();
+  expect(sourceBox).not.toBeNull();
+  const canvasBox = await page.locator('#canvas').boundingBox();
+  expect(canvasBox).not.toBeNull();
+  await page.mouse.click(
+    (sourceBox!.x + destinationBox!.x) / 2,
+    Math.max(canvasBox!.y + 24, sourceBox!.y - 64),
+  );
+  await expect(page.locator('#stat')).toContainText(/경유|waypoint/i);
+  await expect(page.locator('#ghost')).toBeVisible();
+  await expect(page.locator('#ghost')).not.toHaveAttribute('d', initialGhostPath ?? '');
+  expect(await bridgeState(page)).toMatchObject({ revision: initial.revision, wires: initial.wires });
+
+  // Escape is a pure cancellation: it leaves no wire or history revision behind.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#ghost')).toBeHidden();
+  await expect(page.locator('#stat')).toContainText('취소');
+  expect(await bridgeState(page)).toMatchObject({ revision: initial.revision, wires: initial.wires });
+
+  await pointerClickSvgTerminal(page, negativeSource.deviceId, negativeSource.terminalId);
+  await page.mouse.click(
+    (sourceBox!.x + destinationBox!.x) / 2,
+    Math.max(canvasBox!.y + 24, sourceBox!.y - 64),
+  );
+  await pointerClickSvgTerminal(page, negativeDestination.deviceId, negativeDestination.terminalId);
+  const afterCommit = await bridgeState(page);
+  expect(afterCommit.revision).toBe(initial.revision + 1);
+  expect(afterCommit.wires).toHaveLength(2);
+  expect(afterCommit.wires).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      from: { dev: negativeSource.deviceId, term: negativeSource.terminalId },
+      to: { dev: negativeDestination.deviceId, term: negativeDestination.terminalId },
+    }),
+  ]));
+  const committedWire = afterCommit.wires.find((wire) => wire.from.dev === negativeSource.deviceId && wire.from.term === negativeSource.terminalId);
+  expect(committedWire).toBeDefined();
+  expect(committedWire).toMatchObject({
+    from: { dev: negativeSource.deviceId, term: negativeSource.terminalId },
+    to: { dev: negativeDestination.deviceId, term: negativeDestination.terminalId },
+  });
+  expect(committedWire?.waypoints).toHaveLength(1);
+  await expect(page.locator('#validation .core-validation-status')).toContainText('STALE');
+  await expect(page.locator('#validation')).toContainText('revision');
+
+  await page.keyboard.press('Control+Z');
+  const afterUndo = await bridgeState(page);
+  expect(afterUndo.revision).toBe(afterCommit.revision + 1);
+  expect(afterUndo.wires).toEqual(initial.wires);
+  await expect(page.locator('#validation .core-validation-status')).toContainText('STALE');
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('typed wiring assistant selects two devices and finishes the missing 0 V return through the real preview path', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'practice');
+  await applyDocument(page, plusOnlyLoadDocument());
+
+  const assistant = page.locator('.v3-wiring-assistant');
+  await expect(assistant).toBeVisible();
+  await assistant.getByRole('button', { name: '두 장비 선택 시작' }).click();
+  await pointerClickSvgDeviceBody(page, 'dc-open');
+  await pointerClickSvgDeviceBody(page, 'load-open', true);
+  await expect(assistant.locator('.v3-wiring-selection')).toContainText('dc-open ↔ load-open');
+
+  await assistant.getByLabel('결선 목적').selectOption('dc-power');
+  await assistant.getByRole('button', { name: '안내 계산' }).click();
+  const returnPlan = assistant.locator(
+    '.v3-wiring-plan[data-direct-from="load-open:-"][data-direct-to="dc-open:-"]',
+  );
+  await expect(returnPlan).toHaveCount(1);
+  await expect(returnPlan).toContainText('결선 가능');
+
+  const beforePreview = await bridgeState(page);
+  await returnPlan.getByRole('button', { name: '결선 시작' }).click();
+  await expect(page.locator('#m-wire')).toHaveClass(/active/);
+  await expect(page.locator(
+    '#g-terminals .terminal:not(.terminal-hit)[data-id="load-open"][data-term="-"]',
+  )).toHaveClass(/pending/);
+  expect(await bridgeState(page)).toMatchObject({ revision: beforePreview.revision, wires: beforePreview.wires });
+
+  await pointerClickSvgTerminal(page, 'dc-open', '-');
+  const afterCommit = await bridgeState(page);
+  expect(afterCommit.revision).toBeGreaterThan(beforePreview.revision);
+  expect(afterCommit.wires).toHaveLength(beforePreview.wires.length + 1);
+  await expect(assistant.locator('.v3-wiring-stale')).toContainText('다시 계산');
+  await expect(page.locator('#validation')).toContainText('검증 버튼을 누르세요');
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('prewire mode blocks a physical miswire unless Alt explicitly records a diagnostic fault', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'prewire');
+  await applyDocument(page, plusOnlyLoadDocument());
+  await completeVisibleV3Workflow(page);
+  await page.keyboard.press('f');
+
+  const before = await bridgeState(page);
+  await page.locator('#m-select').click();
+  await pointerClickSvgTerminal(page, 'dc-open', '+');
+  await pointerClickSvgTerminal(page, 'dc-open', '-');
+
+  const blocked = await bridgeState(page);
+  expect(blocked.wires).toHaveLength(before.wires.length);
+  await expect(page.locator('#stat')).toContainText('DC_POLARITY_MISMATCH');
+  await expect(page.locator('#stat')).toContainText('Alt');
+
+  await page.keyboard.down('Alt');
+  await pointerClickSvgTerminal(page, 'dc-open', '-');
+  await page.keyboard.up('Alt');
+  const after = await bridgeState(page);
+  expect(after.wires).toHaveLength(before.wires.length + 1);
+  await expect(page.locator('#stat')).toContainText('진단용 강제결선(DC_POLARITY_MISMATCH)');
+  await page.locator('#b-validate').click();
+  await expect(page.locator('#validation .core-validation-status')).toContainText('FAIL');
+  await expect(page.locator('#validation')).toContainText('DC_SHORT');
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('v3 Validate exposes an OPEN_RETURN_PATH for a +24V-only load', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'prewire');
+  await applyDocument(page, plusOnlyLoadDocument());
+  await completeVisibleV3Workflow(page);
+
+  await page.locator('#b-validate').click();
+  await expect(page.locator('#validation .core-validation-status')).toContainText('FAIL');
+  await expect(page.locator('#validation')).toContainText('OPEN_RETURN_PATH');
+  await expect(page.locator('#validation')).toContainText('0V/N 귀로');
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('v3 simulation displays the relay OFF and ON closed-loop scenarios', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'prewire');
+  await applyDocument(page, relayReferenceDocument());
+  await completeVisibleV3Workflow(page, 'XBC-DR32H');
+
+  await page.locator('#b-simulate').click();
+  await expect(page.locator('#sim-monitor')).toContainText('v3 결정적 I/O 시험');
+  await expect(page.locator('#sim-monitor')).toContainText('relay-off');
+  await expect(page.locator('#sim-monitor')).toContainText('relay-on');
+  await expect(page.locator('#sim-monitor')).toContainText('ON[');
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
@@ -503,7 +1015,8 @@ test('1280x720, 200% zoom and reduced-motion states keep the core flow usable', 
   expect(zoomedLayout.palette!.right).toBeLessThanOrEqual(zoomedLayout.stage!.left + 1);
   expect(zoomedLayout.stage!.right).toBeLessThanOrEqual(zoomedLayout.rightPanel!.left + 1);
   await page.locator('#b-validate').click();
-  await expect(page.locator('#stat')).toContainText('검증 완료');
+  await expect(page.locator('#stat')).toContainText('결선 검토: BLOCKED');
+  await expect(page.locator('#stat')).toContainText('LEGACY_DIAGNOSTIC');
 
   await page.locator('#b-workshop-mode').click();
   await expect(page.locator('#workshop-mode-selector')).toBeVisible();

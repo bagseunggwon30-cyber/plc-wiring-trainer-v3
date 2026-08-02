@@ -115,8 +115,15 @@ describe('shared circuit graph and validation', () => {
   });
 
   it('rejects mixing voltage and current analog channel modes', async () => {
+    const analog = device('analog', 'ls-electric:xbf-ah04a');
+    analog.configuration.xbfChannels = {
+      AI0: { enabled: true, selector: 'V', parameterRange: '0-10V' },
+      AI1: { enabled: true, selector: 'I', parameterRange: '4-20mA' },
+      AO0: { enabled: false },
+      AO1: { enabled: false },
+    };
     const doc = workshop(
-      [device('analog', 'ls-electric:xbf-ah04a')],
+      [analog],
       [wire('w1', 'analog', 'I0+', 'analog', 'I1+')],
     );
     const result = await validateWorkshop(doc, DEVICE_PROFILES);
@@ -138,6 +145,28 @@ describe('shared circuit graph and validation', () => {
       DEVICE_PROFILES,
     );
     expect(correct.issues.map((issue) => issue.code)).not.toContain('RS485_POLARITY_MISMATCH');
+  });
+
+  it('requires RS232 TX/RX crossing instead of accepting TX-to-TX', async () => {
+    const devices = [device('plc-a', 'ls-electric:xbc-dr32h'), device('plc-b', 'ls-electric:xbc-dr32h')];
+    const straight = await validateWorkshop(
+      workshop(devices, [wire('w1', 'plc-a', 'TX', 'plc-b', 'TX')]),
+      DEVICE_PROFILES,
+    );
+    expect(straight.status).toBe('FAIL');
+    expect(straight.issues).toContainEqual(expect.objectContaining({
+      code: 'COMMUNICATION_POLARITY_MISMATCH',
+    }));
+
+    const crossed = await validateWorkshop(
+      workshop(devices, [
+        wire('w1', 'plc-a', 'TX', 'plc-b', 'RX'),
+        wire('w2', 'plc-a', 'RX', 'plc-b', 'TX'),
+        wire('w3', 'plc-a', 'SG', 'plc-b', 'SG'),
+      ]),
+      DEVICE_PROFILES,
+    );
+    expect(crossed.status).toBe('PASS');
   });
 });
 

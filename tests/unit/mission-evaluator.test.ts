@@ -9,6 +9,16 @@ function referenceDocument(definition: MissionDefinitionV2): { document: Worksho
   const ids = Object.fromEntries(bindings.map((binding) => [binding.role, binding.deviceId]));
   const devices: DeviceInstanceV2[] = definition.roles.map((role) => {
     const profile = DEVICE_PROFILES[role.allowedProfileIds[0]];
+    const configuration = profile.profileId === 'ls-electric:xbf-ah04a'
+      ? {
+        xbfChannels: {
+          AI0: { enabled: true, selector: 'V', parameterRange: '0-10V' },
+          AI1: { enabled: true, selector: 'I', parameterRange: '4-20mA' },
+          AO0: { enabled: false },
+          AO1: { enabled: false },
+        },
+      }
+      : {};
     return {
       id: ids[role.id],
       profileId: profile.profileId,
@@ -18,7 +28,7 @@ function referenceDocument(definition: MissionDefinitionV2): { document: Worksho
       x: 0,
       y: 0,
       rotation: 0,
-      configuration: {},
+      configuration,
     };
   });
   const requiredSets = definition.connectionPolicy === 'one-of'

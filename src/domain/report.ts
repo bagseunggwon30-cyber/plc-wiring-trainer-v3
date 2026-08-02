@@ -13,7 +13,7 @@ import type {
 import { canonicalStringify, sha256 } from './migration';
 import { canIssueVerifiedReport } from './verification';
 
-export type ReviewReportClassification = 'VERIFIED' | 'DIAGNOSTIC';
+export type ReviewReportClassification = 'LEGACY_DIAGNOSTIC' | 'DIAGNOSTIC';
 
 export interface ReviewReportDocumentIdentity {
   schemaVersion: 2;
@@ -374,7 +374,7 @@ export async function generateReviewReport(
   const evidence = manualEvidence(document, catalog);
   const payload: Omit<ReviewReport, 'reportHash'> = {
     reportSchema: 'plc-prewire-review/1.0',
-    classification: eligibility.eligible ? 'VERIFIED' : 'DIAGNOSTIC',
+    classification: 'LEGACY_DIAGNOSTIC',
     eligibility: { ...eligibility },
     document: {
       schemaVersion: document.schemaVersion,

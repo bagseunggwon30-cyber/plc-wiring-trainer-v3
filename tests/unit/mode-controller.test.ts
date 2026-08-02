@@ -13,10 +13,20 @@ describe('practice and prewire mode policy', () => {
   });
 
   it('limits prewire mode to verified equipment and logical boundaries', () => {
-    for (const type of ['XBC-DR32H', 'XBF-AH04A', 'MDR-100', 'BOUNDARY-AC', 'BOUNDARY-DC', 'BOUNDARY-CONTACT', 'BOUNDARY-LOAD', 'BOUNDARY-RS485']) {
+    for (const type of [
+      'XBC-DR32H', 'XBF-AH04A', 'MDR-100', 'MC-22B-DC24', 'MY2N', 'EOCR3DE-05DUH',
+      'UT-2.5', 'UT-2.5-PE', 'UT-4-HESI',
+      'BOUNDARY-AC', 'BOUNDARY-DC', 'BOUNDARY-CONTACT', 'BOUNDARY-LOAD',
+      'BOUNDARY-ANALOG-V', 'BOUNDARY-ANALOG-I',
+      'BOUNDARY-ANALOG-V-IN', 'BOUNDARY-ANALOG-I-IN', 'BOUNDARY-2W-I', 'BOUNDARY-RS485',
+    ]) {
       expect(isLegacyTypeAllowed('prewire', type)).toBe(true);
     }
-    for (const type of ['IG5A', 'MY-MD02', 'MCCB', 'PB-1C']) {
+    for (const type of [
+      'IG5A', 'MY-MD02', 'PROX-NPN', 'PROX-PNP', 'PSU24', 'MOTOR-3P',
+      'LAMP-G', 'LAMP-Y', 'LAMP-W', 'LAMP', 'BUZZER', 'SOL-Y', 'TB4', 'TB10',
+      'MCCB', 'PB-1C',
+    ]) {
       expect(isLegacyTypeAllowed('prewire', type)).toBe(false);
       expect(isLegacyTypeAllowed('practice', type)).toBe(true);
     }

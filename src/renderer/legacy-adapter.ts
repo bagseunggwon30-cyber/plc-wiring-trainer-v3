@@ -5,13 +5,35 @@ export const LEGACY_PROFILE_MAP: Readonly<Record<string, string>> = Object.freez
   'XBC-DR32H': 'ls-electric:xbc-dr32h',
   'XBF-AH04A': 'ls-electric:xbf-ah04a',
   'MDR-100': 'mean-well:mdr-100-24',
+  'MC-22B-DC24': 'ls-electric:mc-22b-dc24-1a1b',
+  MY2N: 'omron:my2n-d2-dc24',
+  'EOCR3DE-05DUH': 'schneider:eocr3de-05duh',
+  'UT-2.5': 'phoenix-contact:ut-2.5-3044076',
+  'UT-2.5-PE': 'phoenix-contact:ut-2.5-pe-3044092',
+  'UT-4-HESI': 'phoenix-contact:ut-4-hesi-3046032',
   IG5A: 'ls-electric:sv-ig5a',
   'MY-MD02': 'generic:xy-md02',
+  'PROX-NPN': 'generic:prox-npn-3wire',
+  'PROX-PNP': 'generic:prox-pnp-3wire',
+  PSU24: 'educational:dc24-source-box',
+  'MOTOR-3P': 'educational:three-phase-motor',
+  'LAMP-G': 'educational:dc24-load',
+  'LAMP-Y': 'educational:dc24-load',
+  'LAMP-W': 'educational:dc24-load',
+  LAMP: 'educational:dc24-load',
+  BUZZER: 'educational:dc24-load',
+  'SOL-Y': 'educational:dc24-solenoid',
+  TB4: 'educational:terminal-block-4',
   TB10: 'educational:terminal-block-10',
   'BOUNDARY-AC': 'boundary:ac-supply',
   'BOUNDARY-DC': 'boundary:dc-supply',
   'BOUNDARY-CONTACT': 'boundary:dry-contact',
   'BOUNDARY-LOAD': 'boundary:load',
+  'BOUNDARY-ANALOG-V': 'boundary:analog-voltage-source',
+  'BOUNDARY-ANALOG-I': 'boundary:analog-current-source',
+  'BOUNDARY-ANALOG-V-IN': 'boundary:analog-voltage-input',
+  'BOUNDARY-ANALOG-I-IN': 'boundary:analog-current-input',
+  'BOUNDARY-2W-I': 'boundary:two-wire-current-transmitter',
   'BOUNDARY-RS485': 'boundary:communication-peer',
 });
 
@@ -23,7 +45,7 @@ interface LegacyWire {
   color?: string;
   tag?: string;
   gauge?: string;
-  waypoints?: Array<{ x: number; y: number }>;
+  waypoints?: Array<{ x: number; y: number }> | null;
 }
 interface LegacyDevice extends Record<string, unknown> {
   type: string;
@@ -47,6 +69,7 @@ export interface LegacyTrainerState extends Record<string, unknown> {
   doorPanel?: unknown;
   panelConfig?: unknown;
   terminalCalibration?: unknown;
+  workflowState?: unknown;
 }
 
 export interface WorkshopShadowSnapshot {
@@ -59,7 +82,7 @@ const DEVICE_POSITION_KEYS = new Set([
 ]);
 const TOP_LEVEL_KEYS = new Set([
   'devices', 'wires', 'jumpers', 'nextId', 'revision', 'goal', 'boardMode', 'cabinet', 'rails', 'ducts',
-  'doorPanel', 'panelConfig', 'terminalCalibration',
+  'doorPanel', 'panelConfig', 'terminalCalibration', 'workflowState',
 ]);
 
 export async function adaptLegacyState(
@@ -104,7 +127,7 @@ export async function adaptLegacyState(
       color: wire.color,
       tag: wire.tag,
       gauge: wire.gauge,
-      waypoints: wire.waypoints,
+      waypoints: Array.isArray(wire.waypoints) ? wire.waypoints : undefined,
     })),
     jumpers: (state.jumpers ?? []).map((jumper) => ({
       id: jumper.id,
