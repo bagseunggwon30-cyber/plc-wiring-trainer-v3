@@ -71,7 +71,7 @@ test('XBC input overlay exposes only the 24 manual terminals and marks the fabri
   assert.match(html, /imageLabelCorrections:\[\s*\{x:121,y:164,label:'485\+'/);
   assert.doesNotMatch(html, /id:'24G-TOP'/);
   assert.doesNotMatch(html, /id:'PE2'/);
-  assert.match(html, /const REVIEW_PROFILE_TERMINAL_TYPES=new Set\(\['XBC-DR32H','XBF-AH04A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2\.5','UT-2\.5-PE','UT-4-HESI'\]\)/);
+  assert.match(html, /const REVIEW_PROFILE_TERMINAL_TYPES=new Set\(\['XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2\.5','UT-2\.5-PE','UT-4-HESI'\]\)/);
   assert.match(html, /fuseLinkOrderCode/);
   assert.match(html, /LIB\[type\]\.assetId&&LIB\[type\]\.geometryHash/);
   assert.match(html, /function geometryOnlyCalibrationEntry\(type,entry\)/);

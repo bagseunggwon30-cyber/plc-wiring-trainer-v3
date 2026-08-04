@@ -50,11 +50,13 @@ function wire(
  */
 export function createAcademyExp2Md02Template(): WorkshopDocumentV2 {
   const devices = [
-    device('academy-ac', 'BOUNDARY-AC', 'boundary:ac-supply', 80, 80),
-    device('academy-ps1', 'MDR-100', 'mean-well:mdr-100-24', 300, 80, { orderCode: 'MDR-100-24' }),
-    device('academy-plc1', 'XBC-DR32H', 'ls-electric:xbc-dr32h', 560, 60, { orderCode: 'XBC-DR32H' }),
-    device('academy-hmi1', 'EXP2-700', 'ls-electric:exp2-0700d', 220, 450, { orderCode: 'eXP2-0700D' }),
-    device('academy-md02', 'MY-MD02', 'generic:xy-md02', 760, 470),
+    device('academy-ac', 'BOUNDARY-AC', 'boundary:ac-supply', 60, 60),
+    device('academy-ps1', 'MDR-100', 'mean-well:mdr-100-24', 320, 60, { orderCode: 'MDR-100-24' }),
+    device('academy-plc1', 'XBC-DR32H', 'ls-electric:xbc-dr32h', 720, 60, { orderCode: 'XBC-DR32H' }),
+    // Keep a vertical wiring corridor between the power/HMI group and PLC.
+    // The earlier centered HMI closed this passage and forced long hull routes.
+    device('academy-hmi1', 'EXP2-700', 'ls-electric:exp2-0700d', 100, 700, { orderCode: 'eXP2-0700D' }),
+    device('academy-md02', 'MY-MD02', 'generic:xy-md02', 820, 730),
   ];
   const wires = [
     wire('academy-w01', 'academy-ac', 'L1', 'academy-ps1', 'L', '#8b4513', 'AC-L-01'),

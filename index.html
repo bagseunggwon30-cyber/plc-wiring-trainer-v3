@@ -367,7 +367,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <span class="hgroup">
 <button id="b-validate">🔍 검증</button>
 <button id="b-export-report" title="미션 리포트 (배선표+BOM+시뮬+검증) 내보내기">📄 리포트</button>
-<button id="b-router" class="active" title="자동 직각 라우팅">📐 직각선</button>
+<button id="b-router" class="active" title="수동 경유점을 지우고 장비를 피해 배선 레인으로 다시 정리">🧹 선 정리</button>
 <button id="b-labels" class="active" title="단자 라벨">🏷 라벨</button>
 <button id="b-polarity" class="active" title="극성 표시">⚡ 극성</button>
 <button id="b-wire-tags" class="active" title="현장 와이어 번호표 (페룰/택)"># 선번</button>
@@ -2993,20 +2993,20 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
     label:'LS ELECTRIC eXP2-0700D',
     sub:'eXP2-0700D · DC24V · COM1 DB9 RS485 · COM3 RS422/485',
     terminals:[
-      {id:'DC24V',x:64,y:334,side:'P',label:'DC24V +',pol:'DC+',forceLabel:true},
-      {id:'DC0V',x:101,y:334,side:'P',label:'0V',pol:'DC-',forceLabel:true},
-      {id:'FG',x:138,y:334,side:'P',label:'FG',pol:'PE',forceLabel:true},
+      {id:'DC24V',x:64,y:334,side:'B',label:'DC24V +',pol:'DC+',forceLabel:true,anchor:{x:64,y:386}},
+      {id:'DC0V',x:101,y:334,side:'B',label:'0V',pol:'DC-',forceLabel:true,anchor:{x:101,y:386}},
+      {id:'FG',x:138,y:334,side:'B',label:'FG',pol:'PE',forceLabel:true,anchor:{x:138,y:386}},
       /* 공식 HW 매뉴얼 PDF 55쪽: COM1 pin 6=RS485+, pin 1=RS485-. */
-      {id:'COM1-1',x:246,y:202,side:'P',label:'COM1-1 485-',pol:'COMM',forceLabel:true,labelDx:-28,labelDy:-18},
-      {id:'COM1-6',x:250,y:221,side:'P',label:'COM1-6 485+',pol:'COMM',forceLabel:true,labelDx:-28,labelDy:22},
-      {id:'COM2-2',x:260,y:202,side:'P',label:'COM2-2 RXD',pol:'COMM'},
-      {id:'COM2-3',x:274,y:202,side:'P',label:'COM2-3 TXD',pol:'COMM'},
-      {id:'COM2-5',x:302,y:202,side:'P',label:'COM2-5 SG',pol:'COMM'},
-      ...row(['COM3-TX+','COM3-TX-','COM3-RX+','COM3-RX-','COM3-SG','COM3-FG'], 365, 196, 370, 'P', [
+      {id:'COM1-1',x:246,y:202,side:'B',label:'COM1-1 485-',pol:'COMM',forceLabel:true,labelDx:-28,labelDy:-18,anchor:{x:240,y:302}},
+      {id:'COM1-6',x:250,y:221,side:'B',label:'COM1-6 485+',pol:'COMM',forceLabel:true,labelDx:-28,labelDy:22,anchor:{x:260,y:302}},
+      {id:'COM2-2',x:260,y:202,side:'B',label:'COM2-2 RXD',pol:'COMM',anchor:{x:282,y:302}},
+      {id:'COM2-3',x:274,y:202,side:'B',label:'COM2-3 TXD',pol:'COMM',anchor:{x:300,y:302}},
+      {id:'COM2-5',x:302,y:202,side:'B',label:'COM2-5 SG',pol:'COMM',anchor:{x:318,y:302}},
+      ...row(['COM3-TX+','COM3-TX-','COM3-RX+','COM3-RX-','COM3-SG','COM3-FG'], 365, 196, 370, 'B', [
         {label:'TX+',pol:'COMM'},{label:'TX-',pol:'COMM'},
         {label:'RX+',pol:'COMM'},{label:'RX-',pol:'COMM'},
         {label:'SG',pol:'COMM'},{label:'FG',pol:'PE'}
-      ]),
+      ]).map(terminal=>({...terminal,side:'B',anchor:{x:terminal.x,y:386}})),
     ],
     polarityCritical:[['DC24V','DC0V']]
   });
@@ -5457,12 +5457,12 @@ function drawMountedCableAssembly(wire, pa, pb, fromDef, toDef, stroke){
     elWire.appendChild(g);
   }
 }
-function routePanelWire(p1,p2,wire,excludeIds){
+function routePanelWire(p1,p2,wire,excludeIds,laneOffset=0){
   const ids=excludeIds||[wire?.from?.dev,wire?.to?.dev].filter(Boolean);
   const offA=28+cableBoostForDev(wire?.from?.dev);
   const offB=28+cableBoostForDev(wire?.to?.dev);
   // 항상 장애물 회피 직각 라우팅 우선 (덕트는 routeOrtho 내부 후보로 포함)
-  return routeOrtho(p1,p2,offA,offB,wire?.waypoints,ids);
+  return routeOrtho(p1,p2,offA,offB,wire?.waypoints,ids,laneOffset);
 }
 
 function serializeState(){
@@ -7110,6 +7110,14 @@ function drawExp2ManualOverlay(g,def,scale=1){
     node.setAttribute('text-anchor',anchor);node.setAttribute('fill',fill);
     node.setAttribute('pointer-events','none');node.textContent=value;g.appendChild(node);
   };
+  const addPath=(points,stroke,width=2)=>{
+    const node=document.createElementNS(SVGNS,'path');
+    node.setAttribute('d',points.map((point,index)=>`${index?'L':'M'} ${point.x*scale} ${point.y*scale}`).join(' '));
+    node.setAttribute('fill','none');node.setAttribute('stroke',stroke);
+    node.setAttribute('stroke-width',width*scale);node.setAttribute('stroke-linecap','round');
+    node.setAttribute('stroke-linejoin','round');node.setAttribute('pointer-events','none');
+    g.appendChild(node);return node;
+  };
   addRect(36,302,368,84,'rgba(235,241,238,.96)','#375447',5);
   addText(46,316,'매뉴얼 단자 오버레이 · 기존 이미지는 외형 참고용',8,'start','#254136');
   addRect(48,321,108,50,'#b7d4b9','#315c3a',3);
@@ -7122,6 +7130,18 @@ function drawExp2ManualOverlay(g,def,scale=1){
   addRect(220,174,96,64,'rgba(255,209,102,.14)','#ffcc66',5);
   addText(268,170,'COM1 RS485 / COM2 RS232 DB9',8,'middle','#ffe2a1');
   addText(268,246,'COM1: pin 6 = + · pin 1 = -',8,'middle','#ffe2a1');
+  // DB9 플러그 안쪽 심선은 장비 하단 케이블 출구까지 한 묶음으로
+  // 표현한다. 실제 결선 경로는 아래 anchor에서 시작하므로 외형을
+  // 가로지르는 긴 색상 직선이 생기지 않는다.
+  addPath([{x:250,y:230},{x:250,y:284},{x:250,y:302}],'#1d2429',16);
+  addPath([{x:246,y:202},{x:240,y:252},{x:240,y:302}],'#a855f7',3.2);
+  addPath([{x:250,y:221},{x:260,y:252},{x:260,y:302}],'#7c3aed',3.2);
+  addPath([{x:64,y:334},{x:64,y:386}],'#ef4444',3);
+  addPath([{x:101,y:334},{x:101,y:386}],'#2563eb',3);
+  addPath([{x:138,y:334},{x:138,y:386}],'#65a30d',3);
+  for(const x of [196,230.8,265.6,300.4,335.2,370]){
+    addPath([{x,y:365},{x,y:386}],x===370?'#65a30d':'#8b5cf6',2.2);
+  }
   return true;
 }
 
@@ -7603,9 +7623,13 @@ function simplifyOrthoPoints(pts){
   const out=[pts[0]];
   for(let i=1;i<pts.length-1;i++){
     const a=out[out.length-1], b=pts[i], c=pts[i+1];
-    const col=(Math.abs(a.x-b.x)<0.5&&Math.abs(b.x-c.x)<0.5)||
-              (Math.abs(a.y-b.y)<0.5&&Math.abs(b.y-c.y)<0.5);
-    if(!col)out.push(b);
+    const vertical=Math.abs(a.x-b.x)<0.5&&Math.abs(b.x-c.x)<0.5;
+    const horizontal=Math.abs(a.y-b.y)<0.5&&Math.abs(b.y-c.y)<0.5;
+    // 같은 축이어도 b에서 진행 방향이 뒤집히면 장비 바깥 탈출점이다.
+    // 이를 지우면 출구 아래로 빠진 선이 다시 장비 이미지를 관통한다.
+    const continues=(vertical&&(b.y-a.y)*(c.y-b.y)>=0)||
+                    (horizontal&&(b.x-a.x)*(c.x-b.x)>=0);
+    if(!continues)out.push(b);
   }
   out.push(pts[pts.length-1]);
   return out;
@@ -7657,7 +7681,7 @@ function skirtRoutesAroundBox(pStart,pEnd,box,margin=30){
     [a,{x:R,y:a.y},{x:R,y:B},{x:b.x,y:B},b]
   ];
 }
-function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs){
+function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs,laneOffset=0){
   let topY=Infinity, botY=-Infinity, leftX=Infinity, rightX=-Infinity;
   for(const ob of obs){
     topY=Math.min(topY,ob.y1); botY=Math.max(botY,ob.y2);
@@ -7665,7 +7689,8 @@ function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs){
   }
   if(!isFinite(topY))return [];
   const routes=[];
-  for(const margin of [28, 48, 80, 120, 160]){
+  for(const baseMargin of [28, 48, 80, 120, 160]){
+    const margin=baseMargin+laneOffset;
     const up=topY-margin, dn=botY+margin, lf=leftX-margin, rt=rightX+margin;
     routes.push([{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:up},{x:bx,y:up},{x:bx,y:by},{x:p2.x,y:p2.y}]);
     routes.push([{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:dn},{x:bx,y:dn},{x:bx,y:by},{x:p2.x,y:p2.y}]);
@@ -7679,7 +7704,8 @@ function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs){
   // 개별 장애물 스커트 (여러 마진)
   const midA={x:ax,y:ay}, midB={x:bx,y:by};
   for(const ob of obs){
-    for(const m of [20, 36, 56]){
+    for(const baseMargin of [20, 36, 56]){
+      const m=baseMargin+laneOffset;
       for(const skirt of skirtRoutesAroundBox(midA, midB, ob, m)){
         routes.push([{x:p1.x,y:p1.y}, ...skirt, {x:p2.x,y:p2.y}]);
       }
@@ -7691,7 +7717,7 @@ function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs){
  * 채널 그래프 직교 A* — 장애물 가장자리 라인으로 우회.
  * start/end 는 이미 장비 밖 탈출점.
  */
-function routeOrthoChannel(start, end, obs){
+function routeOrthoChannel(start, end, obs, laneOffset=0){
   if(!start||!end)return null;
   if(!obs.length){
     // 장애물 없으면 단순 1-엘보
@@ -7708,7 +7734,8 @@ function routeOrthoChannel(start, end, obs){
   for(const ob of obs){
     minX=Math.min(minX,ob.x1); maxX=Math.max(maxX,ob.x2);
     minY=Math.min(minY,ob.y1); maxY=Math.max(maxY,ob.y2);
-    for(const m of ROUTE_CHANNEL_MARGINS){
+    for(const baseMargin of ROUTE_CHANNEL_MARGINS){
+      const m=baseMargin+laneOffset;
       xs.add(ob.x1-m); xs.add(ob.x2+m);
       ys.add(ob.y1-m); ys.add(ob.y2+m);
     }
@@ -7735,8 +7762,9 @@ function routeOrthoChannel(start, end, obs){
     const xs2=new Set([start.x,end.x,minX-hullPad,maxX+hullPad]);
     const ys2=new Set([start.y,end.y,minY-hullPad,maxY+hullPad]);
     for(const ob of obs){
-      xs2.add(ob.x1-28); xs2.add(ob.x2+28);
-      ys2.add(ob.y1-28); ys2.add(ob.y2+28);
+      const margin=28+laneOffset;
+      xs2.add(ob.x1-margin); xs2.add(ob.x2+margin);
+      ys2.add(ob.y1-margin); ys2.add(ob.y2+margin);
     }
     xArr=uniqSort(xs2); yArr=uniqSort(ys2);
   }
@@ -7898,7 +7926,7 @@ function pickLeastBadRoute(candidates, obs, endpointIds){
   return scored[0].pts;
 }
 
-function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds){
+function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=0){
   const devA=findDeviceAtPoint(p1) || excludeIds?.[0] || null;
   const devB=findDeviceAtPoint(p2) || excludeIds?.[1] || null;
   const endpointIds=[devA, devB];
@@ -7933,7 +7961,7 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds){
   const isP2H=(p2.side==='L'||p2.side==='R');
   const sameLineH = isP1H && isP2H && Math.abs(ay-by)<10;
   const sameLineV = !isP1H && !isP2H && Math.abs(ax-bx)<10;
-  const stub=64;
+  const stub=64+laneOffset;
 
   const candidates=[];
   const base=[{x:p1.x,y:p1.y},{x:ax,y:ay}];
@@ -7987,7 +8015,9 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds){
       candidates.push([...base,{x:ax+s,y:ay},{x:ax+s,y:by},...tail]);
     }
   }
-  candidates.push(...detourAroundObstacles(p1,p2,ax,ay,bx,by,obs));
+  // 전 장비 외곽을 도는 후보는 항상 안전하지만 불필요하게 긴 테두리 배선을
+  // 선택하게 된다. 먼저 단순 후보와 내부 통로 A*를 시도하고 마지막에만 쓴다.
+  const outerDetours=detourAroundObstacles(p1,p2,ax,ay,bx,by,obs,laneOffset);
 
   // 덕트 채널 경유 후보 (패널 모드)
   if(Object.keys(S.ducts||{}).length){
@@ -8003,12 +8033,12 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds){
     }
   }
 
-  // 1) 후보 중 완전 안전 경로
+  // 1) 짧은 직접 후보 중 완전 안전 경로
   let chosen=pickSafeRoute(candidates, obs, endpointIds);
 
   // 2) 채널 A* — 장애물 가장자리를 따라 우회 (이미지 관통 금지)
   if(!chosen){
-    const mid=routeOrthoChannel({x:ax,y:ay}, {x:bx,y:by}, obs);
+    const mid=routeOrthoChannel({x:ax,y:ay}, {x:bx,y:by}, obs, laneOffset);
     if(mid && mid.length>=2){
       const full=[{x:p1.x,y:p1.y}, ...mid, {x:p2.x,y:p2.y}];
       const clean=forceOrthoChain(full, obs, endpointIds);
@@ -8021,14 +8051,20 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds){
     }
   }
 
-  // 3) 외곽 hull 강제 우회
+  // 3) 내부 통로가 없을 때만 장비군 외곽 우회
+  if(!chosen){
+    chosen=pickSafeRoute(outerDetours, obs, endpointIds);
+    if(!chosen)candidates.push(...outerDetours);
+  }
+
+  // 4) 외곽 hull 강제 우회
   if(!chosen){
     let topY=Infinity,botY=-Infinity,leftX=Infinity,rightX=-Infinity;
     for(const ob of obs){
       topY=Math.min(topY,ob.y1); botY=Math.max(botY,ob.y2);
       leftX=Math.min(leftX,ob.x1); rightX=Math.max(rightX,ob.x2);
     }
-    const pad=90;
+    const pad=90+laneOffset;
     const hullCands=[
       [{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:topY-pad},{x:bx,y:topY-pad},{x:bx,y:by},{x:p2.x,y:p2.y}],
       [{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:botY+pad},{x:bx,y:botY+pad},{x:bx,y:by},{x:p2.x,y:p2.y}],
@@ -8039,7 +8075,7 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds){
     if(!chosen) candidates.push(...hullCands);
   }
 
-  // 4) 최후: 충돌 최소 경로 (그래도 이미지 위 최소화)
+  // 5) 최후: 충돌 최소 경로 (그래도 이미지 위 최소화)
   if(!chosen){
     chosen=pickLeastBadRoute(candidates, obs, endpointIds);
   }
@@ -8064,6 +8100,30 @@ let tracedForwardWires=new Set();
 let tracedReturnWires=new Set();
 let tracedPeWires=new Set();
 
+function wireRouteFamily(wire){
+  const terminalFor=(ref)=>{
+    const device=S.devices[ref?.dev];
+    return device&&LIB[device.type]?.terminals?.find(terminal=>terminal.id===ref.term);
+  };
+  const polarities=[terminalFor(wire.from)?.pol,terminalFor(wire.to)?.pol].filter(Boolean);
+  if(polarities.some(polarity=>polarity==='PE'))return 'pe';
+  if(polarities.some(polarity=>polarity==='COMM'))return 'communication';
+  if(polarities.some(polarity=>polarity==='AC-L'||polarity==='AC-N'))return 'ac-power';
+  if(polarities.some(polarity=>polarity==='DC+'))return 'dc-positive';
+  if(polarities.some(polarity=>polarity==='DC-'))return 'dc-return';
+  return 'control-signal';
+}
+function wireRouteLaneOffset(wire,laneUse){
+  const devicePair=[wire.from.dev,wire.to.dev].sort().join('|');
+  const family=wireRouteFamily(wire);
+  const bundle=`${devicePair}|${family==='communication'?'communication':'conductors'}`;
+  const lane=laneUse.get(bundle)||0;
+  laneUse.set(bundle,lane+1);
+  // 같은 장비쌍의 심선을 작은 간격으로 분리한다. 큰 간격은 좁은 내부 통로를
+  // 스스로 막아 외곽을 한 바퀴 도는 경로를 만들므로 작은 간격만 사용한다.
+  return (lane%8)*2;
+}
+
 function renderWires(){
   elWire.innerHTML='';
   // 와이어 인덱스 약간씩 오프셋해 겹침 분산
@@ -8075,6 +8135,7 @@ function renderWires(){
   // 단자별 사용 카운트 — 같은 단자에서 여러 와이어 나오면 lead-out 길이 분산
   const termOutCount = new Map();
   const seen=new Map();
+  const routeLaneUse=new Map();
   const errors=lastErrors;
   for(let wi=0;wi<S.wires.length;wi++){
     const w=S.wires[wi];
@@ -8102,16 +8163,17 @@ function renderWires(){
     // 탈출 거리: 단자가 많을수록 살짝 벌려 겹침 감소 + 본체 밖 확보
     const offA = 32 + fromCount*8 + idx*5 + (wi%3)*3 + boostA;
     const offB = 32 + toCount*8 + idx*5 + (wi%3)*3 + boostB;
+    const laneOffset=wireRouteLaneOffset(w,routeLaneUse);
     let d;
     if(S.routerOrtho){
       // 패널/자유 모두 장애물 회피 라우팅 (이미지 위 통과 금지)
       if(isPanelConstrained() && Object.keys(S.ducts||{}).length && !(w.waypoints&&w.waypoints.length)){
-        d=routePanelWire(pa,pb,w,[w.from.dev,w.to.dev]);
+        d=routePanelWire(pa,pb,w,[w.from.dev,w.to.dev],laneOffset);
       }else{
-        d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev]);
+        d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset);
       }
     }else{
-      d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev]);
+      d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset);
     }
     const hitPath=document.createElementNS(SVGNS,'path');
     hitPath.setAttribute('d',d);
@@ -9678,6 +9740,17 @@ function tidyLayout(){
   status(lockedSkip?`🧹 정렬 완료 (고정 ${lockedSkip}개는 유지)`:'🧹 카테고리별 자동 정렬 완료');
 }
 
+/** 수동 경유점을 비우고 현재 장비 장애물/배선 레인 기준으로 재계산한다. */
+function organizeWireRoutes(){
+  if(!S.wires.length){status('정리할 결선이 없습니다');return;}
+  snapshot();
+  for(const w of S.wires) w.waypoints=[];
+  S.routerOrtho=true;
+  $('#b-router')?.classList.add('active');
+  renderWires();
+  status(`🧹 선 정리 완료 · ${S.wires.length}가닥을 장비 우회 배선 레인으로 재계산했습니다 (Ctrl+Z로 복원)`);
+}
+
 /* PNG 내보내기 (D) */
 function exportPNG(){
   const ids=Object.keys(S.devices);
@@ -11155,7 +11228,7 @@ $('#b-validate').onclick=()=>{
   status(`검증 완료: 오류 ${lastErrors.size}개, net ${lastNets.length}개`);
 };
 $('#b-export-report').onclick=()=>{ exportTrainerReport(); };
-$('#b-router').onclick=function(){S.routerOrtho=!S.routerOrtho;this.classList.toggle('active',S.routerOrtho);renderWires();};
+$('#b-router').onclick=organizeWireRoutes;
 $('#b-labels').onclick=function(){S.showLabels=!S.showLabels;this.classList.toggle('active',S.showLabels);renderDevices();};
 $('#b-polarity').onclick=function(){S.showPolarity=!S.showPolarity;this.classList.toggle('active',S.showPolarity);renderDevices();};
 $('#b-wire-tags')?.addEventListener('click',function(){
