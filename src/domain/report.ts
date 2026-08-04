@@ -50,6 +50,8 @@ export interface ReviewReportTerminal {
   deviceId: string;
   terminalId: string;
   terminalLabel: string | null;
+  terminalMarker: string | null;
+  connectionPoint: 'A' | 'B' | null;
   profileId: string | null;
   profileVersion: string | null;
 }
@@ -179,6 +181,8 @@ function terminalDetails(
     deviceId: ref.deviceId,
     terminalId: ref.terminalId,
     terminalLabel: terminal?.label ?? null,
+    terminalMarker: terminal?.marker ?? terminal?.label ?? null,
+    connectionPoint: terminal?.connectionPoint ?? null,
     profileId: device?.profileId ?? null,
     profileVersion: device?.profileVersion ?? null,
   };

@@ -30,3 +30,13 @@ test('ordinary rendering still does not trigger formal validation after assistan
   assert.match(renderBody, /refreshLiveTopology\(\)/);
   assert.doesNotMatch(renderBody, /\bvalidate\(\)/);
 });
+
+test('selecting exactly two devices automatically shows ordered source-load-return flow', () => {
+  assert.match(panel, /if \(selectedDeviceIds\.length === 2\) void calculate\('automatic'\)/);
+  assert.match(panel, /options\.showFlow\(flowSteps\)/);
+  assert.match(panel, /\+ 공급/);
+  assert.match(panel, /장비·신호/);
+  assert.match(panel, /0V\/N 귀로/);
+  assert.match(workflow, /showWiringFlowV3\(steps/);
+  assert.match(workflow, /clearWiringFlowV3\(\)/);
+});

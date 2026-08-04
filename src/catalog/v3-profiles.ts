@@ -27,6 +27,8 @@ export interface EvidenceV3 {
 export interface DeviceTerminalV3 {
   readonly id: string;
   readonly label: string;
+  readonly marker?: string;
+  readonly connectionPoint?: TerminalSpec['connectionPoint'];
   readonly domain: TerminalSpec['domain'];
   readonly potential: TerminalSpec['potential'];
   readonly role: TerminalSpec['role'];
@@ -115,6 +117,8 @@ function toV3Terminal(terminal: TerminalSpec): DeviceTerminalV3 {
   return {
     id: terminal.id,
     label: terminal.label,
+    ...(terminal.marker === undefined ? {} : { marker: terminal.marker }),
+    ...(terminal.connectionPoint === undefined ? {} : { connectionPoint: terminal.connectionPoint }),
     domain: terminal.domain,
     potential: terminal.potential,
     role: terminal.role,

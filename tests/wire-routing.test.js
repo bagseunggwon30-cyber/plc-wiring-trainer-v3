@@ -45,6 +45,28 @@ test('orthogonal simplification preserves an exterior exit when the route revers
   assert.equal(points[1].y, 1040);
 });
 
+test('automatic routing never accepts a path that crosses a non-endpoint device image', () => {
+  const start = html.indexOf('function routeOrtho(');
+  const end = html.indexOf('function routeCurve(', start);
+  const routeSource = html.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(routeSource, /const devA=excludeIds\?\.\[0\] \|\| findDeviceAtPoint\(p1\)/);
+  assert.doesNotMatch(routeSource, /middlePathHitsObstacles\(clean, obs\)/);
+  assert.doesNotMatch(routeSource, /pickLeastBadRoute\(candidates/);
+  assert.match(routeSource, /const safeStub=/);
+  assert.doesNotMatch(routeSource, /return `M \$\{p1\.x\} \$\{p1\.y\} L \$\{ax\} \$\{ay\} M/);
+  assert.match(routeSource, /ROUTE_BLOCKED_BY_OBSTACLES/);
+});
+
+test('renderer exposes a dedicated non-committing wiring-flow overlay', () => {
+  assert.match(html, /id="g-wiring-flow"/);
+  assert.match(html, /function\s+renderWiringFlow\s*\(/);
+  assert.match(html, /wiring-flow-path/);
+  assert.match(html, /flow-source-terminal/);
+  assert.match(html, /flow-return-terminal/);
+  assert.match(html, /showWiringFlowV3\(steps\)/);
+});
+
 test('wire cleanup is an undoable action that removes stale manual waypoints', () => {
   assert.match(html, /function\s+organizeWireRoutes\s*\(/);
   assert.match(html, /for\(const w of S\.wires\)\s*w\.waypoints=\[\]/);

@@ -132,8 +132,8 @@ describe('review report generation', () => {
       ['wire', 'w-neutral'],
     ]);
     expect(first.pinToPin[0]).toMatchObject({
-      from: { deviceId: 'psu', terminalId: 'V+1', terminalLabel: '+V' },
-      to: { deviceId: 'psu', terminalId: 'V+2', terminalLabel: '+V' },
+      from: { deviceId: 'psu', terminalId: 'V+1', terminalLabel: '+V', terminalMarker: '+V', connectionPoint: null },
+      to: { deviceId: 'psu', terminalId: 'V+2', terminalLabel: '+V', terminalMarker: '+V', connectionPoint: null },
     });
     expect(first.deviceSettings).toEqual([
       expect.objectContaining({ deviceId: 'plc', configuration: { inputMode: 'sink', station: 1 } }),
@@ -174,6 +174,25 @@ describe('review report generation', () => {
       expect.objectContaining({ connectionId: 'j3', segment: 1, from: expect.objectContaining({ terminalId: 'V+1' }), to: expect.objectContaining({ terminalId: 'V+2' }) }),
       expect.objectContaining({ connectionId: 'j3', segment: 2, from: expect.objectContaining({ terminalId: 'V+1' }), to: expect.objectContaining({ terminalId: 'V-1' }) }),
     ]);
+  });
+
+  it('reports one terminal marker with distinct A/B physical connection points', async () => {
+    const document = workshop();
+    document.devices = [instance('xt1', 'phoenix-contact:ut-2.5-3044076')];
+    document.wires = [{
+      id: 'w-through',
+      from: { deviceId: 'xt1', terminalId: '1' },
+      to: { deviceId: 'xt1', terminalId: '2' },
+      color: 'gray',
+    }];
+    document.jumpers = [];
+
+    const report = await generateReviewReport(document, await validation(document), DEVICE_PROFILES);
+
+    expect(report.pinToPin[0]).toMatchObject({
+      from: { deviceId: 'xt1', terminalId: '1', terminalMarker: '1', connectionPoint: 'A' },
+      to: { deviceId: 'xt1', terminalId: '2', terminalMarker: '1', connectionPoint: 'B' },
+    });
   });
 
   it.each([

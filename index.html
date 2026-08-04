@@ -43,6 +43,9 @@ header .hgroup .sep { background: #333; margin: 0 2px; height: 14px; }
 #palette h3{font-size:11px;color:#7af;margin:8px 4px 4px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #333;padding-bottom:2px;cursor:pointer;user-select:none}
 #palette h3::before{content:'▾';margin-right:4px;font-size:9px;color:#666;display:inline-block;transition:transform .15s}
 #palette h3.collapsed::before{transform:rotate(-90deg)}
+.pal-manual-status{display:inline-block;margin:3px 0 0;padding:1px 5px;border-radius:8px;font-size:8px;font-style:normal;font-weight:700}
+.pal-manual-status.exact{background:#183f2a;color:#9de8b7}.pal-manual-status.family{background:#4d3e18;color:#ffe29a}
+.pal-manual-status.unresolved{background:#51242a;color:#ffb8bd}.pal-manual-status.boundary{background:#1d3852;color:#b7ddff}
 .pal{background:#262626;padding:6px 8px;margin:3px 0;cursor:grab;border-radius:3px;font-size:11px;border-left:3px solid #4a90e2;line-height:1.3}
 .pal:hover{background:#333}
 .pal:active{cursor:grabbing}
@@ -103,6 +106,14 @@ svg.canvas.pan:active{cursor:grabbing}
 .terminal.circuit-open-mate:not(.pending){stroke:#ff9800;stroke-width:3.5;stroke-dasharray:4 2;vector-effect:non-scaling-stroke}
 .terminal-hit.circuit-open-mate{fill:rgba(255,152,0,.10);stroke:rgba(255,152,0,.72);stroke-width:3.5;stroke-dasharray:4 2;vector-effect:non-scaling-stroke}
 .terminal.highlight{fill:#ff0;stroke:#f60;stroke-width:2.5;r:10}
+.terminal.flow-source-terminal:not(.terminal-hit){fill:#fee2e2;stroke:#dc2626;stroke-width:3.5;r:10;filter:drop-shadow(0 0 5px rgba(220,38,38,.85))}
+.terminal.flow-signal-terminal:not(.terminal-hit){fill:#ffedd5;stroke:#f97316;stroke-width:3.5;r:10;filter:drop-shadow(0 0 5px rgba(249,115,22,.8))}
+.terminal.flow-return-terminal:not(.terminal-hit){fill:#dbeafe;stroke:#2563eb;stroke-width:3.5;r:10;filter:drop-shadow(0 0 5px rgba(37,99,235,.85))}
+.terminal.flow-pe-terminal:not(.terminal-hit){fill:#ecfccb;stroke:#65a30d;stroke-width:3.5;r:10;filter:drop-shadow(0 0 5px rgba(101,163,13,.8))}
+.terminal-hit.flow-source-terminal{fill:rgba(220,38,38,.08);stroke:rgba(220,38,38,.55);stroke-width:4}
+.terminal-hit.flow-signal-terminal{fill:rgba(249,115,22,.08);stroke:rgba(249,115,22,.55);stroke-width:4}
+.terminal-hit.flow-return-terminal{fill:rgba(37,99,235,.08);stroke:rgba(37,99,235,.55);stroke-width:4}
+.terminal-hit.flow-pe-terminal{fill:rgba(101,163,13,.08);stroke:rgba(101,163,13,.55);stroke-width:4}
 .terminal-hit{fill:rgba(0,0,0,0);stroke:rgba(0,0,0,0);stroke-width:2;filter:none;pointer-events:all;vector-effect:non-scaling-stroke}
 .terminal-hit:hover{stroke:rgba(255,128,0,.12);fill:rgba(255,128,0,.08)}
 .terminal-debug-visual{fill:rgba(255,255,255,.92);stroke:#222;stroke-width:1.2;pointer-events:none}
@@ -152,12 +163,20 @@ body.calib-mode #calib-actions{display:inline-flex}
 .wire.trace-forward{stroke:#ef4444!important;stroke-width:7;filter:drop-shadow(0 0 5px rgba(239,68,68,.9))}
 .wire.trace-return{stroke:#3b82f6!important;stroke-width:7;filter:drop-shadow(0 0 5px rgba(59,130,246,.9))}
 .wire.trace-pe{stroke:#84cc16!important;stroke-width:7;stroke-dasharray:8 4;filter:drop-shadow(0 0 5px rgba(132,204,22,.9))}
+.wire.route-blocked:not(.wire-hit){stroke:#ef4444!important;stroke-dasharray:5 5;filter:drop-shadow(0 0 4px rgba(239,68,68,.8))}
+.wire-core.route-blocked{display:none}
 .wire.live{stroke:#ff0 !important;stroke-width:6;filter:drop-shadow(0 0 5px rgba(255,255,0,.85));animation:flow .8s linear infinite}
 .wire-hit{stroke:rgba(0,0,0,0);stroke-width:18;filter:none;pointer-events:stroke;vector-effect:non-scaling-stroke}
 .wire-hit:hover{stroke:rgba(255,150,0,.12);stroke-width:18}
 .wire-error-x{fill:none;stroke:#e11;stroke-width:2.4;stroke-linecap:round;pointer-events:none;filter:drop-shadow(0 0 2px rgba(200,0,0,.6))}
 .wire-error-badge{fill:#e11;stroke:#600;stroke-width:1;pointer-events:none}
 .wire-error-badge-text{fill:#fff;font-size:9px;font-weight:800;pointer-events:none;font-family:Segoe UI,Malgun Gothic,sans-serif}
+.wiring-flow-path{fill:none;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:10 7;pointer-events:none;opacity:.92;animation:flow 1.1s linear infinite;filter:drop-shadow(0 0 4px rgba(0,0,0,.35))}
+.wiring-flow-path.source{stroke:#dc2626;marker-end:url(#flow-arrow-source)}
+.wiring-flow-path.signal,.wiring-flow-path.differential-pair{stroke:#f97316;marker-end:url(#flow-arrow-signal)}
+.wiring-flow-path.return{stroke:#2563eb;marker-end:url(#flow-arrow-return)}
+.wiring-flow-path.pe{stroke:#65a30d;marker-end:url(#flow-arrow-pe)}
+.wiring-flow-path.route-blocked{stroke:#ef4444;stroke-dasharray:3 5;marker-end:none}
 #select-box{fill:rgba(74,144,226,.12);stroke:#4a90e2;stroke-width:1.5;stroke-dasharray:6 4;pointer-events:none}
 @keyframes flow{from{stroke-dashoffset:0}to{stroke-dashoffset:-30}}
 .terminal.live{fill:#ff0;stroke:#fa0;r:8.5;filter:drop-shadow(0 0 3px rgba(255,200,0,.8))}
@@ -409,6 +428,10 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <path d="M 100 0 L 0 0 0 100" fill="none" class="bg-grid-major"/>
 </pattern>
 <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#666"/></marker>
+<marker id="flow-arrow-source" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#dc2626"/></marker>
+<marker id="flow-arrow-signal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#f97316"/></marker>
+<marker id="flow-arrow-return" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker>
+<marker id="flow-arrow-pe" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#65a30d"/></marker>
 <pattern id="din-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(0)">
   <rect width="8" height="8" fill="#c8c8c8"/>
   <path d="M0 0 H8 M0 4 H8" stroke="#a8a8a8" stroke-width="1"/>
@@ -422,6 +445,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <g id="g-devices"></g>
 <g id="g-jumpers"></g>
 <g id="g-wires"></g>
+<g id="g-wiring-flow"></g>
 <g id="g-terminals"></g>
 <g id="g-overlay"></g>
 <path id="ghost" stroke="#888" stroke-dasharray="6 4" stroke-width="2" fill="none" style="display:none;pointer-events:none"/>
@@ -721,6 +745,8 @@ function terminalSemanticHint(term){
   }
   if(term?.commonType==='analog-reference')return '아날로그 CH−/G 신호 귀로: 모듈 전원 0V와 자동으로 같은 단자가 아님.';
   if(term?.commonType==='communication-reference')return '통신 기준 SG: RS485 A/B 데이터선 및 PE와 구분.';
+  if(term?.commonType==='fused-power')return '퓨즈 직렬 단자: A/B 접속점 사이에 지정된 퓨즈 링크가 들어가며 직접 공통이나 점퍼 우회로 취급하지 않음.';
+  if(term?.commonType==='power-pass-through')return '관통 단자: 같은 마커의 A/B 접속점이 내부 도통하며 각 접속점의 허용 도체 수와 정격을 지켜야 함.';
   if(['U','V','W'].includes(term?.phase))return `인버터 모터 출력 ${term.phase}상: 입력 R/S/T 또는 N에 연결하지 말고 대응 모터 상으로 결선.`;
   if(term?.channel==='analog-reference-supply')return 'VR은 외부 속도설정 볼륨용 12V 기준 공급. V1 최대 입력 10V에 직접 단락 연결하지 말고 볼륨/검증된 신호원을 사용.';
   if(term?.id==='24G')return '24G는 내장 DC24V 전원의 0V 귀로. PE, 입력 COM, 릴레이 COM 또는 통신 SG와 구분.';
@@ -797,25 +823,25 @@ const LIB = {
   ],
   netHints:[['V+1','V+2'],['V-1','V-2']]
 },
-'TB4':{cat:'wiring',label:'4P 단자대',sub:'관통형',w:160,h:55,color:'#666',
+'TB4':{cat:'wiring',label:'4P 단자대',sub:'관통형',w:160,h:55,color:'#666',bridgeable:true,
   icon:'tb',
   terminals:[
-    {id:'1',x:30,y:0,side:'T',label:'1',pol:'NEUTRAL'},
-    {id:'2',x:65,y:0,side:'T',label:'2',pol:'NEUTRAL'},
-    {id:'3',x:100,y:0,side:'T',label:'3',pol:'NEUTRAL'},
-    {id:'4',x:135,y:0,side:'T',label:'4',pol:'NEUTRAL'},
-    {id:"1'",x:30,y:55,side:'B',label:"1'",pol:'NEUTRAL'},
-    {id:"2'",x:65,y:55,side:'B',label:"2'",pol:'NEUTRAL'},
-    {id:"3'",x:100,y:55,side:'B',label:"3'",pol:'NEUTRAL'},
-    {id:"4'",x:135,y:55,side:'B',label:"4'",pol:'NEUTRAL'},
+    {id:'1',x:30,y:0,side:'T',label:'1',connectionSide:'A',pol:'NEUTRAL'},
+    {id:'2',x:65,y:0,side:'T',label:'2',connectionSide:'A',pol:'NEUTRAL'},
+    {id:'3',x:100,y:0,side:'T',label:'3',connectionSide:'A',pol:'NEUTRAL'},
+    {id:'4',x:135,y:0,side:'T',label:'4',connectionSide:'A',pol:'NEUTRAL'},
+    {id:"1'",x:30,y:55,side:'B',label:'1',connectionSide:'B',pol:'NEUTRAL'},
+    {id:"2'",x:65,y:55,side:'B',label:'2',connectionSide:'B',pol:'NEUTRAL'},
+    {id:"3'",x:100,y:55,side:'B',label:'3',connectionSide:'B',pol:'NEUTRAL'},
+    {id:"4'",x:135,y:55,side:'B',label:'4',connectionSide:'B',pol:'NEUTRAL'},
   ],
   netHints:[['1',"1'"],['2',"2'"],['3',"3'"],['4',"4'"]]
 },
 'TB10':{cat:'wiring',label:'10P 단자대',sub:'관통형',w:340,h:55,color:'#666',
   icon:'tb',
   terminals:Array.from({length:10},(_,i)=>[
-    {id:''+(i+1), x:25+i*32,y:0,side:'T',label:''+(i+1),pol:'NEUTRAL'},
-    {id:(i+1)+"'",x:25+i*32,y:55,side:'B',label:(i+1)+"'",pol:'NEUTRAL'},
+    {id:''+(i+1), x:25+i*32,y:0,side:'T',label:''+(i+1),connectionSide:'A',pol:'NEUTRAL'},
+    {id:(i+1)+"'",x:25+i*32,y:55,side:'B',label:''+(i+1),connectionSide:'B',pol:'NEUTRAL'},
   ]).flat(),
   netHints:Array.from({length:10},(_,i)=>[''+(i+1),(i+1)+"'"]),
   generatedTerminalStrip:true, bridgeable:true
@@ -1595,22 +1621,22 @@ Object.assign(LIB,{
   'UT-2.5':{cat:'wiring',label:'UT 2,5 · 3044076',sub:'Phoenix Contact · 관통형 · 1000V/24A',w:180,h:120,color:'#777',
     exactProfile:true,defaultConfiguration:{orderCode:'3044076'},
     terminals:[
-      {id:'1',x:70,y:28,side:'T',label:'1',pol:'NEUTRAL'},
-      {id:'2',x:110,y:28,side:'T',label:'2',pol:'NEUTRAL'}
+      {id:'1',x:70,y:28,side:'L',label:'1',connectionSide:'A',hit:{x:70,y:28,r:14},pol:'NEUTRAL'},
+      {id:'2',x:110,y:28,side:'R',label:'1',connectionSide:'B',hit:{x:110,y:28,r:14},pol:'NEUTRAL'}
     ],netHints:[['1','2']],terminalAssemblyType:'through'
   },
   'UT-2.5-PE':{cat:'wiring',label:'UT 2,5-PE · 3044092',sub:'Phoenix Contact · PE 레일 결합형',w:180,h:120,color:'#5a3',
     exactProfile:true,defaultConfiguration:{orderCode:'3044092'},
     terminals:[
-      {id:'1',x:70,y:28,side:'T',label:'PE 1',pol:'PE'},
-      {id:'2',x:110,y:28,side:'T',label:'PE 2',pol:'PE'}
+      {id:'1',x:70,y:28,side:'L',label:'PE 1',connectionSide:'A',hit:{x:70,y:28,r:14},pol:'PE'},
+      {id:'2',x:110,y:28,side:'R',label:'PE 1',connectionSide:'B',hit:{x:110,y:28,r:14},pol:'PE'}
     ],netHints:[['1','2']],terminalAssemblyType:'pe',bondToDinRail:true
   },
   'UT-4-HESI':{cat:'wiring',label:'UT 4-HESI · 3046032',sub:'Phoenix Contact · 5×20 퓨즈형 · 500V/6.3A',w:180,h:120,color:'#222',
     exactProfile:true,defaultConfiguration:{orderCode:'3046032'},
     terminals:[
-      {id:'1',x:70,y:68,side:'L',label:'IN',pol:'NEUTRAL'},
-      {id:'2',x:110,y:68,side:'R',label:'OUT',pol:'NEUTRAL'}
+      {id:'1',x:70,y:68,side:'L',label:'1',connectionSide:'A',hit:{x:70,y:68,r:14},pol:'NEUTRAL'},
+      {id:'2',x:110,y:68,side:'R',label:'1',connectionSide:'B',hit:{x:110,y:68,r:14},pol:'NEUTRAL'}
     ],contactPairs:[{from:'1',to:'2',normally:'closed',stateKey:'fuse'}],terminalAssemblyType:'fused'
   }
 });
@@ -1686,19 +1712,19 @@ Object.assign(LIB['UT-2.5'],{
   image:CODEX_EXACT+'phoenix-ut25-3044076-imagen-v1.png',imageBox:{x:0,y:0,w:180,h:120},imageHasLabels:false,
   assetId:'codex:phoenix-ut25-3044076-imagen-v1',
   geometryHash:'AF10659DACE46DA366C5E9E9F6C0CB7A94C256DDCEDDEB740A7AC092051634AE',
-  assetApproval:'pending',manualOverlay:true,generatedTerminalStrip:true
+  assetApproval:'pending',manualOverlay:true,generatedTerminalStrip:false,bridgeable:false
 });
 Object.assign(LIB['UT-2.5-PE'],{
   image:CODEX_EXACT+'phoenix-ut25pe-3044092-imagen-v1.png',imageBox:{x:0,y:0,w:180,h:120},imageHasLabels:false,
   assetId:'codex:phoenix-ut25pe-3044092-imagen-v1',
   geometryHash:'95F4F7B75B6AC1495F862D30E5AE080191C030A4D7355F8CC1E0B6590F9849AC',
-  assetApproval:'pending',manualOverlay:true,generatedTerminalStrip:true
+  assetApproval:'pending',manualOverlay:true,generatedTerminalStrip:false,bridgeable:false
 });
 Object.assign(LIB['UT-4-HESI'],{
   image:CODEX_EXACT+'phoenix-ut4-hesi-3046032-imagen-v1.png',imageBox:{x:0,y:0,w:180,h:120},imageHasLabels:false,
   assetId:'codex:phoenix-ut4-hesi-3046032-imagen-v1',
   geometryHash:'AA686911939E62DA1BE94EC9B3496B4DB951E1ADB82B4CF941DF356DA6A62BB3',
-  assetApproval:'pending',manualOverlay:true,generatedTerminalStrip:true
+  assetApproval:'pending',manualOverlay:true,generatedTerminalStrip:false,bridgeable:false
 });
 
 Object.assign(LIB['MCCB'],{
@@ -2056,8 +2082,10 @@ function createTerminalStrip({
   for(let i=0;i<count;i++){
     const n=startNo+i;
     const x = startX + i * pitch;
-    terminals.push({id:`${n}`,x,y:yTop,side:'T',label:`${labelPrefix}${n}`,pol});
-    terminals.push({id:`${n}'`,x,y:yBottom,side:'B',label:`${labelPrefix}${n}'`,pol});
+    // 한 관통 단자 위치의 위/아래 접속점은 같은 마커 번호를 사용한다.
+    // 내부 ID의 apostrophe는 기존 저장 파일 호환을 위해서만 유지한다.
+    terminals.push({id:`${n}`,x,y:yTop,side:'T',label:`${labelPrefix}${n}`,connectionSide:'A',pol});
+    terminals.push({id:`${n}'`,x,y:yBottom,side:'B',label:`${labelPrefix}${n}`,connectionSide:'B',pol});
   }
   const totalW = startX + (count-1)*pitch + 32;
   return {
@@ -2556,16 +2584,16 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
 
   // 4) TB4 — 나사 중심 실측 (terminal-calibration-2026-07-09-08-11.json 기준으로 맞춤)
   Object.assign(LIB['TB4'],{
-    w:220,h:100,image:CODEX+'tb4-codex.png',imageBox:{x:0,y:0,w:220,h:100},imageHasLabels:false,
+    w:220,h:100,image:CODEX+'tb4-codex.png',imageBox:{x:0,y:0,w:220,h:100},imageHasLabels:false,bridgeable:true,
     terminals:[
-      {id:'1',x:78.7,y:28.3,side:'T',label:'1',pol:'NEUTRAL'},
-      {id:'2',x:119.2,y:27.3,side:'T',label:'2',pol:'NEUTRAL'},
-      {id:'3',x:165.1,y:28.6,side:'T',label:'3',pol:'NEUTRAL'},
-      {id:'4',x:207.1,y:28.5,side:'T',label:'4',pol:'NEUTRAL'},
-      {id:"1'",x:77.7,y:68.6,side:'B',label:"1'",pol:'NEUTRAL'},
-      {id:"2'",x:119.6,y:68.6,side:'B',label:"2'",pol:'NEUTRAL'},
-      {id:"3'",x:162.6,y:68.6,side:'B',label:"3'",pol:'NEUTRAL'},
-      {id:"4'",x:205.5,y:68.6,side:'B',label:"4'",pol:'NEUTRAL'},
+      {id:'1',x:78.7,y:28.3,side:'T',label:'1',connectionSide:'A',pol:'NEUTRAL'},
+      {id:'2',x:119.2,y:27.3,side:'T',label:'2',connectionSide:'A',pol:'NEUTRAL'},
+      {id:'3',x:165.1,y:28.6,side:'T',label:'3',connectionSide:'A',pol:'NEUTRAL'},
+      {id:'4',x:207.1,y:28.5,side:'T',label:'4',connectionSide:'A',pol:'NEUTRAL'},
+      {id:"1'",x:77.7,y:68.6,side:'B',label:'1',connectionSide:'B',pol:'NEUTRAL'},
+      {id:"2'",x:119.6,y:68.6,side:'B',label:'2',connectionSide:'B',pol:'NEUTRAL'},
+      {id:"3'",x:162.6,y:68.6,side:'B',label:'3',connectionSide:'B',pol:'NEUTRAL'},
+      {id:"4'",x:205.5,y:68.6,side:'B',label:'4',connectionSide:'B',pol:'NEUTRAL'},
     ],
     netHints:[['1',"1'"],['2',"2'"],['3',"3'"],['4',"4'"]]
   });
@@ -2578,8 +2606,8 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
       return xs.flatMap((px,i)=>{
         const x=+(px/456*480).toFixed(1);
         return [
-          {id:''+(i+1),x,y:28.3,side:'T',label:''+(i+1),pol:'NEUTRAL'},
-          {id:(i+1)+"'",x,y:69.3,side:'B',label:(i+1)+"'",pol:'NEUTRAL'},
+          {id:''+(i+1),x,y:28.3,side:'T',label:''+(i+1),connectionSide:'A',pol:'NEUTRAL'},
+          {id:(i+1)+"'",x,y:69.3,side:'B',label:''+(i+1),connectionSide:'B',pol:'NEUTRAL'},
         ];
       });
     })(),
@@ -3161,7 +3189,10 @@ function terminalLeadOutPoint(p, dist=18){
 }
 function terminalHitRadius(def,t){
   const hit=terminalRolePoint(t,'hit');
-  return isFiniteCoord(hit.r) ? Number(hit.r) : (t.r || (def.terminals.length>32 ? 7.2 : 8.5));
+  if(isFiniteCoord(hit.r))return Number(hit.r);
+  if(def?.terminalAssemblyType)return 14;
+  if(def?.cat==='wiring')return def.terminals.length>32?9.5:11;
+  return t.r || (def.terminals.length>32 ? 7.2 : 8.5);
 }
 /** 교육용 기본 등록 타입(초기 스냅샷). 보정 시 다른 장비 타입도 자동 추가됨 */
 const TERMINAL_DATA_DEVICE_TYPES=['XBC-DR32H','EXP2-700','MDR-100','XBF-AH04A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
@@ -4546,7 +4577,7 @@ if(LIB['EXP2-700'])Object.assign(LIB['EXP2-700'].mount||(LIB['EXP2-700'].mount={
 
 const SVGNS='http://www.w3.org/2000/svg';
 const $=q=>document.querySelector(q);
-const elDev=$('#g-devices'), elWire=$('#g-wires'), elTerm=$('#g-terminals'), elGhost=$('#ghost'), elSelectBox=$('#select-box');
+const elDev=$('#g-devices'), elWire=$('#g-wires'), elFlow=$('#g-wiring-flow'), elTerm=$('#g-terminals'), elGhost=$('#ghost'), elSelectBox=$('#select-box');
 const elPanel=$('#g-panel'), elDucts=$('#g-ducts'), elRails=$('#g-rails'), elJumpers=$('#g-jumpers'), elOverlay=$('#g-overlay');
 const elSvg=$('#canvas'), elStat=$('#stat'), elVP=$('#viewport');
 
@@ -5221,7 +5252,16 @@ function connectBusToTerm(busId, devId, termId){
 }
 function autoJumperTerminalStrip(deviceId, terms, busId){
   const dev=S.devices[deviceId]; if(!dev)return false;
-  const def=LIB[dev.type]; if(!def?.generatedTerminalStrip && !def?.bridgeable && def?.cat!=='wiring')return false;
+  const def=LIB[dev.type];
+  if(def?.terminalAssemblyType==='fused'){
+    status('점퍼 금지: 퓨즈 단자의 두 접속점을 우회하면 보호 기능이 사라집니다');
+    return false;
+  }
+  if(def?.allCommon){
+    status('점퍼 불필요: 이 분배 단자대는 정의상 이미 내부 공통입니다');
+    return false;
+  }
+  if(!def?.generatedTerminalStrip && !def?.bridgeable)return false;
   const bus=busId?S.distribution.buses[busId]:null;
   let useTerms=terms;
   if(!useTerms||!useTerms.length){
@@ -7397,17 +7437,28 @@ function renderDevices(){
       const hitPoint=pose.hit;
       const termR=(t.r || (termList.length>32 ? 7.2 : 8.5))*s;
       const hitR=terminalHitRadius(def,t)*s;
-      const semanticName=resolvedTerminalVisual(effectiveTerminal)?.label||{
+      const semanticName={
+        'power-pass-through':'관통 단자',
+        'fused-power':'퓨즈 직렬 단자'
+      }[effectiveTerminal.commonType]||resolvedTerminalVisual(effectiveTerminal)?.label||{
         line:'L/상선',neutral:'N/중성선',positive:'DC +',return:'DC 0V/귀로',
         'protective-earth':'PE 보호접지',configurable:'설정형 COM',nonpolar:'무전압 접점',
         'signal-positive':'신호 +','signal-return':'신호 −/G',
         'data-positive':'통신 A/+','data-negative':'통신 B/−',reference:'신호 기준',none:'고정 전위 없음'
       }[effectiveTerminal.polarity];
       const polName=semanticName||POL[t.pol]?.name||t.pol||'';
+      const terminalMarker=effectiveTerminal.marker||t.marker||t.label;
+      const connectionPoint=effectiveTerminal.connectionPoint||t.connectionSide||null;
+      const connectionDescription=!connectionPoint?'':effectiveTerminal.commonType==='fused-power'
+        ? `\n접속점: ${connectionPoint}측 · A/B 사이 5×20 퓨즈 직렬 · 직접 공통 아님`
+        : effectiveTerminal.role==='protective-earth'
+          ? `\n접속점: ${connectionPoint}측 · 반대편과 내부 도통 · DIN 레일 PE 보호결합`
+          : `\n접속점: ${connectionPoint}측 · 같은 마커의 반대편과 내부 도통`;
       const tipText=isPlug
-        ? `${def.label}\n커넥터 핀: ${t.label}\n타입: ${polName}\n(HDMI처럼 커넥터에 케이블 장착)`
-        : `${def.label}\n단자: ${t.label}\n타입: ${polName}\n${terminalSemanticHint(effectiveTerminal)}`;
+        ? `${def.label}\n커넥터 핀: ${terminalMarker}\n타입: ${polName}\n(HDMI처럼 커넥터에 케이블 장착)`
+        : `${def.label}\n단자 마커: ${terminalMarker}${connectionDescription}\n타입: ${polName}\n${terminalSemanticHint(effectiveTerminal)}`;
       const isPendingStart=S.pending&&S.pending.dev===id&&String(S.pending.term)===String(t.id);
+      const flowClass=wiringFlowTerminalClass(`${id}.${t.id}`);
       const targetAssessment=S.pending&&!isPendingStart?connectionAssessment(S.pending,{dev:id,term:t.id}):null;
       const candidateClass=targetAssessment?` wire-target-${targetAssessment.level}`:'';
       const completionHint=openCircuitHintByKey.get(`${id}:${t.id}`);
@@ -7416,7 +7467,7 @@ function renderDevices(){
       const candidateTip=targetAssessment?`${completionTip}\n결선 판정: ${targetAssessment.reason}`:completionTip;
       // 히트 영역
       const hit=document.createElementNS(SVGNS, isPlug?'rect':'circle');
-      hit.setAttribute('class', (isPlug?'plug-pin-hit terminal terminal-hit':'terminal terminal-hit')+candidateClass+completionClass);
+      hit.setAttribute('class', (isPlug?'plug-pin-hit terminal terminal-hit':'terminal terminal-hit')+candidateClass+completionClass+flowClass);
       if(isPlug){
         hit.setAttribute('x',hitPoint.x-hitR); hit.setAttribute('y',hitPoint.y-hitR);
         hit.setAttribute('width',hitR*2); hit.setAttribute('height',hitR*2);
@@ -7426,7 +7477,7 @@ function renderDevices(){
       }
       hit.dataset.id=id; hit.dataset.term=t.id;
       hit.setAttribute('role','button');
-      hit.setAttribute('aria-label',`${def.label} ${t.label} 단자`);
+      hit.setAttribute('aria-label',`${def.label} ${terminalMarker} 단자${connectionPoint?` ${connectionPoint}측 접속점`:''}`);
       const hitTip=document.createElementNS(SVGNS,'title');
       hitTip.textContent=candidateTip;
       hit.appendChild(hitTip);
@@ -7434,6 +7485,7 @@ function renderDevices(){
       // 보이는 단자: 플러그=핀, 일반=원형 나사
       let termCls=(isPlug?'plug-pin terminal':'terminal')+
         (isPendingStart?' pending':'')+candidateClass+completionClass+
+        flowClass+
         (highlightedTerms.has(id+'.'+t.id)?' highlight':'')+
         (SIM.on && SIM.liveTerms.has(id+'.'+t.id)?' live':'');
       if(S.boardMode==='distribution' && S.distribution.activeBus){
@@ -7474,7 +7526,7 @@ function renderDevices(){
         if(Number.isFinite(t.labelDy))ty+=t.labelDy;
         if(t.labelAnchor)a=t.labelAnchor;
         tl.setAttribute('x',tx); tl.setAttribute('y',ty); tl.setAttribute('text-anchor',a);
-        tl.textContent=t.label;
+        tl.textContent=terminalMarker;
         tg.appendChild(tl);
       }
       const terminalVisual=resolvedTerminalVisual(effectiveTerminal);
@@ -7525,15 +7577,20 @@ function exteriorExitPoint(p, devId, minDist=ROUTE_EXIT_PAD){
   const side=p?.side||'R';
   const d=devId?S.devices[devId]:null;
   const def=d?LIB[d.type]:null;
-  let exit=terminalLeadOutPoint(p, minDist);
+  // 단자에서 장비 외곽으로 빠져나오는 공통 스텁은 고정 길이로 둔다.
+  // 같은 면의 여러 심선을 벌리려고 스텁 자체를 계속 늘리면, 장비 사이가
+  // 좁을 때 출구가 이웃 장비 장애물 안으로 들어가 경로가 끊길 수 있다.
+  // 심선 분리는 본체 밖 채널의 laneOffset이 담당한다.
+  const safeLeadOut=Math.min(Math.max(0,minDist),ROUTE_EXIT_PAD);
+  let exit=terminalLeadOutPoint(p, safeLeadOut);
   if(d && def){
     const wh=deviceWH(d);
     const pad=ROUTE_DEVICE_PAD+(def.image?14:10);
-    if(side==='T') exit={x:p.x, y:Math.min(p.y-minDist, d.y-pad)};
-    else if(side==='B') exit={x:p.x, y:Math.max(p.y+minDist, d.y+wh.h+pad)};
-    else if(side==='L') exit={x:Math.min(p.x-minDist, d.x-pad), y:p.y};
-    else if(side==='R') exit={x:Math.max(p.x+minDist, d.x+wh.w+pad), y:p.y};
-    else exit={x:p.x, y:Math.min(p.y-minDist, d.y-pad)};
+    if(side==='T') exit={x:p.x, y:Math.min(p.y-safeLeadOut, d.y-pad)};
+    else if(side==='B') exit={x:p.x, y:Math.max(p.y+safeLeadOut, d.y+wh.h+pad)};
+    else if(side==='L') exit={x:Math.min(p.x-safeLeadOut, d.x-pad), y:p.y};
+    else if(side==='R') exit={x:Math.max(p.x+safeLeadOut, d.x+wh.w+pad), y:p.y};
+    else exit={x:p.x, y:Math.min(p.y-safeLeadOut, d.y-pad)};
   }
   return {x:exit.x, y:exit.y, side};
 }
@@ -7582,17 +7639,6 @@ function pathHitsObstacles(points, obs, endpointIds){
     }
   }
   return false;
-}
-/** 중간 경로(탈출점~진입점)만 검사 — 후보 스코어링용 */
-function middlePathHitsObstacles(points, obs){
-  if(!points||points.length<3){
-    // 짧으면 전체에서 끝점 없이 검사
-    return pathHitsObstacles(points, obs, null);
-  }
-  // points: [p1, exitA, ..., exitB, p2] → 중간은 index 1 .. length-2
-  const mid=points.slice(1, -1);
-  if(mid.length<2)return false;
-  return pathHitsObstacles(mid, obs, null);
 }
 function pathHitCount(points, obs, endpointIds){
   if(!points||points.length<2)return 0;
@@ -7914,21 +7960,10 @@ function pickSafeRoute(candidates, obs, endpointIds){
   // 안전 경로 없으면 null — 호출측에서 채널 A* 시도
   return null;
 }
-function pickLeastBadRoute(candidates, obs, endpointIds){
-  const scored=[];
-  for(const pts0 of candidates){
-    if(!pts0||pts0.length<2)continue;
-    const clean=forceOrthoChain(pts0, obs, endpointIds);
-    scored.push({pts:clean, hitN:pathHitCount(clean,obs,endpointIds), len:pathLen(clean)});
-  }
-  if(!scored.length)return null;
-  scored.sort((a,b)=>a.hitN-b.hitN || a.len-b.len);
-  return scored[0].pts;
-}
-
 function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=0){
-  const devA=findDeviceAtPoint(p1) || excludeIds?.[0] || null;
-  const devB=findDeviceAtPoint(p2) || excludeIds?.[1] || null;
+  // 겹친 장비 위 단자라도 실제 와이어의 명시적 끝점 장비를 우선한다.
+  const devA=excludeIds?.[0] || findDeviceAtPoint(p1) || null;
+  const devB=excludeIds?.[1] || findDeviceAtPoint(p2) || null;
   const endpointIds=[devA, devB];
   // 장비 밖으로 충분히 탈출한 뒤 라우팅
   const exitA=exteriorExitPoint(p1, devA, Math.max(offsetA, ROUTE_EXIT_PAD));
@@ -7939,6 +7974,21 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
   const obs=getObstacles([], endpointIds.map(id=>({id})).filter(e=>e.id));
 
   const ptsToSvg=(pts)=>pts.map((p,i)=>(i===0?'M':'L')+` ${p.x} ${p.y}`).join(' ');
+  const safeChannel=(offset)=>{
+    const mid=routeOrthoChannel({x:ax,y:ay}, {x:bx,y:by}, obs, offset);
+    if(!mid || mid.length<2)return null;
+    const clean=forceOrthoChain([{x:p1.x,y:p1.y}, ...mid, {x:p2.x,y:p2.y}], obs, endpointIds);
+    return pathHitsObstacles(clean, obs, endpointIds)?null:clean;
+  };
+  const safeStub=(from,to,endpointIndex)=>{
+    const stubEndpointIds=endpointIndex===0?[devA,null]:[null,devB];
+    for(const ratio of [1,.75,.5,.25,.1]){
+      const end={x:from.x+(to.x-from.x)*ratio,y:from.y+(to.y-from.y)*ratio};
+      const candidate=[{x:from.x,y:from.y},end];
+      if(!pathHitsObstacles(candidate,obs,stubEndpointIds))return candidate;
+    }
+    return [{x:from.x,y:from.y}];
+  };
 
   if(waypoints && waypoints.length){
     const pts=[{x:p1.x,y:p1.y},{x:ax,y:ay}];
@@ -8038,23 +8088,12 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
 
   // 2) 채널 A* — 장애물 가장자리를 따라 우회 (이미지 관통 금지)
   if(!chosen){
-    const mid=routeOrthoChannel({x:ax,y:ay}, {x:bx,y:by}, obs, laneOffset);
-    if(mid && mid.length>=2){
-      const full=[{x:p1.x,y:p1.y}, ...mid, {x:p2.x,y:p2.y}];
-      const clean=forceOrthoChain(full, obs, endpointIds);
-      if(!pathHitsObstacles(clean, obs, endpointIds)){
-        chosen=clean;
-      }else if(!middlePathHitsObstacles(clean, obs)){
-        // 중간만 안전하면 채택 (스텁은 끝점 장비 내부 허용)
-        chosen=clean;
-      }
-    }
+    chosen=safeChannel(laneOffset);
   }
 
   // 3) 내부 통로가 없을 때만 장비군 외곽 우회
   if(!chosen){
     chosen=pickSafeRoute(outerDetours, obs, endpointIds);
-    if(!chosen)candidates.push(...outerDetours);
   }
 
   // 4) 외곽 hull 강제 우회
@@ -8072,15 +8111,22 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
       [{x:p1.x,y:p1.y},{x:ax,y:ay},{x:rightX+pad,y:ay},{x:rightX+pad,y:by},{x:bx,y:by},{x:p2.x,y:p2.y}]
     ];
     chosen=pickSafeRoute(hullCands, obs, endpointIds);
-    if(!chosen) candidates.push(...hullCands);
   }
 
-  // 5) 최후: 충돌 최소 경로 (그래도 이미지 위 최소화)
+  // 5) 레인 여유값 때문에 좁은 통로가 닫힌 경우 더 작은 값부터 재탐색한다.
   if(!chosen){
-    chosen=pickLeastBadRoute(candidates, obs, endpointIds);
+    for(const retryOffset of [...new Set([0,2,6,12,24,48,96])]){
+      chosen=safeChannel(retryOffset);
+      if(chosen)break;
+    }
   }
   if(!chosen){
-    chosen=[{x:p1.x,y:p1.y},{x:ax,y:ay},{x:bx,y:ay},{x:bx,y:by},{x:p2.x,y:p2.y}];
+    // 관통 경로를 그려 정상처럼 보이게 하지 않는다. 양 끝 스텁만 표시하면
+    // 사용자는 ROUTE_BLOCKED_BY_OBSTACLES 상태를 보고 장비 간격을 넓힐 수 있다.
+    console.warn('ROUTE_BLOCKED_BY_OBSTACLES',devA,devB);
+    const stubA=safeStub(p1,{x:ax,y:ay},0);
+    const stubB=safeStub(p2,{x:bx,y:by},1);
+    return `${ptsToSvg(stubA)} ${ptsToSvg(stubB)}`;
   }
   return ptsToSvg(chosen);
 }
@@ -8099,6 +8145,67 @@ let highlightedTerms=new Set();
 let tracedForwardWires=new Set();
 let tracedReturnWires=new Set();
 let tracedPeWires=new Set();
+let activeWiringFlowSteps=[];
+let wiringFlowSourceTerms=new Set();
+let wiringFlowSignalTerms=new Set();
+let wiringFlowReturnTerms=new Set();
+let wiringFlowPeTerms=new Set();
+
+function wiringFlowTerminalClass(key){
+  if(wiringFlowSourceTerms.has(key))return ' flow-source-terminal';
+  if(wiringFlowReturnTerms.has(key))return ' flow-return-terminal';
+  if(wiringFlowPeTerms.has(key))return ' flow-pe-terminal';
+  if(wiringFlowSignalTerms.has(key))return ' flow-signal-terminal';
+  return '';
+}
+function wiringFlowLegacyRef(ref){
+  const dev=String(ref?.elementId||ref?.dev||'');
+  const term=String(ref?.terminalId||ref?.term||'');
+  return dev&&term?{dev,term}:null;
+}
+function setWiringFlowSteps(steps){
+  activeWiringFlowSteps=(steps||[]).map(step=>structuredClone(step));
+  wiringFlowSourceTerms=new Set();wiringFlowSignalTerms=new Set();
+  wiringFlowReturnTerms=new Set();wiringFlowPeTerms=new Set();
+  for(const step of activeWiringFlowSteps){
+    const role=step.circuitRole||'signal';
+    const targetSet=role==='source'?wiringFlowSourceTerms:
+      role==='return'?wiringFlowReturnTerms:
+      role==='pe'?wiringFlowPeTerms:wiringFlowSignalTerms;
+    for(const ref of [step.from,step.to]){
+      const legacy=wiringFlowLegacyRef(ref);
+      if(legacy)targetSet.add(`${legacy.dev}.${legacy.term}`);
+    }
+  }
+}
+function clearWiringFlowState({renderNow=true}={}){
+  setWiringFlowSteps([]);
+  if(elFlow)elFlow.innerHTML='';
+  if(renderNow)renderDevices();
+}
+function renderWiringFlow(){
+  if(!elFlow)return;
+  elFlow.innerHTML='';
+  for(let index=0;index<activeWiringFlowSteps.length;index++){
+    const step=activeWiringFlowSteps[index];
+    const from=wiringFlowLegacyRef(step.from),to=wiringFlowLegacyRef(step.to);
+    if(!from||!to||!S.devices[from.dev]||!S.devices[to.dev])continue;
+    const pa=termAbs(S.devices[from.dev],from.term),pb=termAbs(S.devices[to.dev],to.term);
+    if(!pa||!pb)continue;
+    const d=routeOrtho(pa,pb,44,44,null,[from.dev,to.dev],index*2);
+    const routeBlocked=(d.match(/\bM\b/g)||[]).length>1;
+    const path=document.createElementNS(SVGNS,'path');
+    const role=step.circuitRole||'signal';
+    path.setAttribute('d',d);
+    path.setAttribute('class',`wiring-flow-path ${role}${routeBlocked?' route-blocked':''}`);
+    path.dataset.flowIndex=String(index);
+    const tip=document.createElementNS(SVGNS,'title');
+    tip.textContent=routeBlocked
+      ? 'ROUTE_BLOCKED_BY_OBSTACLES · 장비 간격을 넓히세요'
+      : `${role} · ${from.dev}:${from.term} → ${to.dev}:${to.term}`;
+    path.appendChild(tip);elFlow.appendChild(path);
+  }
+}
 
 function wireRouteFamily(wire){
   const terminalFor=(ref)=>{
@@ -8175,9 +8282,10 @@ function renderWires(){
     }else{
       d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset);
     }
+    const routeBlocked=(d.match(/\bM\b/g)||[]).length>1;
     const hitPath=document.createElementNS(SVGNS,'path');
     hitPath.setAttribute('d',d);
-    hitPath.setAttribute('class','wire wire-hit');
+    hitPath.setAttribute('class','wire wire-hit'+(routeBlocked?' route-blocked':''));
     hitPath.dataset.id=w.id;
     elWire.appendChild(hitPath);
     let stroke=w.color||'#222';
@@ -8196,6 +8304,7 @@ function renderWires(){
     let cls='wire';
     if(S.selWire===w.id)cls+=' sel';
     if(isErr)cls+=' error';
+    if(routeBlocked)cls+=' route-blocked';
     if(highlightedWires.has(w.id))cls+=' highlight';
     if(tracedForwardWires.has(w.id))cls+=' trace-forward';
     if(tracedReturnWires.has(w.id))cls+=' trace-return';
@@ -8205,12 +8314,17 @@ function renderWires(){
     }
     pathOuter.setAttribute('class',cls);
     pathOuter.setAttribute('stroke',stroke);
+    if(routeBlocked){
+      const tip=document.createElementNS(SVGNS,'title');
+      tip.textContent='ROUTE_BLOCKED_BY_OBSTACLES · 장비 간격을 넓히거나 선 정리를 다시 실행하세요';
+      pathOuter.appendChild(tip);
+    }
     if(fromDef?.plugPort||toDef?.plugPort) pathOuter.setAttribute('stroke-width','7');
     pathOuter.dataset.id=w.id;
     elWire.appendChild(pathOuter);
     const pathCore=document.createElementNS(SVGNS,'path');
     pathCore.setAttribute('d',d);
-    pathCore.setAttribute('class','wire-core');
+    pathCore.setAttribute('class','wire-core'+(routeBlocked?' route-blocked':''));
     pathCore.setAttribute('stroke', isErr ? '#fcc' : '#fff');
     if(fromDef?.plugPort||toDef?.plugPort) pathCore.setAttribute('stroke-width','3.2');
     pathCore.dataset.id=w.id;
@@ -8310,6 +8424,7 @@ function render(){
   renderDevices();
   applyTransform();
   renderWires();
+  renderWiringFlow();
   renderJumpers();
   updateMissionCoach();
   renderNetlist();
@@ -9698,7 +9813,7 @@ function stopSim(){
   document.body.classList.remove('sim-mode');
   SIM.energized=new Set(); SIM.liveTerms=new Set(); SIM.coilState=new Map();
   SIM.timerStarted=new Map(); SIM.cylState=new Map();
-  renderDevices(); renderWires();
+  renderDevices(); renderWires(); renderWiringFlow();
   status('시뮬레이션 종료');
 }
 
@@ -9933,6 +10048,18 @@ const CATS=[
   ['actuator','⚙ 액추에이터'],
   ['wiring','🔌 배선/접지'],
 ];
+const EXACT_MANUAL_DEVICE_TYPES=new Set([
+  'XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24',
+  'MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI'
+]);
+const FAMILY_MANUAL_DEVICE_TYPES=new Set(['IG5A','SERVO-DRV','MC','EOCR']);
+function paletteManualStatus(type){
+  if(type.startsWith('BOUNDARY-'))return {kind:'boundary',label:'시험 경계 · 제품 아님'};
+  if(EXACT_MANUAL_DEVICE_TYPES.has(type))return {kind:'exact',label:'정확 품번 · 공식 매뉴얼'};
+  if(FAMILY_MANUAL_DEVICE_TYPES.has(type))return {kind:'family',label:'계열 매뉴얼 · 전체 품번 필요'};
+  if(type==='MY-MD02')return {kind:'unresolved',label:'공식 제조사·매뉴얼 미확인'};
+  return {kind:'unresolved',label:'교육용 · 제조사/전체 품번 필요'};
+}
 function buildPalette(){
   const el=$('#palette'); el.innerHTML='';
   // 검색창
@@ -9960,7 +10087,9 @@ function buildPalette(){
       d.className='pal'; d.dataset.cat=cat; d.dataset.search=(def.label+' '+(def.sub||'')+' '+type).toLowerCase();
       d.dataset.type=type;
       d.draggable=true;
-      d.innerHTML=`<b>${def.label}</b><small>${def.sub||''}</small>`;
+      const manualStatus=paletteManualStatus(type);
+      d.dataset.manualStatus=manualStatus.kind;
+      d.innerHTML=`<b>${def.label}</b><small>${def.sub||''}</small><em class="pal-manual-status ${manualStatus.kind}">${manualStatus.label}</em>`;
       d.addEventListener('dragstart',e=>{
         S.paletteDragType=type;
         S.paletteDragDropped=false;
@@ -10389,7 +10518,7 @@ elSvg.addEventListener('mousemove',e=>{
     }
     S.draggingDev.moved=true;
     S.draggingDev.snapOk=snapOk;
-    renderDevices(); renderWires(); renderJumpers();
+    renderDevices(); renderWires(); renderWiringFlow(); renderJumpers();
     return;
   }
   if(S.boxSelect){
@@ -11686,6 +11815,13 @@ window.LegacyTrainerBridge={
     }
     setMultiDeviceSelection([...deviceRefs]);
     renderWires();renderDevices();
+  },
+  showWiringFlowV3(steps){
+    setWiringFlowSteps(Array.isArray(steps)?steps:[]);
+    renderDevices();renderWiringFlow();
+  },
+  clearWiringFlowV3(){
+    clearWiringFlowState();
   },
   traceCircuitV3(forwardRefs,returnRefs,peRefs){
     const wireIds=new Set(S.wires.map(wire=>wire.id));

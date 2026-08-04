@@ -18,6 +18,7 @@ describe('v3 device profile catalog', () => {
   it('carries the locally and officially evidenced exact order codes into v3', () => {
     expect(Object.values(DEVICE_PROFILES_V3).map((profile) => profile.orderCode)).toEqual([
       'XBC-DR32H',
+      'eXP2-0700D',
       'XBF-AH04A',
       'MDR-100-24',
       'MC-22b / DC24 / 1a1b',
@@ -117,6 +118,14 @@ describe('v3 device profile catalog', () => {
     const fused = getDeviceProfileV3('phoenix-contact:ut-4-hesi-3046032');
 
     expect(through.terminals.every((terminal) => terminal.commonType === 'power-pass-through')).toBe(true);
+    expect(through.terminals.map((terminal) => ({
+      id: terminal.id,
+      marker: terminal.marker,
+      connectionPoint: terminal.connectionPoint,
+    }))).toEqual([
+      { id: '1', marker: '1', connectionPoint: 'A' },
+      { id: '2', marker: '1', connectionPoint: 'B' },
+    ]);
     expect(through.terminals.every((terminal) => terminal.maxConductors === 1
       && terminal.conductorRangeMm2?.min === 0.14
       && terminal.conductorRangeMm2.max === 4
@@ -132,7 +141,9 @@ describe('v3 device profile catalog', () => {
       },
     });
     expect(pe.terminals.every((terminal) => terminal.domain === 'pe' && terminal.polarity === 'protective-earth')).toBe(true);
+    expect(pe.terminals.map((terminal) => terminal.marker)).toEqual(['PE 1', 'PE 1']);
     expect(fused.terminals.every((terminal) => terminal.commonType === 'fused-power')).toBe(true);
+    expect(fused.terminals.map((terminal) => terminal.marker)).toEqual(['1', '1']);
     expect(fused.terminals.every((terminal) => terminal.maxConductors === 1
       && terminal.conductorRangeMm2?.max === 6
       && terminal.tighteningTorqueNm?.max === 0.8)).toBe(true);

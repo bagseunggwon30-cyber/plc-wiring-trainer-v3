@@ -66,6 +66,10 @@ export interface RatedVoltageRange {
 export interface TerminalSpec {
   id: string;
   label: string;
+  /** Project terminal marker shown on both sides of one feed-through position. */
+  marker?: string;
+  /** Physical connection point within one marked terminal position. */
+  connectionPoint?: 'A' | 'B';
   domain: ElectricalDomain;
   potential: ElectricalPotential;
   role: TerminalRole;

@@ -25,6 +25,7 @@ import {
   type ScenarioSimulationV3,
   suggestWiringPlans,
   type TerminalReferenceV3,
+  type WiringGuideStepV3,
 } from '../domain/v3';
 import type { TerminalSpec, WorkshopDocumentV2, WorkshopMode } from '../domain/types';
 import { validateWorkshop } from '../domain/validator';
@@ -99,6 +100,8 @@ interface LegacyTrainerBridge {
     to: TerminalReferenceV3,
   ): { ok: boolean; code: string; reason: string };
   focusRefs(refs: string[]): void;
+  showWiringFlowV3(steps: readonly WiringGuideStepV3[]): void;
+  clearWiringFlowV3(): void;
   traceCircuitV3(forwardRefs: string[], returnRefs: string[], peRefs: string[]): void;
   downloadJson(value: unknown, filename: string): void;
   downloadText(value: string, filename: string, mimeType?: string): void;
@@ -144,6 +147,7 @@ const WORKFLOW_STYLES = `
   .xgsim-diagnostics{flex:1 1 760px;padding:9px;border:1px solid #3f6f63;border-radius:7px;background:#10231f;color:#d8eee8}.xgsim-diagnostics h3{margin:0 0 4px;color:#a9ead7;font-size:12px}.xgsim-diagnostics p{margin:0 0 7px;color:#b7cdc6;font-size:10px}.xgsim-diagnostics-grid{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:5px}.xgsim-diagnostics-grid label{display:grid;gap:2px;font-size:9px}.xgsim-diagnostics-grid input{min-width:0;border:1px solid #4f746a;border-radius:4px;background:#0b1715;color:#effffb;padding:4px}.xgsim-diagnostics-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}.xgsim-diagnostics-status{display:block;margin-top:6px;padding:5px;border-radius:4px;background:#07110f;font:10px/1.45 monospace;color:#bff7e7}
   .v3-test-tools{margin-top:7px;padding:7px;border:1px solid #41576d;border-radius:5px;background:#111c27}.v3-test-tools h3{margin:0 0 5px;color:#b6ddff;font-size:11px}.v3-test-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.v3-test-grid select,.v3-test-grid button{min-width:0;border:1px solid #52637a;border-radius:4px;background:#101923;color:#eef4ff;padding:5px;font-size:9px}.v3-test-result{display:block;margin-top:6px;min-height:1.4em;color:#ffe29a;font:10px ui-monospace,monospace}.v3-trace-legend{margin-top:4px;color:#b9c9d8;font-size:9px}.v3-trace-legend b:nth-child(1){color:#ef4444}.v3-trace-legend b:nth-child(2){color:#60a5fa}.v3-trace-legend b:nth-child(3){color:#a3e635}
   .v3-wiring-assistant{margin:0;padding:9px;border-bottom:1px solid #3b5066;background:#152230}.v3-wiring-assistant h3{margin:0 0 4px;color:#b6ddff;font-size:12px}.v3-wiring-help{margin:0 0 7px;color:#b9c9d8;font-size:10px;line-height:1.4}.v3-wiring-selection{display:block;margin:5px 0;color:#e6f2ff;font-size:10px}.v3-wiring-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px}.v3-wiring-controls button:last-child{grid-column:1/-1}.v3-wiring-controls select,.v3-wiring-controls button,.v3-wiring-actions button{min-width:0;border:1px solid #52637a;border-radius:4px;background:#101923;color:#eef4ff;padding:5px;font-size:9px}.v3-wiring-controls button.primary,.v3-wiring-actions button.primary{background:#23583b;border-color:#438a59}.v3-wiring-results{max-height:300px;overflow:auto;margin-top:7px}.v3-wiring-empty,.v3-wiring-stale{margin:5px 0;color:#9fb2c4;font-size:10px}.v3-wiring-stale{color:#ffbd66}.v3-wiring-plan{margin:6px 0;padding:7px;border:1px solid #425469;border-left:3px solid #4f91c9;border-radius:5px;background:#111b26;font-size:9px}.v3-wiring-plan.blocked{border-left-color:#d15b5b}.v3-wiring-plan.requires_prerequisite{border-left-color:#d49a43}.v3-wiring-plan-title{display:flex;gap:5px;margin-bottom:5px}.v3-wiring-badge,.v3-wiring-grade{padding:1px 5px;border-radius:8px;background:#264f6c;color:#d9efff;font-weight:700}.v3-wiring-grade.educational{background:#5b4520;color:#ffe2a1}.v3-wiring-grade.manual-verified,.v3-wiring-grade.bench-verified{background:#245a3a;color:#bdf4ca}.v3-wiring-path{display:block;color:#f1f7ff}.v3-wiring-plan p{margin:4px 0;color:#c6d4e1;line-height:1.35}.v3-wiring-plan ul{margin:4px 0;padding-left:17px;color:#ffd998}.v3-wiring-plan details{margin-top:5px;color:#9fc3e3}.v3-wiring-plan details li{overflow-wrap:anywhere;color:#aebdca}.v3-wiring-actions{display:flex;gap:5px;margin-top:6px}.v3-wiring-actions button{flex:1}.v3-wiring-controls button:disabled,.v3-wiring-actions button:disabled{opacity:.45;cursor:not-allowed}
+  .v3-wiring-flow{margin:7px 0;padding:7px;border:1px solid #516477;border-radius:5px;background:#0d1721}.v3-wiring-flow[hidden]{display:none}.v3-wiring-flow-title{display:block;margin-bottom:5px;color:#e7f3ff;font-size:10px}.v3-wiring-flow-step{display:grid;grid-template-columns:84px minmax(0,1fr);gap:5px;margin:3px 0;font-size:9px}.v3-wiring-flow-step b{white-space:nowrap}.v3-wiring-flow-step.source b{color:#f87171}.v3-wiring-flow-step.signal b,.v3-wiring-flow-step.differential-pair b{color:#fb923c}.v3-wiring-flow-step.return b{color:#60a5fa}.v3-wiring-flow-step.pe b{color:#a3e635}.v3-wiring-flow-internal{margin:4px 0;color:#fed7aa;font-size:9px}
   .v3-workflow-field select,.v3-workflow-field input{width:100%;box-sizing:border-box}@media(max-width:1600px){.v3-workflow-device{grid-template-columns:1fr}.v3-workflow-device input{width:100%;box-sizing:border-box}.v3-xbf-channel{grid-template-columns:58px minmax(70px,1fr) minmax(90px,1fr)}}
   @media(max-width:1280px){.mode-selector-actions{grid-template-columns:1fr}#core-toolbar button{font-size:10px;padding:3px 5px}.workflow-mode-badge{display:none}}
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
@@ -289,8 +293,15 @@ export function issueAction(code: string): string {
   return ISSUE_ACTIONS[code] ?? '관련 단자와 와이어를 확인한 뒤 문서를 다시 검증하세요.';
 }
 
-function terminalText(terminal: { deviceId: string; terminalLabel: string | null; terminalId: string }): string {
-  return `${terminal.deviceId}:${terminal.terminalLabel ?? terminal.terminalId}`;
+function terminalText(terminal: {
+  deviceId: string;
+  terminalLabel: string | null;
+  terminalMarker?: string | null;
+  connectionPoint?: 'A' | 'B' | null;
+  terminalId: string;
+}): string {
+  const marker = terminal.terminalMarker ?? terminal.terminalLabel ?? terminal.terminalId;
+  return `${terminal.deviceId}:${marker}${terminal.connectionPoint ? `(${terminal.connectionPoint})` : ''}`;
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {
@@ -655,6 +666,8 @@ export function installWorkflowApp(): void {
     },
     focus: (refs) => bridge.focusRefs([...refs]),
     preview: (from, to) => bridge.previewSuggestedWire(from, to),
+    showFlow: (steps) => bridge.showWiringFlowV3(steps),
+    clearFlow: () => bridge.clearWiringFlowV3(),
     clearSelection: () => bridge.clearDeviceSelection(),
     setStatus: (message) => bridge.setStatus(message),
   });

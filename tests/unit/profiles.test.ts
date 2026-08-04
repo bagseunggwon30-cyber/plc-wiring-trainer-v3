@@ -6,6 +6,7 @@ describe('device profile catalog', () => {
   it('manual-verifies only exact profiles backed by retained official evidence', () => {
     expect(verifiedProfiles().map((profile) => profile.profileId)).toEqual([
       'ls-electric:xbc-dr32h',
+      'ls-electric:exp2-0700d',
       'ls-electric:xbf-ah04a',
       'mean-well:mdr-100-24',
       'ls-electric:mc-22b-dc24-1a1b',
@@ -101,9 +102,9 @@ describe('device profile catalog', () => {
     expect(drive.evidence.level).toBe('educational');
     expect(drive.evidence.documents).toEqual([
       expect.objectContaining({
-        documentId: '04_LS_SV-iG5A_User_Manual.pdf',
-        pages: [19, 24, 25],
-        sha256: '2800AD2B47AA3E5058C49ED1684839EC644F2E0E1CB7F91542C453E2458A500E',
+        documentId: 'LS_SV-iG5A_User_Manual_EN_V2.4.pdf',
+        pages: [21, 26, 27],
+        sha256: '974654E65A7D0B61476CA64FD180BC3E0C96DE0407A2080012DFE879A2F7A950',
       }),
     ]);
     expect(byId.get('CM')).toMatchObject({
@@ -166,6 +167,21 @@ describe('device profile catalog', () => {
     ]);
     expect(tb4.terminals.map((terminal) => terminal.id)).toEqual([
       '1', "1'", '2', "2'", '3', "3'", '4', "4'",
+    ]);
+    expect(tb4.terminals.map((terminal) => ({
+      id: terminal.id,
+      label: terminal.label,
+      marker: terminal.marker,
+      connectionPoint: terminal.connectionPoint,
+    }))).toEqual([
+      { id: '1', label: '1', marker: '1', connectionPoint: 'A' },
+      { id: "1'", label: '1', marker: '1', connectionPoint: 'B' },
+      { id: '2', label: '2', marker: '2', connectionPoint: 'A' },
+      { id: "2'", label: '2', marker: '2', connectionPoint: 'B' },
+      { id: '3', label: '3', marker: '3', connectionPoint: 'A' },
+      { id: "3'", label: '3', marker: '3', connectionPoint: 'B' },
+      { id: '4', label: '4', marker: '4', connectionPoint: 'A' },
+      { id: "4'", label: '4', marker: '4', connectionPoint: 'B' },
     ]);
     expect(tb4.internalLinks).toHaveLength(4);
   });

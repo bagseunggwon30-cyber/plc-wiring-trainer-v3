@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
+import { createAcademyExp2Md02Template } from '../../src/domain/academy-panel-template';
 import { expect, test } from './electron.fixture';
 
 const VERIFIED_PREWIRE_TYPES = [
@@ -287,6 +288,75 @@ async function pointerClickSvgDeviceBody(page: Page, deviceId: string, addToSele
   if (addToSelection) await page.keyboard.up('Control');
 }
 
+async function boxSelectSvgDevices(page: Page, deviceIds: readonly string[]): Promise<void> {
+  await page.locator('#m-select').click();
+  const boxes = await Promise.all(deviceIds.map(async (deviceId) => {
+    const body = page.locator(`#g-devices > .device[data-id="${deviceId}"] .device-body`);
+    await expect(body).toHaveCount(1);
+    const box = await body.boundingBox();
+    expect(box, `${deviceId} body must be visible for box selection`).not.toBeNull();
+    return box!;
+  }));
+  const canvas = await page.locator('#canvas').boundingBox();
+  expect(canvas).not.toBeNull();
+  const left = Math.max(canvas!.x + 4, Math.min(...boxes.map((box) => box.x)) - 14);
+  const top = Math.max(canvas!.y + 4, Math.min(...boxes.map((box) => box.y)) - 14);
+  const right = Math.min(canvas!.x + canvas!.width - 4, Math.max(...boxes.map((box) => box.x + box.width)) + 14);
+  const bottom = Math.min(canvas!.y + canvas!.height - 4, Math.max(...boxes.map((box) => box.y + box.height)) + 14);
+  await page.mouse.move(left, top);
+  await page.mouse.down();
+  await page.mouse.move(right, bottom, { steps: 10 });
+  await page.mouse.up();
+}
+
+async function imageCrossingAudit(page: Page): Promise<{ crossings: string[]; blocked: string[] }> {
+  return page.evaluate(() => {
+    const state = (window as unknown as {
+      LegacyTrainerBridge: {
+        readState(): {
+          wires: Array<{ id: string; from: { dev: string }; to: { dev: string } }>;
+        };
+      };
+    }).LegacyTrainerBridge.readState();
+    const wires = new Map(state.wires.map((wire) => [wire.id, wire]));
+    const images = [...document.querySelectorAll<SVGGElement>('#g-devices > .device')].flatMap((group) => {
+      const deviceId = group.dataset.id ?? '';
+      return [...group.querySelectorAll<SVGGraphicsElement>('.device-image')].map((image) => ({
+        deviceId,
+        rect: image.getBoundingClientRect(),
+      })).filter(({ rect }) => rect.width > 2 && rect.height > 2);
+    });
+    const crossings = new Set<string>();
+    const paths = [...document.querySelectorAll<SVGPathElement>('#g-wires > path.wire:not(.wire-hit)')];
+    for (const path of paths) {
+      const wireId = path.dataset.id ?? '';
+      const wire = wires.get(wireId);
+      const matrix = path.getScreenCTM();
+      if (!wire || !matrix) continue;
+      const total = path.getTotalLength();
+      const sampleStep = Math.max(1, total / 5000);
+      for (let distance = 0; distance <= total; distance += sampleStep) {
+        const local = path.getPointAtLength(distance);
+        const screen = new DOMPoint(local.x, local.y).matrixTransform(matrix);
+        for (const image of images) {
+          if (image.deviceId === wire.from.dev || image.deviceId === wire.to.dev) continue;
+          if (screen.x > image.rect.left + 1 && screen.x < image.rect.right - 1
+            && screen.y > image.rect.top + 1 && screen.y < image.rect.bottom - 1) {
+            crossings.add(`${wireId}:${image.deviceId}`);
+          }
+        }
+      }
+    }
+    return {
+      crossings: [...crossings].sort(),
+      blocked: [...document.querySelectorAll<SVGPathElement>('#g-wires > path.wire.route-blocked:not(.wire-hit)')]
+        .map((path) => path.dataset.id ?? '')
+        .filter(Boolean)
+        .sort(),
+    };
+  });
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test('offline policy blocks main-process and session network before transmission', async ({ harness }) => {
@@ -488,6 +558,27 @@ test('XBC terminal overlay keeps 24V above 24G, disables the spare screw, and pr
   ]);
 
   await page.screenshot({ path: 'output/xbc-md02-terminal-fix.png', fullPage: true });
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('academy panel routes every conductor around non-endpoint equipment images', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'practice');
+  await applyDocument(page, createAcademyExp2Md02Template());
+  await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(5);
+  await expect.poll(async () => (await bridgeState(page)).wires.length).toBe(12);
+
+  await expect.poll(() => imageCrossingAudit(page)).toEqual({ crossings: [], blocked: [] });
+
+  await page.locator('#m-select').click();
+  await pointerClickSvgDeviceBody(page, 'academy-ps1');
+  await pointerClickSvgDeviceBody(page, 'academy-hmi1', true);
+  const assistant = page.locator('.v3-wiring-assistant');
+  await expect(assistant.locator('.v3-wiring-selection')).toContainText('academy-hmi1 ↔ academy-ps1');
+  await expect(assistant.locator('.v3-wiring-flow')).toBeVisible();
+  await expect(page.locator('#g-wiring-flow .wiring-flow-path.source')).toHaveCount(1);
+  await expect(page.locator('#g-wiring-flow .wiring-flow-path.return')).toHaveCount(1);
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
@@ -765,13 +856,20 @@ test('typed wiring assistant selects two devices and finishes the missing 0 V re
 
   const assistant = page.locator('.v3-wiring-assistant');
   await expect(assistant).toBeVisible();
+  await boxSelectSvgDevices(page, ['dc-open', 'load-open']);
+  await expect(assistant.locator('.v3-wiring-selection')).toContainText('dc-open ↔ load-open');
+  await expect(assistant.locator('.v3-wiring-flow')).toBeVisible();
+  await expect(assistant.locator('.v3-wiring-flow')).toContainText('+ 공급');
+  await expect(assistant.locator('.v3-wiring-flow')).toContainText('장비·신호');
+  await expect(assistant.locator('.v3-wiring-flow')).toContainText('0V/N 귀로');
+  await expect(page.locator('#g-wiring-flow .wiring-flow-path.source')).toHaveCount(1);
+  await expect(page.locator('#g-wiring-flow .wiring-flow-path.return')).toHaveCount(1);
+
   await assistant.getByRole('button', { name: '두 장비 선택 시작' }).click();
   await pointerClickSvgDeviceBody(page, 'dc-open');
   await pointerClickSvgDeviceBody(page, 'load-open', true);
   await expect(assistant.locator('.v3-wiring-selection')).toContainText('dc-open ↔ load-open');
-
-  await assistant.getByLabel('결선 목적').selectOption('dc-power');
-  await assistant.getByRole('button', { name: '안내 계산' }).click();
+  await expect(assistant.locator('.v3-wiring-flow')).toBeVisible();
   const returnPlan = assistant.locator(
     '.v3-wiring-plan[data-direct-from="load-open:-"][data-direct-to="dc-open:-"]',
   );

@@ -127,3 +127,29 @@ test('MY2N-D2 keeps its existing skin but uses the official diode polarity and a
   assert.match(html, /assetId:'existing:my2n-flat-v1'/);
   assert.doesNotMatch(html, /코일:\s*13\(\+\),\s*14\(-\)/);
 });
+
+test('terminal strips show one marker on both connection sides without breaking legacy endpoint ids', () => {
+  assert.match(html, /id:`\$\{n\}'`,x,y:yBottom,side:'B',label:`\$\{labelPrefix\}\$\{n\}`,connectionSide:'B'/);
+  assert.match(html, /id:"1'",x:77\.7,y:68\.6,side:'B',label:'1',connectionSide:'B'/);
+  assert.match(html, /id:\(i\+1\)\+"'",x,y:69\.3,side:'B',label:''\+\(i\+1\),connectionSide:'B'/);
+  assert.match(html, /terminalMarker=effectiveTerminal\.marker\|\|t\.marker\|\|t\.label/);
+  assert.match(html, /접속점: \$\{connectionPoint\}측/);
+});
+
+test('manual-backed Phoenix blocks use two physical connection points and prohibit fuse bypass jumpers', () => {
+  assert.match(html, /'UT-2\.5':\{[\s\S]*?id:'1',x:70,y:28,side:'L'[\s\S]*?id:'2',x:110,y:28,side:'R',label:'1'/);
+  assert.match(html, /'UT-2\.5-PE':\{[\s\S]*?label:'PE 1',connectionSide:'A'[\s\S]*?label:'PE 1',connectionSide:'B'/);
+  assert.match(html, /def\?\.terminalAssemblyType==='fused'/);
+  assert.match(html, /점퍼 금지: 퓨즈 단자의 두 접속점을 우회하면 보호 기능이 사라집니다/);
+  assert.match(html, /A\/B 사이 5×20 퓨즈 직렬 · 직접 공통 아님/);
+  assert.match(html, /DIN 레일 PE 보호결합/);
+  assert.match(html, /if\(def\?\.terminalAssemblyType\)return 14/);
+});
+
+test('palette distinguishes exact official manuals from family and unresolved educational devices', () => {
+  assert.match(html, /const EXACT_MANUAL_DEVICE_TYPES=new Set\(\[/);
+  assert.match(html, /'XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24'/);
+  assert.match(html, /const FAMILY_MANUAL_DEVICE_TYPES=new Set\(\['IG5A','SERVO-DRV','MC','EOCR'\]\)/);
+  assert.match(html, /type==='MY-MD02'.*공식 제조사·매뉴얼 미확인/);
+  assert.match(html, /d\.dataset\.manualStatus=manualStatus\.kind/);
+});

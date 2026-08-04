@@ -622,10 +622,12 @@ const profiles: DeviceProfile[] = [
     includeInBom: true,
     terminals: [
       terminal('1', '1', 'floating', 'floating', 'common', {
+        marker: '1', connectionPoint: 'A',
         polarity: 'none', commonType: 'power-pass-through', channel: 'through',
         ...ut25ConnectionFacts,
       }),
-      terminal('2', '2', 'floating', 'floating', 'common', {
+      terminal('2', '1', 'floating', 'floating', 'common', {
+        marker: '1', connectionPoint: 'B',
         polarity: 'none', commonType: 'power-pass-through', channel: 'through',
         ...ut25ConnectionFacts,
       }),
@@ -674,8 +676,12 @@ const profiles: DeviceProfile[] = [
     boundary: false,
     includeInBom: true,
     terminals: [
-      terminal('1', 'PE 1', 'pe', 'PE', 'protective-earth', { channel: 'PE', ...ut25ConnectionFacts }),
-      terminal('2', 'PE 2', 'pe', 'PE', 'protective-earth', { channel: 'PE', ...ut25ConnectionFacts }),
+      terminal('1', 'PE 1', 'pe', 'PE', 'protective-earth', {
+        marker: 'PE 1', connectionPoint: 'A', channel: 'PE', ...ut25ConnectionFacts,
+      }),
+      terminal('2', 'PE 1', 'pe', 'PE', 'protective-earth', {
+        marker: 'PE 1', connectionPoint: 'B', channel: 'PE', ...ut25ConnectionFacts,
+      }),
     ],
     internalLinks: [{ from: '1', to: '2', kind: 'conductive' }],
     behavior: {
@@ -714,11 +720,13 @@ const profiles: DeviceProfile[] = [
     boundary: false,
     includeInBom: true,
     terminals: [
-      terminal('1', 'IN', 'floating', 'floating', 'common', {
+      terminal('1', '1', 'floating', 'floating', 'common', {
+        marker: '1', connectionPoint: 'A',
         polarity: 'none', commonType: 'fused-power', channel: 'fuse',
         ...ut4HesiConnectionFacts,
       }),
-      terminal('2', 'OUT', 'floating', 'floating', 'common', {
+      terminal('2', '1', 'floating', 'floating', 'common', {
+        marker: '1', connectionPoint: 'B',
         polarity: 'none', commonType: 'fused-power', channel: 'fuse',
         ...ut4HesiConnectionFacts,
       }),
@@ -755,11 +763,11 @@ const profiles: DeviceProfile[] = [
     evidence: {
       level: 'educational',
       documents: [{
-        documentId: '04_LS_SV-iG5A_User_Manual.pdf',
-        revision: '9th Edition (2009-07)',
-        pages: [19, 24, 25],
-        sha256: '2800AD2B47AA3E5058C49ED1684839EC644F2E0E1CB7F91542C453E2458A500E',
-        notes: 'PDF pages 19, 24 and 25 define control terminals, ratings and NPN/PNP input selection. The exact order code and supply class remain unspecified.',
+        documentId: 'LS_SV-iG5A_User_Manual_EN_V2.4.pdf',
+        revision: 'V2.4 (official LS ELECTRIC download)',
+        pages: [21, 26, 27],
+        sha256: '974654E65A7D0B61476CA64FD180BC3E0C96DE0407A2080012DFE879A2F7A950',
+        notes: 'PDF pages 21, 26 and 27 define control terminals, ratings and NPN/PNP input selection. The exact order code and supply class remain unspecified.',
       }],
       note: 'Manual-backed family semantics only. Full order code, input voltage class and motor rating are not fixed.',
     },
@@ -1080,8 +1088,12 @@ const profiles: DeviceProfile[] = [
     terminals: Array.from({ length: 4 }, (_, index) => {
       const id = String(index + 1);
       return [
-        terminal(id, id, 'floating', 'floating', 'common', { channel: id }),
-        terminal(`${id}'`, `${id}'`, 'floating', 'floating', 'common', { channel: id }),
+        terminal(id, id, 'floating', 'floating', 'common', {
+          marker: id, connectionPoint: 'A', channel: id,
+        }),
+        terminal(`${id}'`, id, 'floating', 'floating', 'common', {
+          marker: id, connectionPoint: 'B', channel: id,
+        }),
       ];
     }).flat(),
     internalLinks: Array.from({ length: 4 }, (_, index) => {
@@ -1096,8 +1108,12 @@ const profiles: DeviceProfile[] = [
     terminals: Array.from({ length: 10 }, (_, index) => {
       const id = String(index + 1);
       return [
-        terminal(id, id, 'floating', 'floating', 'common', { channel: id }),
-        terminal(`${id}'`, `${id}'`, 'floating', 'floating', 'common', { channel: id }),
+        terminal(id, id, 'floating', 'floating', 'common', {
+          marker: id, connectionPoint: 'A', channel: id,
+        }),
+        terminal(`${id}'`, id, 'floating', 'floating', 'common', {
+          marker: id, connectionPoint: 'B', channel: id,
+        }),
       ];
     }).flat(),
     internalLinks: Array.from({ length: 10 }, (_, index) => {

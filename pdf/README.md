@@ -20,7 +20,7 @@
 | `04b_LS_iG5A_Troubleshooting.pdf` | iG5A 트러블슈팅 |
 | `08_LS_Metasol_MC_Contactor_Catalog.pdf` | Metasol MC 전자접촉기 |
 
-현재 코드가 직접 참조하는 iG5A 근거는 PDF 19쪽(제어 I/O 단자 역할), 24쪽(단자 배열·정격), 25쪽(S8 NPN/PNP 입력 선택)입니다. 이 자료로 `CM`, `MG`, `MO`, `24`, `VR`, `V1`, `I`, `AM`, `3A/3B/3C`, `S+/S-` 의미를 구분하고, NPN의 내부 24V→입력회로→P→접점→CM 경로와 PNP의 외부 +24V→접점→P→입력회로→CM→외부 0V 경로를 별도로 풉니다. 전체 주문코드와 전원 등급이 확정되지 않아 프로필 등급은 계속 `educational`입니다.
+현재 코드가 직접 참조하는 iG5A 근거는 `pdf/official/LS_SV-iG5A_User_Manual_EN_V2.4.pdf`의 PDF 21쪽(제어 I/O 단자), 26쪽(제어단자 정격), 27쪽(S8 NPN/PNP 선택)입니다. 이 자료로 `CM`, `MG`, `MO`, `24`, `VR`, `V1`, `I`, `AM`, `3A/3B/3C`, `S+/S-` 의미를 구분하고, NPN의 내부 24V→입력회로→P→접점→CM 경로와 PNP의 외부 +24V→접점→P→입력회로→CM→외부 0V 경로를 별도로 풉니다. 전체 주문코드와 전원 등급이 확정되지 않아 프로필 등급은 계속 `educational`입니다.
 
 ## 기타 제조사 (파일로 저장됨)
 
@@ -38,6 +38,10 @@
 
 | 파일명 | 정확 품번 | 확인 항목 |
 |--------|-----------|-----------|
+| `LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf` | `eXP2-0700D` | DC24V/FG 전원, 포트 배치, COM1·COM2·COM3 핀, 배선 굵기·토크 |
+| `LS_XP_Communication_Manual_EN_V2.2.pdf` | `eXP2-0700D` 통신 근거 | XGT Panel↔XGB RS485 결선, 종단·실드 지침 |
+| `LS_eXP2_Series_Installation_Guide_V1.1.pdf` | `eXP2-07□□D` 참고 | 외형·패널 컷·전원 배선 보조자료. 정확 프로필 근거 해시에는 사용하지 않음 |
+| `LS_SV-iG5A_User_Manual_EN_V2.4.pdf` | `SV-iG5A` 계열 참고 | 제어 I/O 단자, 전력 단자, NPN/PNP S8 선택. 전체 주문코드 미확정으로 연습 전용 |
 | `Omron_MY_Series_J219-E1.pdf` | `MY2N-D2 DC24V` | 14(+)/13(-) 다이오드 코일, 9-1·12-4 b접, 9-5·12-8 a접, 코일·접점 정격 |
 | `Schneider_EOCR_Digital_E_Instruction_2023.pdf` | `EOCR3DE-05DUH` | AC100–240V 제어전원, 95–96 b접, 97–98 a접, 07–08 경보 a접, fail-safe 동작 |
 | `Phoenix_UT-2.5_3044076.pdf` | `3044076` | 관통 연결, 1000V/24A, 도체·토크·치수 |
@@ -45,6 +49,8 @@
 | `Phoenix_UT-4-HESI-5x20_3046032.pdf` | `3046032` | 5×20 퓨즈형, 500V/6.3A, 퓨즈 링크 별도, 도체·토크·치수 |
 
 이 PDF들은 프로필 근거 해시 검증을 위한 개발 자료이며 Electron 출시 파일에는 포함하지 않습니다. 앱 리포트에는 문서 ID·쪽·SHA-256만 기록합니다.
+
+팔레트 전체의 공식 문서 보유·품번 미확정 상태는 `docs/official-manual-inventory.md`에 기록합니다. 전체 품번이 없는 일반 장비에는 비슷한 제품의 매뉴얼을 임의 연결하지 않습니다.
 
 ---
 

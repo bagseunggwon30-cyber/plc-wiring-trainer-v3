@@ -14,6 +14,8 @@ export const EvidenceDocumentSchema = z.object({
 export const TerminalSpecSchema = z.object({
   id: z.string().min(1),
   label: z.string(),
+  marker: z.string().min(1).optional(),
+  connectionPoint: z.enum(['A', 'B']).optional(),
   domain: z.enum(['ac', 'dc', 'pe', 'signal', 'communication', 'floating']),
   potential: z.enum(['L1', 'L2', 'L3', 'N', '+24V', '0V', 'PE', 'floating', 'signal']),
   role: z.enum([
