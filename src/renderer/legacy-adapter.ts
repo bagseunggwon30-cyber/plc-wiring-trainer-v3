@@ -3,6 +3,7 @@ import type { DeviceProfile, EvidenceLevel, WorkshopDocumentV2, WorkshopMode } f
 
 export const LEGACY_PROFILE_MAP: Readonly<Record<string, string>> = Object.freeze({
   'XBC-DR32H': 'ls-electric:xbc-dr32h',
+  'EXP2-700': 'ls-electric:exp2-0700d',
   'XBF-AH04A': 'ls-electric:xbf-ah04a',
   'MDR-100': 'mean-well:mdr-100-24',
   'MC-22B-DC24': 'ls-electric:mc-22b-dc24-1a1b',
@@ -55,6 +56,32 @@ interface LegacyDevice extends Record<string, unknown> {
 }
 interface LegacyJumper { id: string; deviceId: string; terms: string[] }
 
+const LEGACY_IDENTITY_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  'EXP2-700': 'ls-electric:exp2-0700d',
+  'MY-MD02': 'generic:xy-md02',
+});
+
+const LEGACY_TERMINAL_ALIASES: Readonly<Record<string, Readonly<Record<string, string>>>> = Object.freeze({
+  'EXP2-700': Object.freeze({
+    'V+': 'DC24V',
+    'V-': 'DC0V',
+    'T+': 'COM1-6',
+    '485+': 'COM1-6',
+    'RS485+': 'COM1-6',
+    'T-': 'COM1-1',
+    '485-': 'COM1-1',
+    'RS485-': 'COM1-1',
+    RXD: 'COM2-2',
+    TXD: 'COM2-3',
+    SG: 'COM2-5',
+    'COM3-RDB': 'COM3-RX-',
+    'COM3-RDA': 'COM3-RX+',
+    'COM3-SDB': 'COM3-TX-',
+    'COM3-SDA': 'COM3-TX+',
+    'COM3-SG': 'COM3-SG',
+  }),
+});
+
 export interface LegacyTrainerState extends Record<string, unknown> {
   devices: Record<string, LegacyDevice>;
   wires: LegacyWire[];
@@ -92,19 +119,22 @@ export async function adaptLegacyState(
 ): Promise<WorkshopDocumentV2> {
   const devices = Object.entries(state.devices).map(([id, legacy]) => {
     const preservedProfileId = typeof legacy.__v2ProfileId === 'string' ? legacy.__v2ProfileId : undefined;
-    const profile = preservedProfileId ? catalog[preservedProfileId] : undefined;
+    const inferredProfileId = preservedProfileId ?? LEGACY_IDENTITY_ALIASES[legacy.type];
+    const profile = inferredProfileId ? catalog[inferredProfileId] : undefined;
     const preservedEvidence = ['educational', 'manual-verified', 'bench-verified'].includes(String(legacy.__v2EvidenceLevel))
       ? legacy.__v2EvidenceLevel as EvidenceLevel
       : undefined;
     return {
       id,
-      profileId: preservedProfileId ?? `legacy:${legacy.type}`,
+      profileId: inferredProfileId ?? `legacy:${legacy.type}`,
       profileVersion: typeof legacy.__v2ProfileVersion === 'string'
         ? legacy.__v2ProfileVersion
         : profile?.version ?? 'legacy-v1',
-      evidenceLevel: preservedEvidence ?? profile?.evidence.level ?? 'educational' as const,
+      // A legacy type label is enough to restore endpoints, but never enough
+      // to inherit a verified-report grade or exact installed order code.
+      evidenceLevel: preservedEvidence ?? (preservedProfileId ? profile?.evidence.level : 'educational') ?? 'educational' as const,
       legacyType: legacy.type,
-      missingProfile: typeof legacy.__v2MissingProfile === 'boolean' ? legacy.__v2MissingProfile : !profile,
+      missingProfile: typeof legacy.__v2MissingProfile === 'boolean' ? legacy.__v2MissingProfile : profile === undefined,
       x: legacy.x ?? 0,
       y: legacy.y ?? 0,
       rotation: legacy.rot ?? 0,
@@ -120,19 +150,31 @@ export async function adaptLegacyState(
     name: mode === 'prewire' ? '사전 결선 검토 작업장' : '결선 연습 작업장',
     source: { kind: 'legacy-v1', hash: await sha256(state) },
     devices,
-    wires: state.wires.map((wire) => ({
-      id: wire.id,
-      from: { deviceId: wire.from.dev, terminalId: wire.from.term },
-      to: { deviceId: wire.to.dev, terminalId: wire.to.term },
-      color: wire.color,
-      tag: wire.tag,
-      gauge: wire.gauge,
-      waypoints: Array.isArray(wire.waypoints) ? wire.waypoints : undefined,
-    })),
+    wires: state.wires.map((wire) => {
+      const normalizeEndpoint = (endpoint: LegacyEndpoint) => {
+        const legacyType = state.devices[endpoint.dev]?.type;
+        const terminalId = legacyType
+          ? LEGACY_TERMINAL_ALIASES[legacyType]?.[endpoint.term] ?? endpoint.term
+          : endpoint.term;
+        return { deviceId: endpoint.dev, terminalId };
+      };
+      return {
+        id: wire.id,
+        from: normalizeEndpoint(wire.from),
+        to: normalizeEndpoint(wire.to),
+        color: wire.color,
+        tag: wire.tag,
+        gauge: wire.gauge,
+        waypoints: Array.isArray(wire.waypoints) ? wire.waypoints : undefined,
+      };
+    }),
     jumpers: (state.jumpers ?? []).map((jumper) => ({
       id: jumper.id,
       deviceId: jumper.deviceId,
-      terminalIds: [...jumper.terms],
+      terminalIds: jumper.terms.map((terminalId) => {
+        const legacyType = state.devices[jumper.deviceId]?.type;
+        return legacyType ? LEGACY_TERMINAL_ALIASES[legacyType]?.[terminalId] ?? terminalId : terminalId;
+      }),
     })),
     layout: {
       boardMode: state.boardMode ?? 'panel-layout',

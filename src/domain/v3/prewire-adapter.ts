@@ -568,17 +568,64 @@ export async function buildPrewireCircuitV3(
       const returnTerminal = typeof profile.behavior.returnTerminal === 'string'
         ? profile.behavior.returnTerminal
         : '-';
+      const hasAdditionalTerminals = profile.terminals.some((terminal) =>
+        terminal.id !== positiveTerminal && terminal.id !== returnTerminal);
+      const loadElementId = hasAdditionalTerminals ? `${device.id}#supply` : device.id;
+      if (hasAdditionalTerminals) {
+        elements.push({
+          kind: 'device',
+          id: device.id,
+          terminals: profile.terminals.map((terminal) => terminal.id),
+        });
+        parentByElement.set(device.id, device.id);
+      }
       elements.push({
         kind: 'load',
-        id: device.id,
+        id: loadElementId,
         positiveTerminal,
         returnTerminal,
         parentDeviceId: device.id,
         polarity: 'positive-return',
         required: 'always',
+        resistanceOhms: positiveNumber(profile.behavior.resistanceOhms),
         onThresholdVoltage: positiveNumber(profile.behavior.onThresholdVoltage),
       });
+      parentByElement.set(loadElementId, device.id);
+      if (hasAdditionalTerminals) {
+        addAlias(branches, `supply:${device.id}:positive`, device.id, positiveTerminal, loadElementId, positiveTerminal);
+        addAlias(branches, `supply:${device.id}:return`, device.id, returnTerminal, loadElementId, returnTerminal);
+      }
+      continue;
+    }
+    if (profile.behavior?.kind === 'modbus-practice') {
+      const positiveTerminal = typeof profile.behavior.positiveTerminal === 'string'
+        ? profile.behavior.positiveTerminal
+        : 'V+';
+      const returnTerminal = typeof profile.behavior.returnTerminal === 'string'
+        ? profile.behavior.returnTerminal
+        : 'V-';
+      const assumedCurrentA = positiveNumber(profile.behavior.assumedCurrentA);
+      const loadElementId = `${device.id}#supply`;
+      elements.push({
+        kind: 'device',
+        id: device.id,
+        terminals: profile.terminals.map((terminal) => terminal.id),
+      });
       parentByElement.set(device.id, device.id);
+      elements.push({
+        kind: 'load',
+        id: loadElementId,
+        positiveTerminal,
+        returnTerminal,
+        parentDeviceId: device.id,
+        polarity: 'positive-return',
+        required: 'always',
+        ...(assumedCurrentA === undefined ? {} : { resistanceOhms: 24 / assumedCurrentA }),
+        onThresholdVoltage: positiveNumber(profile.behavior.onThresholdVoltage),
+      });
+      parentByElement.set(loadElementId, device.id);
+      addAlias(branches, `supply:${device.id}:positive`, device.id, positiveTerminal, loadElementId, positiveTerminal);
+      addAlias(branches, `supply:${device.id}:return`, device.id, returnTerminal, loadElementId, returnTerminal);
       continue;
     }
     if (device.profileId === 'boundary:load') {

@@ -164,6 +164,109 @@ const profiles: DeviceProfile[] = [
     },
   },
   {
+    profileId: 'ls-electric:exp2-0700d',
+    version: '1.0.0',
+    manufacturer: 'LS ELECTRIC',
+    model: 'eXP2-0700D',
+    evidence: {
+      level: 'manual-verified',
+      documents: [
+        {
+          documentId: 'LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf',
+          revision: 'V1.5',
+          pages: [14, 20, 21, 28, 55, 88, 89],
+          sha256: '7B24C37B791224FC7744413589C853A348065C0746ED9AEE258070F99A4EBBF9',
+          notes: 'Exact eXP2-0700D order code, rear connectors, DC24V/FG terminal, 7-inch electrical rating, COM1 RS485 loopback pin polarity, and power wiring requirements.',
+        },
+        {
+          documentId: 'LS_XP_Communication_Manual_EN_V2.2.pdf',
+          revision: 'V2.2',
+          pages: [59, 102, 103],
+          sha256: 'DAFD6867E240989A98EF6C5D3184ACEBD5947A3EB23E39150F05FD97C2399F34',
+          notes: 'XGT Panel to XGB built-in Cnet RS485 wiring, two-wire TX/RX pairing, termination and shield guidance.',
+        },
+      ],
+      ...reviewedExact,
+    },
+    boundary: false,
+    includeInBom: true,
+    terminals: [
+      terminal('DC24V', 'DC24V +', 'dc', '+24V', 'supply-input', {
+        ratedVoltage: { min: 19.2, max: 28.8, unit: 'VDC' },
+        maxConductors: 1,
+        conductorRangeMm2: { min: 1.5, max: 2.5 },
+        tighteningTorqueNm: { min: 0.51, max: 0.51 },
+      }),
+      terminal('DC0V', 'DC24V 0V', 'dc', '0V', 'supply-input', {
+        ratedVoltage: { min: 0, max: 0, unit: 'VDC' },
+        maxConductors: 1,
+        conductorRangeMm2: { min: 1.5, max: 2.5 },
+        tighteningTorqueNm: { min: 0.51, max: 0.51 },
+      }),
+      // The current v2 schema has no FE discriminator. Keep the manual label
+      // and record the functional/frame-ground meaning in behavior instead of
+      // inventing a normal working-current return.
+      terminal('FG', 'FG', 'pe', 'PE', 'protective-earth', {
+        maxConductors: 1,
+        conductorRangeMm2: { min: 1.5, max: 2.5 },
+        tighteningTorqueNm: { min: 0.51, max: 0.51 },
+      }),
+      // Hardware manual PDF p55: COM1 RS485 pin 6 is the positive line and
+      // pin 1 is the negative line. The former renderer had these reversed.
+      terminal('COM1-1', 'COM1 pin 1 / RS485-', 'communication', 'signal', 'communication', {
+        polarity: 'data-negative', protocol: 'RS485', channel: 'B',
+      }),
+      terminal('COM1-6', 'COM1 pin 6 / RS485+', 'communication', 'signal', 'communication', {
+        polarity: 'data-positive', protocol: 'RS485', channel: 'A',
+      }),
+      terminal('COM2-2', 'COM2 pin 2 / RXD', 'communication', 'signal', 'communication', {
+        polarity: 'none', protocol: 'RS232', channel: 'RX',
+      }),
+      terminal('COM2-3', 'COM2 pin 3 / TXD', 'communication', 'signal', 'communication', {
+        polarity: 'none', protocol: 'RS232', channel: 'TX',
+      }),
+      terminal('COM2-5', 'COM2 pin 5 / SG', 'communication', 'signal', 'common', {
+        polarity: 'reference', commonType: 'communication-reference', protocol: 'RS232', channel: 'SG',
+      }),
+      terminal('COM3-TX+', 'COM3 TX+', 'communication', 'signal', 'communication', {
+        polarity: 'data-positive', protocol: 'RS485', channel: 'A',
+      }),
+      terminal('COM3-TX-', 'COM3 TX-', 'communication', 'signal', 'communication', {
+        polarity: 'data-negative', protocol: 'RS485', channel: 'B',
+      }),
+      terminal('COM3-RX+', 'COM3 RX+', 'communication', 'signal', 'communication', {
+        polarity: 'data-positive', protocol: 'RS485', channel: 'A',
+      }),
+      terminal('COM3-RX-', 'COM3 RX-', 'communication', 'signal', 'communication', {
+        polarity: 'data-negative', protocol: 'RS485', channel: 'B',
+      }),
+      terminal('COM3-SG', 'COM3 SG', 'communication', 'signal', 'common', {
+        polarity: 'reference', commonType: 'communication-reference', protocol: 'RS485', channel: 'SG',
+      }),
+      terminal('COM3-FG', 'COM3 FG', 'pe', 'PE', 'protective-earth'),
+    ],
+    internalLinks: [],
+    behavior: {
+      kind: 'dc-load-practice',
+      positiveTerminal: 'DC24V',
+      returnTerminal: 'DC0V',
+      resistanceOhms: 96,
+      onThresholdVoltage: 19.2,
+      groundTerminal: { terminal: 'FG', kind: 'functional-frame-ground', notWorkingReturn: true },
+      communicationPorts: [
+        {
+          id: 'COM1', protocol: 'RS485', positiveTerminal: 'COM1-6', negativeTerminal: 'COM1-1',
+          terminationSetting: 'com1Termination', defaultTermination: true,
+        },
+        {
+          id: 'COM3', protocol: 'RS485', positiveTerminal: 'COM3-TX+', negativeTerminal: 'COM3-TX-',
+          receivePositiveTerminal: 'COM3-RX+', receiveNegativeTerminal: 'COM3-RX-',
+          terminationSetting: 'com3Termination', defaultTermination: true,
+        },
+      ],
+    },
+  },
+  {
     profileId: 'ls-electric:xbf-ah04a',
     version: '1.0.0',
     manufacturer: 'LS ELECTRIC',
@@ -769,7 +872,19 @@ const profiles: DeviceProfile[] = [
         polarity: 'data-negative', protocol: 'RS485', channel: 'B',
       }),
     ],
-    internalLinks: [], behavior: { kind: 'modbus-practice' },
+    internalLinks: [],
+    behavior: {
+      kind: 'modbus-practice',
+      positiveTerminal: 'V+',
+      returnTerminal: 'V-',
+      // Educational assumption only. The product identity and official manual
+      // remain unknown, so this never qualifies for verified prewire review.
+      onThresholdVoltage: 5,
+      assumedCurrentA: 0.02,
+      communicationPorts: [
+        { id: 'RS485', protocol: 'RS485', positiveTerminal: 'A+', negativeTerminal: 'B-' },
+      ],
+    },
   },
   {
     profileId: 'generic:prox-npn-3wire',

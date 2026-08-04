@@ -1619,6 +1619,7 @@ Object.assign(LIB,{
    구형 저장본의 type 문자열만으로는 검증 프로필에 승격하지 않는다. */
 for(const [type,profileId] of Object.entries({
   'XBC-DR32H':'ls-electric:xbc-dr32h',
+  'EXP2-700':'ls-electric:exp2-0700d',
   'XBF-AH04A':'ls-electric:xbf-ah04a',
   'MDR-100':'mean-well:mdr-100-24',
   'MC-22B-DC24':'ls-electric:mc-22b-dc24-1a1b',
@@ -2777,6 +2778,8 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
   Object.assign(LIB['MY-MD02'],{
     w:220,h:330,image:CODEX+'md02-imagen-v2.png',imageBox:{x:0,y:0,w:220,h:330},imageHasLabels:false,
     imagePreserveAspectRatio:'xMidYMid meet',
+    label:'XY-MD02 (교육용)',
+    sub:'제조사·공식 매뉴얼 미확인 · 전원과 RS485 상태 분리',
     // 실물 전면 기준 좌→우: RS485 B-, A+, 전원 -, +
     terminals:row(['B-','A+','V-','V+'], 299, 82.7, 137.9, 'B', [
       {label:'B-',pol:'COMM'},{label:'A+',pol:'COMM'},{label:'-',pol:'DC-'},{label:'+',pol:'DC+'}
@@ -2985,20 +2988,27 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
 
   // 33) EXP2 후면 단자 — 하단 전원/통신 블록
   Object.assign(LIB['EXP2-700'],{
-    w:420,h:300,image:CODEX+'exp2-700-rear-codex.png',imageBox:{x:0,y:0,w:420,h:300},imageHasLabels:false,skin:null,
+    w:420,h:390,image:CODEX+'exp2-700-rear-codex.png',imageBox:{x:0,y:0,w:420,h:300},imageHasLabels:false,skin:null,
+    overlaySkin:'exp2-manual',practiceOnly:false,
+    label:'LS ELECTRIC eXP2-0700D',
+    sub:'eXP2-0700D · DC24V · COM1 DB9 RS485 · COM3 RS422/485',
     terminals:[
-      ...row(['V+','V-','FG'], 228, 70, 130, 'B', [
-        {label:'DC24V+',pol:'DC+'},{label:'DC24V 0V',pol:'DC-'},{label:'FG',pol:'PE'}
+      {id:'DC24V',x:64,y:334,side:'P',label:'DC24V +',pol:'DC+',forceLabel:true},
+      {id:'DC0V',x:101,y:334,side:'P',label:'0V',pol:'DC-',forceLabel:true},
+      {id:'FG',x:138,y:334,side:'P',label:'FG',pol:'PE',forceLabel:true},
+      /* 공식 HW 매뉴얼 PDF 55쪽: COM1 pin 6=RS485+, pin 1=RS485-. */
+      {id:'COM1-1',x:246,y:202,side:'P',label:'COM1-1 485-',pol:'COMM',forceLabel:true,labelDx:-28,labelDy:-18},
+      {id:'COM1-6',x:250,y:221,side:'P',label:'COM1-6 485+',pol:'COMM',forceLabel:true,labelDx:-28,labelDy:22},
+      {id:'COM2-2',x:260,y:202,side:'P',label:'COM2-2 RXD',pol:'COMM'},
+      {id:'COM2-3',x:274,y:202,side:'P',label:'COM2-3 TXD',pol:'COMM'},
+      {id:'COM2-5',x:302,y:202,side:'P',label:'COM2-5 SG',pol:'COMM'},
+      ...row(['COM3-TX+','COM3-TX-','COM3-RX+','COM3-RX-','COM3-SG','COM3-FG'], 365, 196, 370, 'P', [
+        {label:'TX+',pol:'COMM'},{label:'TX-',pol:'COMM'},
+        {label:'RX+',pol:'COMM'},{label:'RX-',pol:'COMM'},
+        {label:'SG',pol:'COMM'},{label:'FG',pol:'PE'}
       ]),
-      ...row(['T+','T-','RXD','TXD','SG'], 218, 220, 350, 'B', [
-        {label:'485+',pol:'COMM'},{label:'485-',pol:'COMM'},
-        {label:'RXD',pol:'COMM'},{label:'TXD',pol:'COMM'},{label:'SG',pol:'COMM'}
-      ]),
-      ...row(['COM3-RDB','COM3-RDA','COM3-SDB','COM3-SDA','COM3-SG'], 258, 90, 280, 'B', [
-        {label:'RDB-',pol:'COMM'},{label:'RDA+',pol:'COMM'},
-        {label:'SDB-',pol:'COMM'},{label:'SDA+',pol:'COMM'},{label:'SG',pol:'COMM'}
-      ]),
-    ]
+    ],
+    polarityCritical:[['DC24V','DC0V']]
   });
 
   // 생성형 단자대 — 나사 위치 y 보정 (상단/하단 가장자리)
@@ -3154,8 +3164,8 @@ function terminalHitRadius(def,t){
   return isFiniteCoord(hit.r) ? Number(hit.r) : (t.r || (def.terminals.length>32 ? 7.2 : 8.5));
 }
 /** 교육용 기본 등록 타입(초기 스냅샷). 보정 시 다른 장비 타입도 자동 추가됨 */
-const TERMINAL_DATA_DEVICE_TYPES=['XBC-DR32H','MDR-100','XBF-AH04A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
-const REVIEW_PROFILE_TERMINAL_TYPES=new Set(['XBC-DR32H','XBF-AH04A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI']);
+const TERMINAL_DATA_DEVICE_TYPES=['XBC-DR32H','EXP2-700','MDR-100','XBF-AH04A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
+const REVIEW_PROFILE_TERMINAL_TYPES=new Set(['XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI']);
 const LSK_CALIB='wiring-workshop-terminal-calib-v1';
 function cloneTerminalData(value){
   return value==null ? value : JSON.parse(JSON.stringify(value));
@@ -7083,6 +7093,38 @@ function beginTerminalCalibrationDrag(devId,termId,e){
   return true;
 }
 
+/* 기존 생성 이미지는 그대로 두고, 매뉴얼에서 확인된 실제 커넥터만 SVG로 보강한다. */
+function drawExp2ManualOverlay(g,def,scale=1){
+  const addRect=(x,y,w,h,fill,stroke,rx=3)=>{
+    const node=document.createElementNS(SVGNS,'rect');
+    node.setAttribute('x',x*scale);node.setAttribute('y',y*scale);
+    node.setAttribute('width',w*scale);node.setAttribute('height',h*scale);
+    node.setAttribute('rx',rx*scale);node.setAttribute('fill',fill);
+    node.setAttribute('stroke',stroke);node.setAttribute('stroke-width',Math.max(1,scale));
+    g.appendChild(node);return node;
+  };
+  const addText=(x,y,value,size=9,anchor='start',fill='#102018')=>{
+    const node=document.createElementNS(SVGNS,'text');
+    node.setAttribute('x',x*scale);node.setAttribute('y',y*scale);
+    node.setAttribute('font-size',size*scale);node.setAttribute('font-weight','700');
+    node.setAttribute('text-anchor',anchor);node.setAttribute('fill',fill);
+    node.setAttribute('pointer-events','none');node.textContent=value;g.appendChild(node);
+  };
+  addRect(36,302,368,84,'rgba(235,241,238,.96)','#375447',5);
+  addText(46,316,'매뉴얼 단자 오버레이 · 기존 이미지는 외형 참고용',8,'start','#254136');
+  addRect(48,321,108,50,'#b7d4b9','#315c3a',3);
+  addText(102,330,'POWER',8,'middle','#183b22');
+  for(const x of [64,101,138])addRect(x-10,337,20,20,'#d8ead8','#315c3a',2);
+  addText(64,382,'+24V',8,'middle');addText(101,382,'0V',8,'middle');addText(138,382,'FG',8,'middle');
+  addRect(178,321,210,50,'#d7e2dc','#3e5b4d',3);
+  addText(283,330,'COM3 RS-422/485 · TX+/TX-/RX+/RX-/SG/FG',7.5,'middle','#203d31');
+  for(const x of [196,230.8,265.6,300.4,335.2,370])addRect(x-9,338,18,18,'#eef4f1','#3e5b4d',2);
+  addRect(220,174,96,64,'rgba(255,209,102,.14)','#ffcc66',5);
+  addText(268,170,'COM1 RS485 / COM2 RS232 DB9',8,'middle','#ffe2a1');
+  addText(268,246,'COM1: pin 6 = + · pin 1 = -',8,'middle','#ffe2a1');
+  return true;
+}
+
 function drawDisabledTerminalSpots(group,def,scale=1){
   for(const correction of def.imageLabelCorrections||[]){
     if(correction.mask){
@@ -7180,6 +7222,7 @@ function renderDevices(){
       img.setAttribute('width',box.w*s); img.setAttribute('height',box.h*s);
       img.setAttribute('preserveAspectRatio',def.imagePreserveAspectRatio||'none');
       g.appendChild(img);
+      if(def.overlaySkin==='exp2-manual')drawExp2ManualOverlay(g,def,s);
       drawDisabledTerminalSpots(g,def,s);
     } else {
     const drawDef=s===1?def:{...def,w:sw,h:sh};
@@ -11416,6 +11459,7 @@ window.LegacyTrainerBridge={
   readTerminalGeometryV3(){
     const profileByType={
       'XBC-DR32H':'ls-electric:xbc-dr32h',
+      'EXP2-700':'ls-electric:exp2-0700d',
       'XBF-AH04A':'ls-electric:xbf-ah04a',
       'MDR-100':'mean-well:mdr-100-24',
       'MC-22B-DC24':'ls-electric:mc-22b-dc24-1a1b',
@@ -11468,7 +11512,7 @@ window.LegacyTrainerBridge={
     cancelPendingWire('',{render:false});
     S.history=[];S.future=[];
     const profileToLegacy={
-      'ls-electric:xbc-dr32h':'XBC-DR32H','ls-electric:xbf-ah04a':'XBF-AH04A','mean-well:mdr-100-24':'MDR-100',
+      'ls-electric:xbc-dr32h':'XBC-DR32H','ls-electric:exp2-0700d':'EXP2-700','ls-electric:xbf-ah04a':'XBF-AH04A','mean-well:mdr-100-24':'MDR-100',
       'ls-electric:mc-22b-dc24-1a1b':'MC-22B-DC24','schneider:eocr3de-05duh':'EOCR3DE-05DUH',
       'omron:my2n-d2-dc24':'MY2N',
       'phoenix-contact:ut-2.5-3044076':'UT-2.5','phoenix-contact:ut-2.5-pe-3044092':'UT-2.5-PE',

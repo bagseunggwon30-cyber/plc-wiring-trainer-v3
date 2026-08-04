@@ -1,6 +1,8 @@
 import { DEVICE_PROFILES } from '../catalog/profiles';
 import { DEVICE_PROFILES_V3 } from '../catalog/v3-profiles';
+import { createAcademyExp2Md02Template } from '../domain/academy-panel-template';
 import type { ValidationIssue, ValidationResult } from '../domain/engine-types';
+import { analyzeSerialDeviceStates } from '../domain/communication-runtime';
 import { evaluateMission, type MissionEvaluationResult } from '../domain/mission-evaluator';
 import { sha256, migrateLegacyLocalStorage } from '../domain/migration';
 import { PUBLIC_MISSIONS, type MissionDefinitionV2, type RoleBinding } from '../domain/missions';
@@ -913,6 +915,18 @@ export function installWorkflowApp(): void {
     }
     const monitor = requiredElement<HTMLElement>('sim-monitor');
     monitor.replaceChildren();
+    const appendSerialStates = (serialSolution: CircuitSolution): void => {
+      const serialStates = analyzeSerialDeviceStates(run.document, DEVICE_PROFILES, serialSolution);
+      for (const state of Object.values(serialStates)) {
+        const row = document.createElement('div');
+        row.dataset.serialDeviceId = state.deviceId;
+        row.textContent = `${state.deviceId} ${state.portId}: 전원 ${state.powered ? '정상' : '꺼짐'}`
+          + ` · 통신선 ${state.communicationWired ? '정상' : '미구성'}`
+          + ` · 설정 ${state.protocolConfigured ? (state.settingsCompatible ? '일치' : '불일치') : '미입력'}`
+          + ` · ${state.communicationReady ? '통신 준비' : state.status}`;
+        monitor.appendChild(row);
+      }
+    };
     if (run.scenarioSimulations?.length) {
       const heading = document.createElement('div');
       heading.textContent = `v3 결정적 I/O 시험 · ${run.validation.status} · ${run.scenarioSimulations.length}개 시나리오`;
@@ -932,6 +946,7 @@ export function installWorkflowApp(): void {
           + ` · LOOP[${activeLoops.join(', ') || '-'}] · 접점[${closedContacts.join(', ') || '-'}] · 반복 ${scenario.iterations}`;
         monitor.appendChild(scenarioRow);
       }
+      appendSerialStates(solution);
       return;
     }
     const heading = document.createElement('div');
@@ -948,6 +963,7 @@ export function installWorkflowApp(): void {
         + ` · RX ${loop.receiverVoltageV?.toFixed(3) ?? '?'}V · TX ${loop.transmitterVoltageV?.toFixed(3) ?? '?'}V`;
       monitor.appendChild(row);
     }
+    appendSerialStates(solution);
   };
 
   const probeReference = (key: string): { elementId: string; terminalId: string } | null => {
@@ -1108,6 +1124,15 @@ export function installWorkflowApp(): void {
         if (JSON.stringify(state) === JSON.stringify(v3WorkflowState)) return;
         v3WorkflowState = state;
         bridge.updateWorkflowState(state);
+      },
+      onLoadAcademyTemplate: () => {
+        void (async () => {
+          const current = await readDocument();
+          if ((current.devices.length || current.wires.length)
+            && !window.confirm('현재 작업장을 학원 eXP2·MD02 진단 예제로 교체할까요? 저장하지 않은 결선은 현재 화면에서 사라집니다.')) return;
+          const template = createAcademyExp2Md02Template();
+          applyLoadedWorkshop(template, '학원 진단 예제 로드 · 시뮬 버튼으로 HMI 통신 준비와 MD02 전원 정상/통신 미구성을 확인하세요.');
+        })();
       },
     }));
     const progress = requiredElement<HTMLElement>('mission-progress');

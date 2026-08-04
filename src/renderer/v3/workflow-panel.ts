@@ -3,6 +3,8 @@ import {
   type Ig5aControlPowerStateV3,
   type Ig5aInputLogicV3,
   type PhaseSequenceV3Workflow,
+  type Rs485ProtocolV3,
+  type Rs485WorkflowSetting,
   type SourceSystemSelection,
   type V3WorkflowState,
   type XbfChannelIdV3,
@@ -29,6 +31,7 @@ export interface V3WorkflowPanelOptions {
   devices: readonly V3WorkflowDevice[];
   conductors: readonly V3WorkflowConductor[];
   onChange(state: V3WorkflowState): void;
+  onLoadAcademyTemplate?(): void;
 }
 
 const SOURCE_SYSTEMS: readonly SourceSystemSelection[] = [
@@ -47,6 +50,7 @@ const EARTHING_OPTIONS: readonly { value: Earthing0vPePolicy; label: string }[] 
 const REVIEW_TEMPLATES = [
   ['control-panel-prewire', '제어반 사전 결선 검토'],
   ['field-io-prewire', '필드 I/O 사전 결선 검토'],
+  ['academy-exp2-md02', '학원 eXP2·XBC·MD02 진단'],
 ] as const;
 const XBF_CHANNELS: readonly XbfChannelIdV3[] = ['AI0', 'AI1', 'AO0', 'AO1'];
 const XBF_RANGES = ['1-5V', '0-5V', '0-10V', '4-20mA', '0-20mA'] as const;
@@ -101,6 +105,14 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
   description.className = 'v3-workflow-help';
   description.textContent = '공급계통, PE/0V 규칙, 실제 mm 환산, 템플릿과 검토 범위를 모두 명시해야 합니다.';
   panel.append(heading, description);
+  if (options.onLoadAcademyTemplate) {
+    const loadTemplate = targetDocument.createElement('button');
+    loadTemplate.type = 'button';
+    loadTemplate.id = 'load-academy-exp2-md02-template';
+    loadTemplate.textContent = '학원 eXP2·MD02 시험 예제 불러오기';
+    loadTemplate.addEventListener('click', options.onLoadAcademyTemplate);
+    panel.appendChild(loadTemplate);
+  }
 
   const source = labelledSelect(targetDocument, '공급 SourceSystem', '공급 SourceSystem 선택');
   const sourcePrompt = new Option('선택 필요', '');
@@ -350,6 +362,115 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       controlPowerHelp.textContent = 'P1–P8 입력 시험은 인버터 제어전원이 실제로 살아 있을 때만 유효합니다. 이 값은 연습용 상태 기록이며 정확 주문코드의 주회로 검증을 대신하지 않습니다.';
       controlPower.field.appendChild(controlPowerHelp);
       scope.appendChild(controlPower.field);
+    }
+    if (
+      device.profileId === 'ls-electric:exp2-0700d'
+      || device.profileId === 'ls-electric:xbc-dr32h'
+      || device.profileId === 'generic:xy-md02'
+    ) {
+      const serial = targetDocument.createElement('fieldset');
+      serial.className = 'v3-xbf-settings';
+      const serialLegend = targetDocument.createElement('legend');
+      serialLegend.textContent = `${device.label} RS485 실제 설정`;
+      serial.appendChild(serialLegend);
+      const previous = state.deviceSettings[device.id] ?? { orderCode: null };
+      const defaults: Rs485WorkflowSetting = {
+        port: device.profileId === 'ls-electric:exp2-0700d'
+          ? 'COM1'
+          : device.profileId === 'ls-electric:xbc-dr32h' ? 'BUILT_IN_CNET' : 'RS485',
+        protocol: null,
+        baudRate: null,
+        dataBits: null,
+        parity: null,
+        stopBits: null,
+        stationId: null,
+      };
+      const setting = previous.rs485 ?? defaults;
+      state.deviceSettings[device.id] = { ...previous, rs485: setting };
+      const port = targetDocument.createElement('select');
+      port.setAttribute('aria-label', `${device.label} RS485 포트`);
+      const ports = device.profileId === 'ls-electric:exp2-0700d'
+        ? [['COM1', 'COM1 DB9 · pin 6(+), pin 1(-)'], ['COM3', 'COM3 RS422/485 단자']] as const
+        : device.profileId === 'ls-electric:xbc-dr32h'
+          ? [['BUILT_IN_CNET', '내장 485+/485-']] as const
+          : [['RS485', 'A+/B-']] as const;
+      for (const [value, label] of ports) port.add(new Option(label, value));
+      port.value = setting.port ?? ports[0][0];
+
+      const protocol = targetDocument.createElement('select');
+      protocol.setAttribute('aria-label', `${device.label} RS485 프로토콜`);
+      protocol.add(new Option('프로토콜 선택 필요', ''));
+      if (device.profileId !== 'generic:xy-md02') protocol.add(new Option('XGB Cnet', 'XGB_CNET'));
+      if (device.profileId === 'ls-electric:exp2-0700d') protocol.add(new Option('Modbus RTU Master', 'MODBUS_RTU_MASTER'));
+      if (device.profileId === 'generic:xy-md02') protocol.add(new Option('Modbus RTU Slave', 'MODBUS_RTU_SLAVE'));
+      protocol.value = setting.protocol ?? '';
+
+      const baud = targetDocument.createElement('select');
+      baud.setAttribute('aria-label', `${device.label} RS485 baud rate`);
+      baud.add(new Option('baud rate', ''));
+      for (const value of [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]) {
+        baud.add(new Option(String(value), String(value)));
+      }
+      baud.value = setting.baudRate === null ? '' : String(setting.baudRate);
+
+      const dataBits = targetDocument.createElement('select');
+      dataBits.setAttribute('aria-label', `${device.label} RS485 data bits`);
+      dataBits.add(new Option('data bits', ''));
+      dataBits.add(new Option('7 bit', '7')); dataBits.add(new Option('8 bit', '8'));
+      dataBits.value = setting.dataBits === null ? '' : String(setting.dataBits);
+
+      const parity = targetDocument.createElement('select');
+      parity.setAttribute('aria-label', `${device.label} RS485 parity`);
+      parity.add(new Option('parity', ''));
+      parity.add(new Option('None', 'NONE')); parity.add(new Option('Even', 'EVEN')); parity.add(new Option('Odd', 'ODD'));
+      parity.value = setting.parity ?? '';
+
+      const stopBits = targetDocument.createElement('select');
+      stopBits.setAttribute('aria-label', `${device.label} RS485 stop bits`);
+      stopBits.add(new Option('stop bits', ''));
+      stopBits.add(new Option('1 bit', '1')); stopBits.add(new Option('2 bit', '2'));
+      stopBits.value = setting.stopBits === null ? '' : String(setting.stopBits);
+
+      const station = targetDocument.createElement('input');
+      station.type = 'number'; station.min = '1'; station.max = '247'; station.placeholder = '국번';
+      station.setAttribute('aria-label', `${device.label} Modbus 국번`);
+      station.value = setting.stationId === null ? '' : String(setting.stationId);
+      if (device.profileId !== 'generic:xy-md02') station.hidden = true;
+
+      const updateSerial = (): void => {
+        const latest = state.deviceSettings[device.id] ?? { orderCode: null };
+        const selectedProtocol = protocol.value;
+        const baudValue = Number(baud.value);
+        const dataValue = Number(dataBits.value);
+        const stopValue = Number(stopBits.value);
+        const stationValue = Number(station.value);
+        latest.rs485 = {
+          port: port.value || null,
+          protocol: selectedProtocol === 'XGB_CNET'
+            || selectedProtocol === 'MODBUS_RTU_MASTER'
+            || selectedProtocol === 'MODBUS_RTU_SLAVE'
+            ? selectedProtocol as Rs485ProtocolV3
+            : null,
+          baudRate: Number.isFinite(baudValue) && baudValue > 0 ? baudValue : null,
+          dataBits: dataValue === 7 || dataValue === 8 ? dataValue : null,
+          parity: parity.value === 'NONE' || parity.value === 'EVEN' || parity.value === 'ODD' ? parity.value : null,
+          stopBits: stopValue === 1 || stopValue === 2 ? stopValue : null,
+          stationId: Number.isInteger(stationValue) && stationValue > 0 ? stationValue : null,
+        };
+        state.deviceSettings[device.id] = latest;
+        notify();
+      };
+      for (const control of [port, protocol, baud, dataBits, parity, stopBits, station]) {
+        control.addEventListener('change', updateSerial);
+      }
+      serial.append(port, protocol, baud, dataBits, parity, stopBits, station);
+      const help = targetDocument.createElement('small');
+      help.className = 'v3-workflow-help';
+      help.textContent = device.profileId === 'ls-electric:exp2-0700d'
+        ? 'COM1의 물리 극성은 공식 매뉴얼 기준 pin 6(+), pin 1(-)입니다. 실제 XP-Builder 설정도 동일하게 기록하세요.'
+        : '통신 준비는 전원, A/B 두 가닥, 프로토콜과 모든 직렬 설정이 함께 맞을 때만 표시됩니다.';
+      serial.appendChild(help);
+      scope.appendChild(serial);
     }
     if (device.profileId === 'generic:prox-npn-3wire' || device.profileId === 'generic:prox-pnp-3wire') {
       const previous = state.deviceSettings[device.id] ?? { orderCode: null };

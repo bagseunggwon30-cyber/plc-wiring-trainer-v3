@@ -14,7 +14,7 @@ describe('practice and prewire mode policy', () => {
 
   it('limits prewire mode to verified equipment and logical boundaries', () => {
     for (const type of [
-      'XBC-DR32H', 'XBF-AH04A', 'MDR-100', 'MC-22B-DC24', 'MY2N', 'EOCR3DE-05DUH',
+      'XBC-DR32H', 'EXP2-700', 'XBF-AH04A', 'MDR-100', 'MC-22B-DC24', 'MY2N', 'EOCR3DE-05DUH',
       'UT-2.5', 'UT-2.5-PE', 'UT-4-HESI',
       'BOUNDARY-AC', 'BOUNDARY-DC', 'BOUNDARY-CONTACT', 'BOUNDARY-LOAD',
       'BOUNDARY-ANALOG-V', 'BOUNDARY-ANALOG-I',

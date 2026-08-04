@@ -28,6 +28,16 @@ export type XbfChannelIdV3 = 'AI0' | 'AI1' | 'AO0' | 'AO1';
 export type XbfRangeV3 = '1-5V' | '0-5V' | '0-10V' | '4-20mA' | '0-20mA';
 export type Ig5aInputLogicV3 = 'NPN_INTERNAL_24V' | 'PNP_EXTERNAL_24V';
 export type Ig5aControlPowerStateV3 = 'POWERED' | 'UNPOWERED';
+export type Rs485ProtocolV3 = 'XGB_CNET' | 'MODBUS_RTU_MASTER' | 'MODBUS_RTU_SLAVE';
+export interface Rs485WorkflowSetting {
+  port: string | null;
+  protocol: Rs485ProtocolV3 | null;
+  baudRate: number | null;
+  dataBits: 7 | 8 | null;
+  parity: 'NONE' | 'EVEN' | 'ODD' | null;
+  stopBits: 1 | 2 | null;
+  stationId: number | null;
+}
 export interface XbfChannelWorkflowSetting {
   enabled: boolean;
   selector: 'V' | 'I' | null;
@@ -40,6 +50,7 @@ export interface DeviceWorkflowSetting {
   ig5aControlPowerState?: Ig5aControlPowerStateV3;
   sensorDetected?: boolean;
   currentMilliamp?: number;
+  rs485?: Rs485WorkflowSetting;
 }
 export interface ConductorWorkflowSetting {
   cableId: string | null;
@@ -139,6 +150,24 @@ function deviceSettings(value: unknown): Record<string, DeviceWorkflowSetting> {
       : undefined;
     const sensorDetected = typeof raw.sensorDetected === 'boolean' ? raw.sensorDetected : undefined;
     const currentMilliamp = positiveNumber(raw.currentMilliamp) ?? undefined;
+    const rawRs485 = raw.rs485 && typeof raw.rs485 === 'object' && !Array.isArray(raw.rs485)
+      ? raw.rs485 as Record<string, unknown>
+      : null;
+    const rs485: Rs485WorkflowSetting | undefined = rawRs485 ? {
+      port: text(rawRs485.port),
+      protocol: rawRs485.protocol === 'XGB_CNET'
+        || rawRs485.protocol === 'MODBUS_RTU_MASTER'
+        || rawRs485.protocol === 'MODBUS_RTU_SLAVE'
+        ? rawRs485.protocol
+        : null,
+      baudRate: positiveNumber(rawRs485.baudRate),
+      dataBits: rawRs485.dataBits === 7 || rawRs485.dataBits === 8 ? rawRs485.dataBits : null,
+      parity: rawRs485.parity === 'NONE' || rawRs485.parity === 'EVEN' || rawRs485.parity === 'ODD'
+        ? rawRs485.parity
+        : null,
+      stopBits: rawRs485.stopBits === 1 || rawRs485.stopBits === 2 ? rawRs485.stopBits : null,
+      stationId: positiveNumber(rawRs485.stationId),
+    } : undefined;
     if (
       !orderCode
       && !channels
@@ -146,6 +175,7 @@ function deviceSettings(value: unknown): Record<string, DeviceWorkflowSetting> {
       && ig5aControlPowerState === undefined
       && sensorDetected === undefined
       && currentMilliamp === undefined
+      && rs485 === undefined
     ) return [];
     return [[deviceId, {
       orderCode,
@@ -154,6 +184,7 @@ function deviceSettings(value: unknown): Record<string, DeviceWorkflowSetting> {
       ...(ig5aControlPowerState === undefined ? {} : { ig5aControlPowerState }),
       ...(sensorDetected === undefined ? {} : { sensorDetected }),
       ...(currentMilliamp === undefined ? {} : { currentMilliamp }),
+      ...(rs485 === undefined ? {} : { rs485 }),
     }] as const];
   }).sort(([left], [right]) => left.localeCompare(right)));
 }

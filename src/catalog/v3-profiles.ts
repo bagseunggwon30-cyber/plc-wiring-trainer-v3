@@ -207,6 +207,10 @@ const V3_PROFILE_LIST: readonly DeviceProfileV3[] = [
     orderCode: 'XBC-DR32H',
     evidenceGrade: 'manual-verified',
   }),
+  adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:exp2-0700d'], {
+    orderCode: 'eXP2-0700D',
+    evidenceGrade: 'manual-verified',
+  }),
   adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbf-ah04a'], {
     orderCode: 'XBF-AH04A',
     evidenceGrade: 'manual-verified',

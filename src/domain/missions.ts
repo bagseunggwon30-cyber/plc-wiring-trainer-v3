@@ -409,29 +409,160 @@ export const PUBLIC_MISSIONS: readonly MissionDefinitionV2[] = Object.freeze([
   },
   {
     schemaVersion: 2,
-    id: 'md02-rs485-practice',
-    title: 'MD02 RS485 결선 연습',
-    description: '공식 제조사 근거 확보 전 교육용 MD02 프로필로 전원 극성과 RS485 A/B 대응을 연습한다.',
+    id: 'exp2-power-practice',
+    title: 'eXP2-0700D DC24V 전원',
+    description: '학원 제어반과 같이 MDR 첫 번째 출력쌍으로 HMI의 DC24V와 0V 귀로를 완성한다.',
     eligibleModes: ['practice'],
     roles: [
-      { id: 'dcSupply', label: 'DC 공급원', allowedProfileIds: ['boundary:dc-supply'] },
+      { id: 'acSupply', label: 'AC 공급원', allowedProfileIds: ['boundary:ac-supply'] },
+      { id: 'powerSupply', label: 'MDR-100-24', allowedProfileIds: ['mean-well:mdr-100-24'] },
+      { id: 'hmi', label: 'eXP2-0700D HMI', allowedProfileIds: ['ls-electric:exp2-0700d'] },
+    ],
+    initialState: {},
+    actions: [
+      { id: 'connect-hmi-power', label: 'MDR +24V와 0V를 HMI 전원 단자에 연결한다.', kind: 'connect', target: terminal('hmi', 'DC24V') },
+      { id: 'measure-hmi-power', label: 'HMI DC24V-DC0V 전압과 귀로를 확인한다.', kind: 'observe', target: terminal('hmi', 'DC0V') },
+    ],
+    scenarios: [{ id: 'hmi-powered' }],
+    connectionPolicy: 'all-sets',
+    expectedConnections: [
+      {
+        id: 'mdr-input-and-hmi-output',
+        label: 'MDR 입력 및 HMI 전원 폐회로',
+        connections: [
+          connection('acSupply', 'L1', 'powerSupply', 'L', 'AC L → MDR L'),
+          connection('acSupply', 'N', 'powerSupply', 'N', 'AC N → MDR N'),
+          connection('acSupply', 'PE', 'powerSupply', 'PE', 'PE → MDR FG'),
+          connection('powerSupply', 'V+1', 'hmi', 'DC24V', 'MDR +V1 → HMI DC24V'),
+          connection('powerSupply', 'V-1', 'hmi', 'DC0V', 'MDR -V1 → HMI 0V'),
+        ],
+      },
+    ],
+    expectedStates: [
+      { scenarioId: 'hmi-powered', target: terminal('hmi', 'DC24V'), kind: 'energized', expected: true },
+    ],
+    forbiddenStates: [
+      { code: 'OPEN_RETURN_PATH', description: 'HMI 0V 귀로가 없으면 전원이 켜진 것으로 판정하지 않는다.' },
+      { code: 'LOAD_REVERSED', description: 'HMI DC24V와 0V를 반대로 연결하면 안 된다.' },
+      { code: 'DC_SHORT', description: 'HMI 전원 +와 0V를 같은 net으로 만들면 안 된다.' },
+    ],
+    hints: hints(
+      'HMI는 +24V 전위만 도달해서는 켜지지 않고 0V 귀로까지 필요하다.',
+      'MDR-100-24와 eXP2-0700D를 사용한다.',
+      'MDR V+1/V-1을 HMI DC24V/DC0V에 각각 연결한다.',
+      '첫 단계로 MDR V+1을 HMI DC24V에 연결한다.',
+    ),
+  },
+  {
+    schemaVersion: 2,
+    id: 'exp2-xbc-rs485-practice',
+    title: 'eXP2-0700D ↔ XBC RS485',
+    description: '공식 DB9 핀맵에 따라 eXP2 COM1 pin 6(+)과 pin 1(-)을 XBC 485+/485-에 연결한다.',
+    eligibleModes: ['practice'],
+    roles: [
+      { id: 'hmi', label: 'eXP2-0700D HMI', allowedProfileIds: ['ls-electric:exp2-0700d'] },
+      { id: 'plc', label: 'XBC-DR32H PLC', allowedProfileIds: ['ls-electric:xbc-dr32h'] },
+    ],
+    initialState: {},
+    actions: [
+      { id: 'configure-cnet', label: '양쪽 baud/parity/stop bit를 같은 값으로 설정한다.', kind: 'configure', target: terminal('hmi', 'COM1-6') },
+      { id: 'observe-cnet', label: 'COM1 종단저항과 RS485 극성을 확인한다.', kind: 'observe', target: terminal('hmi', 'COM1-1') },
+    ],
+    scenarios: [{ id: 'cnet-idle' }],
+    connectionPolicy: 'all-sets',
+    expectedConnections: [
+      {
+        id: 'exp2-xbc-cnet',
+        label: 'eXP2 COM1 DB9 ↔ XBC 내장 Cnet',
+        connections: [
+          connection('hmi', 'COM1-6', 'plc', '485+', 'COM1 pin 6(+) → XBC 485+'),
+          connection('hmi', 'COM1-1', 'plc', '485-', 'COM1 pin 1(-) → XBC 485-'),
+        ],
+      },
+    ],
+    expectedStates: [
+      { scenarioId: 'cnet-idle', target: terminal('hmi', 'COM1-6'), kind: 'protocol', expected: 'RS485-A' },
+      { scenarioId: 'cnet-idle', target: terminal('hmi', 'COM1-1'), kind: 'protocol', expected: 'RS485-B' },
+    ],
+    forbiddenStates: [
+      { code: 'RS485_POLARITY_MISMATCH', description: 'DB9 pin 6과 pin 1을 반대로 연결하면 안 된다.' },
+      { code: 'COMMUNICATION_POLARITY_MISMATCH', description: 'RS485 +와 -의 기능이 교차되면 안 된다.' },
+    ],
+    hints: hints(
+      'eXP2 COM1은 나사단자 두 개가 아니라 DB9 핀을 사용하는 RS485 포트다.',
+      'eXP2-0700D와 XBC-DR32H를 사용한다.',
+      '공식 매뉴얼 기준 COM1 pin 6은 +, pin 1은 -다.',
+      '첫 단계로 COM1 pin 6을 XBC 485+에 연결한다.',
+    ),
+  },
+  {
+    schemaVersion: 2,
+    id: 'md02-power-practice',
+    title: 'XY-MD02 전원만 연결',
+    description: '학원 제어반처럼 MDR 두 번째 출력쌍으로 MD02 전원 폐회로만 완성하고 통신은 미구성 상태로 둔다.',
+    eligibleModes: ['practice'],
+    roles: [
+      { id: 'acSupply', label: 'AC 공급원', allowedProfileIds: ['boundary:ac-supply'] },
+      { id: 'powerSupply', label: 'MDR-100-24', allowedProfileIds: ['mean-well:mdr-100-24'] },
+      { id: 'sensor', label: 'MD02 교육용 센서', allowedProfileIds: ['generic:xy-md02'] },
+    ],
+    initialState: {},
+    actions: [
+      { id: 'connect-md02-power', label: 'MDR V+2/V-2를 MD02 V+/V-에 연결한다.', kind: 'connect', target: terminal('sensor', 'V+') },
+      { id: 'observe-md02-power', label: '전원 정상/통신 미구성 상태를 확인한다.', kind: 'observe', target: terminal('sensor', 'V-') },
+    ],
+    scenarios: [{ id: 'md02-powered-only' }],
+    connectionPolicy: 'all-sets',
+    expectedConnections: [
+      {
+        id: 'md02-power',
+        label: 'MDR 입력 및 MD02 전원 폐회로',
+        connections: [
+          connection('acSupply', 'L1', 'powerSupply', 'L', 'AC L → MDR L'),
+          connection('acSupply', 'N', 'powerSupply', 'N', 'AC N → MDR N'),
+          connection('acSupply', 'PE', 'powerSupply', 'PE', 'PE → MDR FG'),
+          connection('powerSupply', 'V+2', 'sensor', 'V+', 'MDR +V2 → MD02 V+'),
+          connection('powerSupply', 'V-2', 'sensor', 'V-', 'MDR -V2 → MD02 V-'),
+        ],
+      },
+    ],
+    expectedStates: [
+      { scenarioId: 'md02-powered-only', target: terminal('sensor', 'V+'), kind: 'energized', expected: true },
+    ],
+    forbiddenStates: [
+      { code: 'OPEN_RETURN_PATH', description: 'MD02 V- 귀로가 없으면 전원 정상으로 판정하지 않는다.' },
+      { code: 'LOAD_REVERSED', description: 'MD02 V+와 V-를 반대로 연결하면 안 된다.' },
+      { code: 'UNVERIFIED_PROFILE', description: 'MD02 교육용 프로필로 통과 리포트를 발급하면 안 된다.' },
+    ],
+    hints: hints(
+      'MD02 전원 상태와 Modbus 통신 상태는 서로 다르다.',
+      'MDR-100-24와 MD02 교육용 프로필을 사용한다.',
+      'MDR V+2/V-2를 MD02 V+/V-에 각각 연결한다.',
+      '첫 단계로 MDR V+2를 MD02 V+에 연결한다.',
+    ),
+  },
+  {
+    schemaVersion: 2,
+    id: 'md02-rs485-practice',
+    title: 'XY-MD02 Modbus RTU 통신',
+    description: '전원 미션과 분리하여 통신 마스터, A/B, 국번과 직렬 통신 설정만 연습한다.',
+    eligibleModes: ['practice'],
+    roles: [
       { id: 'sensor', label: 'MD02 교육용 센서', allowedProfileIds: ['generic:xy-md02'] },
       { id: 'communicationPeer', label: 'RS485 통신 상대', allowedProfileIds: ['boundary:communication-peer'] },
     ],
     initialState: {},
     actions: [
-      { id: 'connect-power', label: '센서 전원 극성을 연결한다.', kind: 'connect', target: terminal('sensor', 'V+') },
+      { id: 'configure-modbus', label: '국번, baud rate, parity와 stop bit를 설정한다.', kind: 'configure', target: terminal('sensor', 'A+') },
       { id: 'observe-bus', label: 'RS485 A/B 대응을 확인한다.', kind: 'observe', target: terminal('sensor', 'A+') },
     ],
     scenarios: [{ id: 'rs485-idle' }],
     connectionPolicy: 'all-sets',
     expectedConnections: [
       {
-        id: 'power-and-bus',
-        label: 'MD02 전원 및 RS485',
+        id: 'modbus-bus',
+        label: 'MD02 RS485 A/B',
         connections: [
-          connection('dcSupply', '+', 'sensor', 'V+', '+24V → 센서 +'),
-          connection('dcSupply', '-', 'sensor', 'V-', '0V → 센서 -'),
           connection('communicationPeer', 'A', 'sensor', 'A+', 'A → A+'),
           connection('communicationPeer', 'B', 'sensor', 'B-', 'B → B-'),
         ],
@@ -443,14 +574,13 @@ export const PUBLIC_MISSIONS: readonly MissionDefinitionV2[] = Object.freeze([
     ],
     forbiddenStates: [
       { code: 'RS485_POLARITY_MISMATCH', description: 'A와 B를 반대로 연결하면 안 된다.' },
-      { code: 'DC_SHORT', description: '센서 전원 +와 -를 단락하면 안 된다.' },
       { code: 'UNVERIFIED_PROFILE', description: 'MD02 교육용 프로필로 통과 리포트를 발급하면 안 된다.' },
     ],
     hints: hints(
       'RS485는 같은 이름의 차동선끼리 1:1로 연결한다.',
-      'DC 공급원, MD02 교육용 센서, RS485 상대 경계를 사용한다.',
-      'A는 A+, B는 B-에 대응하고 전원 극성도 별도로 확인한다.',
-      '첫 단계로 DC +를 MD02 V+에 연결한다.',
+      'MD02 교육용 센서와 RS485 상대 경계를 사용한다.',
+      'A는 A+, B는 B-에 대응하고 양쪽 직렬 설정도 같아야 한다.',
+      '첫 단계로 통신 상대 A를 MD02 A+에 연결한다.',
     ),
   },
   {

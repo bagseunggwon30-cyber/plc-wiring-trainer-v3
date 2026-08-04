@@ -51,17 +51,20 @@ function bindings(entries: Record<string, string>): RoleBinding[] {
 }
 
 describe('public MissionDefinitionV2 catalog', () => {
-  it('publishes exactly the seven approved role-based missions', () => {
+  it('publishes the approved role-based missions with HMI and MD02 power separated from communication', () => {
     expect(PUBLIC_MISSIONS.map((entry) => entry.id)).toEqual([
       'mdr-ac-dc-distribution',
       'xbc-source-sink-input',
       'xbc-forced-relay-output',
       'xbf-analog-voltage-current',
       'ig5a-terminal-control-practice',
+      'exp2-power-practice',
+      'exp2-xbc-rs485-practice',
+      'md02-power-practice',
       'md02-rs485-practice',
       'door-terminal-block-routing',
     ]);
-    expect(new Set(PUBLIC_MISSIONS.map((entry) => entry.id)).size).toBe(7);
+    expect(new Set(PUBLIC_MISSIONS.map((entry) => entry.id)).size).toBe(10);
   });
 
   it('makes only evidence-qualified missions eligible for prewire mode', () => {

@@ -181,7 +181,8 @@ function expectedActualValue(
     const reverse = common !== undefined && common === component('P2');
     return forward && reverse ? 'forward-reverse-conflict' : forward ? 'forward-command' : reverse ? 'reverse-command' : 'stopped';
   }
-  const directLoad = simulation.solution.loads[deviceId];
+  const directLoad = simulation.solution.loads[`${deviceId}#supply`]
+    ?? simulation.solution.loads[deviceId];
   if (directLoad) return directLoad.state === 'ON';
   const inputLoad = simulation.solution.loads[`${deviceId}#${terminalId}`];
   if (inputLoad) return inputLoad.state === 'ON';
@@ -247,9 +248,10 @@ export function evaluateMissionV3(
     const expected = expectedByScenario.get(simulation.scenarioId) ?? [];
     const requiredOnLoadIds = new Set(expected.flatMap((state) => {
       const deviceId = prepared.resolved[state.target.role];
-      return state.kind === 'energized' && state.expected === true && simulation.solution.loads[deviceId]
-        ? [deviceId]
-        : [];
+      if (state.kind !== 'energized' || state.expected !== true || !deviceId) return [];
+      const supplyLoadId = `${deviceId}#supply`;
+      if (simulation.solution.loads[supplyLoadId]) return [supplyLoadId];
+      return simulation.solution.loads[deviceId] ? [deviceId] : [];
     }));
     const scenarioControlledLoadIds = new Set(document.elements.flatMap((element) =>
       element.kind === 'load' && element.required === 'scenario' ? [element.id] : []));
