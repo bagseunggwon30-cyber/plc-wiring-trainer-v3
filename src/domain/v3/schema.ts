@@ -14,7 +14,7 @@ const sourceSchema = z.union([
   z.object({
     // `kind` stayed optional for historical 24 V circuit fixtures and must remain round-trippable.
     kind: z.literal('dc').optional(), id: textSchema, positiveTerminal: textSchema, returnTerminal: textSchema, voltage: z.number().positive(),
-    enabledByElementId: textSchema.optional(),
+    maximumCurrentA: z.number().positive().optional(), enabledByElementId: textSchema.optional(),
   }).strict(),
   z.object({
     kind: z.literal('ac-single-phase'), id: textSchema, lineTerminal: textSchema, neutralTerminal: textSchema, peTerminal: textSchema,

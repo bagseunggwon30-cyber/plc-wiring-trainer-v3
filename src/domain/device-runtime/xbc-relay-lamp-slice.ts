@@ -1,5 +1,6 @@
 import type { PlcRuntimeAdapter, PlcRuntimeSnapshot, RuntimeFrame, RuntimeIssueV1 } from '../plc-runtime/contracts';
 import { synchronizeRuntimeFrame } from '../plc-runtime/runtime-coordinator';
+import type { StableSnapshotClock, StableSnapshotPolicyV1 } from '../plc-runtime/stable-snapshot';
 import { simulateScenario } from '../v3/circuit';
 import type { CircuitIssueV3, CircuitSolution, ScenarioSimulationV3, WorkshopDocumentV3 } from '../v3/contracts';
 import { stepDeviceBehavior } from './behavior-runtime';
@@ -12,7 +13,10 @@ export interface XbcRelayLampSliceDefinition {
   readonly runOutputBindingId: string;
   readonly startInputElementId: string;
   readonly stopInputElementId: string;
+  readonly stopInputEncoding?: 'nc-healthy-level' | 'active-high-stop-request';
   readonly plcPowerElementId: string;
+  readonly startContactStateKey: string;
+  readonly stopContactStateKey: string;
   readonly plcOutputContactStateKey: string;
   readonly relayCoilElementId: string;
   readonly lampElementId: string;
@@ -31,6 +35,9 @@ export interface RunXbcRelayLampFrameRequest {
   readonly controls: XbcRelayLampControls;
   readonly previousRelayState: DeviceBehaviorSnapshot;
   readonly elapsedMs?: number;
+  readonly expectedRunOutput?: boolean;
+  readonly stableSnapshotPolicy?: StableSnapshotPolicyV1;
+  readonly stableSnapshotClock?: StableSnapshotClock;
   readonly retryCount?: number;
   readonly now?: () => number;
   readonly timestamp?: () => string;
@@ -87,7 +94,9 @@ function relevantCircuitIssue(
   if (referencedElementIds.has(request.definition.stopInputElementId)) return !request.controls.stopPressed;
   if (referencedElementIds.has(request.definition.relayCoilElementId)) return runOutputOn;
   if (referencedElementIds.has(request.definition.lampElementId)) return coilEnergized;
-  return true;
+  // A PLC profile exposes every input channel, but this diagnostic owns only
+  // P03/P02. Open paths on unbound inputs must not poison this scoped frame.
+  return false;
 }
 
 function assertSliceDefinition(document: WorkshopDocumentV3, definition: XbcRelayLampSliceDefinition): void {
@@ -133,25 +142,33 @@ export async function runXbcRelayLampFrame(
     sessionId: status.sessionId,
     projectSha256: status.projectSha256,
     retryCount: request.retryCount,
+    ...(request.expectedRunOutput === undefined
+      ? {}
+      : { expectedOutputs: { [request.definition.runOutputBindingId]: request.expectedRunOutput } }),
+    stableSnapshotPolicy: request.stableSnapshotPolicy,
+    stableSnapshotClock: request.stableSnapshotClock,
     now: request.now,
     timestamp: request.timestamp,
     prepare: (previous): { nextInputs: { values: Readonly<Record<string, boolean>> }; context: PreparedXbcFrame } => {
       const previousOutput = booleanOutput(previous, request.definition.runOutputBindingId).value;
       const contactStates = {
-        'operator:start': request.controls.startPressed,
-        'operator:stop-closed': !request.controls.stopPressed,
+        [request.definition.startContactStateKey]: request.controls.startPressed,
+        [request.definition.stopContactStateKey]: !request.controls.stopPressed,
         [request.definition.plcOutputContactStateKey]: previousOutput,
       };
       const solved = simulateScenario(request.workshop, { id: `runtime-input-${request.frameNumber}`, contactStates });
       inputCircuit = solved;
       const plcPowered = elementIsEnergized(solved.solution, request.definition.plcPowerElementId);
+      const stopCircuitHealthy = plcPowered
+        && solved.solution.loads[request.definition.stopInputElementId]?.energized === true;
       return {
         nextInputs: {
           values: {
             [request.definition.startInputBindingId]: plcPowered
               && solved.solution.loads[request.definition.startInputElementId]?.energized === true,
-            [request.definition.stopInputBindingId]: plcPowered
-              && solved.solution.loads[request.definition.stopInputElementId]?.energized === true,
+            [request.definition.stopInputBindingId]: request.definition.stopInputEncoding === 'active-high-stop-request'
+              ? !stopCircuitHealthy
+              : stopCircuitHealthy,
           },
         },
         context: { inputCircuit: solved, plcPowered, contactStates },

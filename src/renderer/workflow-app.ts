@@ -1,5 +1,6 @@
 import { DEVICE_PROFILES } from '../catalog/profiles';
 import { DEVICE_PROFILES_V3 } from '../catalog/v3-profiles';
+import { XGSIM_CLOSED_LOOP_MANIFEST } from '../catalog/xgsim-project-manifest';
 import { createAcademyExp2Md02Template } from '../domain/academy-panel-template';
 import type { EquipmentOrderCatalogItem } from '../domain/equipment-order';
 import type { ValidationIssue, ValidationResult } from '../domain/engine-types';
@@ -69,6 +70,7 @@ import {
 } from './v3/workflow-state';
 import { createWiringAssistantPanel } from './v3/wiring-assistant-panel';
 import { createXgSimDiagnosticsPanel } from './plc-runtime/xgsim-diagnostics-panel';
+import { createXgSimFunctionTestPanel } from './plc-runtime/xgsim-function-test-panel';
 import { installEquipmentOrderPanel, type EquipmentOrderPanelController } from './equipment-order-panel';
 
 interface LegacyTrainerBridge {
@@ -122,6 +124,7 @@ interface CoreRun {
 
 const LEGACY_STORAGE_KEY = 'wiring-workshop-v2';
 const EQUIPMENT_ORDER_BACKUP_KEY = 'plc-wiring-trainer:before-equipment-order';
+const XGSIM_FUNCTION_TEST_BACKUP_KEY = 'plc-wiring-trainer:before-xgsim-function-test';
 
 const WORKFLOW_STYLES = `
   :focus-visible{outline:3px solid #ffd54f!important;outline-offset:2px}
@@ -150,6 +153,7 @@ const WORKFLOW_STYLES = `
   .core-issue{display:block;width:100%;text-align:left;margin:5px 0;padding:7px;border:1px solid #663f3f;border-radius:5px;background:#321f22;color:#f7d8d8;cursor:pointer}.core-issue.blocked{border-color:#735f2d;background:#342d1b;color:#ffe7a8}.core-issue small{display:block;color:#bdb7b7;margin-top:3px;line-height:1.35}
   .v3-workflow-panel{margin:0 0 10px;padding:9px;border:1px solid #46617d;border-radius:7px;background:#152230}.v3-workflow-panel h3{margin:0 0 4px;font-size:12px;color:#b6ddff}.v3-workflow-help{margin:0 0 8px;color:#b9c9d8;font-size:10px;line-height:1.35}.v3-workflow-field{display:grid;gap:3px;margin:6px 0;color:#dcecff;font-size:10px}.v3-workflow-field select,.v3-workflow-field input,.v3-workflow-device input,.v3-conductor-row input,.v3-xbf-channel select{min-width:0;border:1px solid #52637a;border-radius:4px;background:#101923;color:#eef4ff;padding:4px}.v3-workflow-scope{margin:8px 0 0;border:1px solid #41576d;border-radius:5px;overflow-x:auto}.v3-workflow-scope legend{font-size:10px;color:#b6ddff}.v3-workflow-device{display:grid;grid-template-columns:minmax(0,1fr) 100px 112px;gap:6px;align-items:center;margin:5px 0;font-size:10px}.v3-workflow-device label{display:flex;gap:5px;align-items:center;min-width:0}.v3-workflow-device span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.v3-xbf-settings{margin:4px 0 8px;border:1px dashed #52637a}.v3-xbf-channel{display:grid;grid-template-columns:70px 1fr 1fr;gap:5px;margin:4px 0}.v3-conductor-row{display:grid;grid-template-columns:minmax(150px,1fr) repeat(12,minmax(70px,.7fr));gap:4px;align-items:center;margin:5px 0;min-width:1120px;font-size:9px}.v3-conductor-row label{display:flex;gap:3px;align-items:center}
   .xgsim-diagnostics{flex:1 1 760px;padding:9px;border:1px solid #3f6f63;border-radius:7px;background:#10231f;color:#d8eee8}.xgsim-diagnostics h3{margin:0 0 4px;color:#a9ead7;font-size:12px}.xgsim-diagnostics p{margin:0 0 7px;color:#b7cdc6;font-size:10px}.xgsim-diagnostics-grid{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:5px}.xgsim-diagnostics-grid label{display:grid;gap:2px;font-size:9px}.xgsim-diagnostics-grid input{min-width:0;border:1px solid #4f746a;border-radius:4px;background:#0b1715;color:#effffb;padding:4px}.xgsim-diagnostics-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}.xgsim-diagnostics-status{display:block;margin-top:6px;padding:5px;border-radius:4px;background:#07110f;font:10px/1.45 monospace;color:#bff7e7}
+  .xgsim-function-test{flex:1 1 920px;padding:10px;border:1px solid #51739b;border-radius:7px;background:#101d2b;color:#e4f1ff}.xgsim-function-test h3{margin:0 0 4px;color:#a9d7ff;font-size:12px}.xgsim-function-test p{margin:0 0 7px;color:#b8c9da;font-size:10px;line-height:1.4}.xgsim-function-project,.xgsim-function-status,.xgsim-function-path{display:block;margin:6px 0;padding:5px;border-radius:4px;background:#08111b;color:#cce7ff;font:10px/1.45 ui-monospace,monospace;overflow-wrap:anywhere}.xgsim-function-confirm{display:flex;gap:6px;align-items:flex-start;font-size:10px;color:#e7f2ff}.xgsim-function-actions{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}.xgsim-function-actions button{border:1px solid #52769c;border-radius:4px;background:#17314b;color:#eef7ff;padding:5px 8px;font-size:9px;cursor:pointer}.xgsim-function-actions button:disabled{opacity:.45;cursor:not-allowed}.xgsim-function-live{display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));gap:5px;margin-top:7px}.xgsim-function-live div{display:grid;gap:2px;padding:5px;border:1px solid #334d68;border-radius:4px;background:#0b1622;font-size:9px}.xgsim-function-live output{color:#fff;font-weight:800}.xgsim-function-steps{max-height:180px;overflow:auto;margin:6px 0 0;padding-left:24px;font:9px/1.4 ui-monospace,monospace}.xgsim-function-steps li.pass{color:#91e0a0}.xgsim-function-steps li.fail{color:#ff9f96}
   .v3-test-tools{margin-top:7px;padding:7px;border:1px solid #41576d;border-radius:5px;background:#111c27}.v3-test-tools h3{margin:0 0 5px;color:#b6ddff;font-size:11px}.v3-test-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.v3-test-grid select,.v3-test-grid button{min-width:0;border:1px solid #52637a;border-radius:4px;background:#101923;color:#eef4ff;padding:5px;font-size:9px}.v3-test-result{display:block;margin-top:6px;min-height:1.4em;color:#ffe29a;font:10px ui-monospace,monospace}.v3-trace-legend{margin-top:4px;color:#b9c9d8;font-size:9px}.v3-trace-legend b:nth-child(1){color:#ef4444}.v3-trace-legend b:nth-child(2){color:#60a5fa}.v3-trace-legend b:nth-child(3){color:#a3e635}
   .v3-wiring-assistant{margin:0;padding:9px;border-bottom:1px solid #3b5066;background:#152230}.v3-wiring-assistant h3{margin:0 0 4px;color:#b6ddff;font-size:12px}.v3-wiring-help{margin:0 0 7px;color:#b9c9d8;font-size:10px;line-height:1.4}.v3-wiring-selection{display:block;margin:5px 0;color:#e6f2ff;font-size:10px}.v3-wiring-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px}.v3-wiring-controls button:last-child{grid-column:1/-1}.v3-wiring-controls select,.v3-wiring-controls button,.v3-wiring-actions button{min-width:0;border:1px solid #52637a;border-radius:4px;background:#101923;color:#eef4ff;padding:5px;font-size:9px}.v3-wiring-controls button.primary,.v3-wiring-actions button.primary{background:#23583b;border-color:#438a59}.v3-wiring-results{max-height:300px;overflow:auto;margin-top:7px}.v3-wiring-empty,.v3-wiring-stale{margin:5px 0;color:#9fb2c4;font-size:10px}.v3-wiring-stale{color:#ffbd66}.v3-wiring-plan{margin:6px 0;padding:7px;border:1px solid #425469;border-left:3px solid #4f91c9;border-radius:5px;background:#111b26;font-size:9px}.v3-wiring-plan.blocked{border-left-color:#d15b5b}.v3-wiring-plan.requires_prerequisite{border-left-color:#d49a43}.v3-wiring-plan-title{display:flex;gap:5px;margin-bottom:5px}.v3-wiring-badge,.v3-wiring-grade{padding:1px 5px;border-radius:8px;background:#264f6c;color:#d9efff;font-weight:700}.v3-wiring-grade.educational{background:#5b4520;color:#ffe2a1}.v3-wiring-grade.manual-verified,.v3-wiring-grade.bench-verified{background:#245a3a;color:#bdf4ca}.v3-wiring-path{display:block;color:#f1f7ff}.v3-wiring-plan p{margin:4px 0;color:#c6d4e1;line-height:1.35}.v3-wiring-plan ul{margin:4px 0;padding-left:17px;color:#ffd998}.v3-wiring-plan details{margin-top:5px;color:#9fc3e3}.v3-wiring-plan details li{overflow-wrap:anywhere;color:#aebdca}.v3-wiring-actions{display:flex;gap:5px;margin-top:6px}.v3-wiring-actions button{flex:1}.v3-wiring-controls button:disabled,.v3-wiring-actions button:disabled{opacity:.45;cursor:not-allowed}
   .v3-wiring-flow{margin:7px 0;padding:7px;border:1px solid #516477;border-radius:5px;background:#0d1721}.v3-wiring-flow[hidden]{display:none}.v3-wiring-flow-title{display:block;margin-bottom:5px;color:#e7f3ff;font-size:10px}.v3-wiring-flow-step{display:grid;grid-template-columns:84px minmax(0,1fr);gap:5px;margin:3px 0;font-size:9px}.v3-wiring-flow-step b{white-space:nowrap}.v3-wiring-flow-step.source b{color:#f87171}.v3-wiring-flow-step.signal b,.v3-wiring-flow-step.differential-pair b{color:#fb923c}.v3-wiring-flow-step.return b{color:#60a5fa}.v3-wiring-flow-step.pe b{color:#a3e635}.v3-wiring-flow-internal{margin:4px 0;color:#fed7aa;font-size:9px}
@@ -307,11 +311,23 @@ export const ISSUE_ACTIONS: Readonly<Record<string, string>> = Object.freeze({
     ROUTE_SEPARATION_LIMIT_REQUIRED: '전력선과 아날로그·통신선 분리 거리의 회사/매뉴얼 기준을 입력하세요.',
     ROUTE_SEPARATION_VIOLATION: '전력선과 민감 신호선의 경로를 분리하거나 공식 간격을 확보하세요.',
     SHIELD_TERMINATION_REQUIRED: '실드·드레인의 종단 위치를 명시하고 회사 접지 규칙과 일치시키세요.',
+    SOURCE_CAPACITY_BLOCKED: 'XBC 내부 24V 0.4A에 연결된 입력·릴레이 코일·램프 전류를 확인하고 정격 안으로 줄이세요.',
+    PROJECT_IDENTITY_UNVERIFIED: '선택한 XG5000 프로젝트 해시를 확인하고, 열린 프로젝트 신원은 사용자 선언과 진단 근거로만 기록하세요.',
+    PROJECT_FILE_HASH_MISMATCH: '검사된 4층_GEMINI.xgwx를 다시 선택하고 매니페스트 SHA-256과 일치하는지 확인하세요.',
+    PROJECT_LOAD_DECLARATION_REQUIRED: '선택한 프로젝트를 XG5000에서 열고 XG-SIM을 시작했음을 확인한 뒤 다시 사전 점검하세요.',
+    PROGRAM_CHECK_REQUIRED: '정확한 4층_GEMINI.xgwx에서 XG5000 Program Check를 실행하고 오류·경고 결과와 저장 파일 해시를 기록하세요.',
+    PLC_OUTPUT_NOT_STABLE: 'XG-SIM 연결과 M00100 운전상태를 확인하고 500ms 안에 동일 값이 두 번 연속 관찰되는지 다시 시험하세요.',
+    PLC_OUTPUT_LOAD_INACTIVE: 'M00100 상태, P21 가상접점의 COM0 공급, P21-릴레이 14번 선, 코일 13번-24G 귀로를 순서대로 확인하세요.',
+    RUNTIME_FRAME_IN_FLIGHT: '진행 중인 XG-SIM 프레임이 끝날 때까지 기다린 뒤 기능시험을 다시 시작하세요.',
     VALIDATION_STALE: '문서가 검증 이후 변경됐습니다. 최신 상태로 다시 검증하세요.',
   });
 
 export function issueAction(code: string): string {
   return ISSUE_ACTIONS[code] ?? '관련 단자와 와이어를 확인한 뒤 문서를 다시 검증하세요.';
+}
+
+export function workshopHasEditableContent(document: WorkshopDocumentV2): boolean {
+  return document.devices.length > 0 || document.wires.length > 0 || document.jumpers.length > 0;
 }
 
 function terminalText(terminal: {
@@ -580,6 +596,9 @@ export function installWorkflowApp(): void {
   const completedStepsByMission = new Map<string, Set<string>>();
   let v3WorkflowState = workflowStateFromDocument(bridge.readV2Shadow()?.document ?? {});
   let readWorkshopForAssistant: (() => Promise<WorkshopDocumentV2>) | undefined;
+  let readWorkshopForFunctionTest: (() => Promise<WorkshopDocumentV2>) | undefined;
+  let applyWorkshopForFunctionTest:
+    ((workshop: WorkshopDocumentV2, message: string) => void) | undefined;
   bridge.setWorkflowStateBaseline(v3WorkflowState);
   let lastValidatedRevision: number | null = null;
   const v3Validator = createV3ValidationPort(createDomainV3ValidationPort());
@@ -645,6 +664,32 @@ export function installWorkflowApp(): void {
     },
   });
   advancedBody.appendChild(xgSimDiagnostics.element);
+  const xgSimFunctionTest = createXgSimFunctionTestPanel({
+    manifest: XGSIM_CLOSED_LOOP_MANIFEST,
+    readWorkshop: async () => {
+      if (!readWorkshopForFunctionTest) throw new Error('결선 문서 판독기가 아직 준비되지 않았습니다.');
+      return readWorkshopForFunctionTest();
+    },
+    applyTemplate: async (template) => {
+      if (!readWorkshopForFunctionTest || !applyWorkshopForFunctionTest) {
+        throw new Error('진단 템플릿 적용기가 아직 준비되지 않았습니다.');
+      }
+      const current = await readWorkshopForFunctionTest();
+      if (workshopHasEditableContent(current)
+        && !window.confirm('현재 제어반을 XG-SIM 자기유지 진단 템플릿으로 교체할까요? 기존 작업은 로컬 백업에 보존됩니다.')) {
+        return false;
+      }
+      localStorage.setItem(XGSIM_FUNCTION_TEST_BACKUP_KEY, JSON.stringify(current));
+      applyWorkshopForFunctionTest(
+        template,
+        `XG-SIM 자기유지 진단 템플릿 적용 · 장비 ${template.devices.length}대 · 결선 ${template.wires.length}가닥 · 이전 작업 자동 백업`,
+      );
+      return true;
+    },
+    setStatus: (message) => bridge.setStatus(message),
+    downloadReport: (report, filename) => bridge.downloadJson(report, filename),
+  });
+  advancedBody.appendChild(xgSimFunctionTest.element);
   if (counter) header.insertBefore(advanced, counter); else header.appendChild(advanced);
 
   const legacySave = saveButton.onclick;
@@ -740,13 +785,18 @@ export function installWorkflowApp(): void {
   };
   window.addEventListener('workshop-document-revision', (event) => {
     const revision = (event as CustomEvent<{ revision?: number }>).detail?.revision;
-    if (typeof revision === 'number') { markValidationStale(revision); wiringAssistant.markStale(); }
+    if (typeof revision === 'number') {
+      markValidationStale(revision);
+      wiringAssistant.markStale();
+      void xgSimFunctionTest.markStale(`문서 revision ${revision}(으)로 변경`);
+    }
   });
   window.addEventListener('workshop-document-replaced', (event) => {
     const revision = (event as CustomEvent<{ revision?: number }>).detail?.revision;
     if (typeof revision === 'number') {
       markValidationStale(revision, true);
       wiringAssistant.markStale('문서를 불러와 이전 결선 안내를 폐기했습니다. 다시 계산하세요.');
+      void xgSimFunctionTest.markStale(`문서 revision ${revision} 교체`);
     }
   });
   window.addEventListener('workshop-selection-change', (event) => {
@@ -759,6 +809,7 @@ export function installWorkflowApp(): void {
     const state = (event as CustomEvent<{ state?: unknown }>).detail?.state;
     v3WorkflowState = createV3WorkflowState(state);
     void xgSimDiagnostics.disconnect();
+    void xgSimFunctionTest.disconnect();
     xgSimDiagnostics.setConfiguration(v3WorkflowState.plcRuntime);
     void renderMissions();
   });
@@ -794,6 +845,7 @@ export function installWorkflowApp(): void {
     return applyV3WorkflowState(documentV2, v3WorkflowState);
   };
   readWorkshopForAssistant = readDocument;
+  readWorkshopForFunctionTest = readDocument;
 
   const evidenceForIssue = (issue: ValidationIssue, workshop: WorkshopDocumentV2): string[] => {
     const deviceIds = new Set<string>();
@@ -1305,6 +1357,7 @@ export function installWorkflowApp(): void {
     setMode(workshop.mode);
     bridge.setStatus(message);
   };
+  applyWorkshopForFunctionTest = applyLoadedWorkshop;
 
   const equipmentOrderCatalog = bridge.readEquipmentCatalog();
   equipmentOrderPanel = installEquipmentOrderPanel(document, {

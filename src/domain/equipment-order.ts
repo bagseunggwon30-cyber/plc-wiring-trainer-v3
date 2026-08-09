@@ -757,8 +757,8 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
   };
 
   const inputDevices = [
-    ...(deviceByKey.get('startButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '1', signalTerminal: '2' })),
-    ...(deviceByKey.get('stopButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '1', signalTerminal: '2' })),
+    ...(deviceByKey.get('startButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '13', signalTerminal: '14' })),
+    ...(deviceByKey.get('stopButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '21', signalTerminal: '22' })),
     ...(deviceByKey.get('emergencyStop') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '11', signalTerminal: '12' })),
     ...(deviceByKey.get('npnSensor') ?? []).map((device) => ({ device, kind: 'npn-sensor' as const, sourceTerminal: 'BU', signalTerminal: 'BK' })),
   ];

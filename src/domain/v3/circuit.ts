@@ -1443,9 +1443,10 @@ export function solveCircuit(model: CircuitModel): CircuitSolution {
       const active = activeDcSources.includes(source);
       const positive = terminalKey(source.id, source.positiveTerminal);
       const returned = terminalKey(source.id, source.returnTerminal);
-      const sourceLoads = Object.values(loads).filter((loadSolution) =>
+      const sourceLoadEntries = Object.entries(loads).filter(([, loadSolution]) =>
         ['ON', 'INACTIVE', 'BELOW_THRESHOLD'].includes(loadSolution.state)
         && loadSolution.sourceId === source.id);
+      const sourceLoads = sourceLoadEntries.map(([, loadSolution]) => loadSolution);
       const sourceLoops = Object.values(currentLoops).filter((loop) =>
         (loop.state === 'COMPLETE' || loop.state === 'OVER_RANGE')
         && loop.sourceId === source.id);
@@ -1455,6 +1456,21 @@ export function solveCircuit(model: CircuitModel): CircuitSolution {
           ? null
           : sourceLoads.reduce((sum, loadSolution) => sum + (loadSolution.currentA ?? 0), 0)
             + sourceLoops.reduce((sum, loop) => sum + loop.currentA, 0);
+      if (active && !sourceShorted.has(source.id) && source.maximumCurrentA !== undefined) {
+        if (sourceCurrent === null) {
+          pushUniqueIssue(issues, issue(
+            'SOURCE_CAPACITY_BLOCKED',
+            `Source ${source.id} capacity cannot be checked because at least one active load current is unknown.`,
+            [source.id, ...sourceLoadEntries.filter(([, loadSolution]) => loadSolution.currentA === null).map(([elementId]) => elementId)],
+          ));
+        } else if (sourceCurrent > source.maximumCurrentA) {
+          pushUniqueIssue(issues, issue(
+            'SOURCE_CURRENT_EXCEEDED',
+            `Source ${source.id} current ${sourceCurrent.toFixed(4)} A exceeds its ${source.maximumCurrentA.toFixed(4)} A continuous rating.`,
+            [source.id, ...sourceLoadEntries.map(([elementId]) => elementId)],
+          ));
+        }
+      }
       elements[source.id] = {
         kind: 'source',
         state: !active ? 'SOURCE_INACTIVE' : sourceShorted.has(source.id) ? 'SOURCE_SHORTED' : 'SOURCE_ACTIVE',
@@ -1677,7 +1693,8 @@ function validationStatus(issues: readonly CircuitIssueV3[]): Exclude<Validation
     || entry.code === 'DUPLICATE_ELEMENT_ID'
     || entry.code === 'INVALID_CONTACT_RULE'
     || entry.code === 'NON_CONVERGENT_SIMULATION'
-    || entry.code === 'PROTECTION_COORDINATION_BLOCKED')) return 'BLOCKED';
+    || entry.code === 'PROTECTION_COORDINATION_BLOCKED'
+    || entry.code === 'SOURCE_CAPACITY_BLOCKED')) return 'BLOCKED';
   return issues.some((entry) => entry.blocking) ? 'FAIL' : 'PASS';
 }
 

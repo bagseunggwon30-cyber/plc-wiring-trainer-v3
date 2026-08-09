@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MY2N_D2_DC24_BEHAVIOR } from '../../src/catalog/device-behavior-profiles';
 import {
   createFunctionalSimulationReport,
+  createFunctionalSimulationReportV2,
   type FunctionalSimulationResultV1,
   type IoBindingV1,
   type RuntimeFrame,
@@ -17,7 +18,7 @@ const binding: IoBindingV1 = {
   cpuModel: 'XGB-XBCH',
   projectId: 'fixture',
   symbolName: 'RUN',
-  address: 'B0S00.OUT00',
+  address: 'M00100',
   direction: 'output',
   dataType: 'BOOL',
   inverted: false,
@@ -68,10 +69,74 @@ describe('functional simulation report', () => {
       unsupportedChecks: ['transient-analysis'],
     });
     expect(report.classification).toBe('SIL_PASS');
-    expect(report.bindings[0]).toMatchObject({ address: 'B0S00.OUT00', access: { write: false } });
+    expect(report.bindings[0]).toMatchObject({ address: 'M00100', access: { write: false } });
     expect(report.frames[0].closedLoopPaths[0]).toMatchObject({ elementId: 'coil', sourceBranchIds: ['feed'], returnBranchIds: ['return'] });
     expect(report.manualEvidence[0]).toMatchObject({ manualId: 'Omron_MY_Series_J219-E1.pdf', pages: [8, 10, 20] });
     expect(report.reportHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(report)).not.toContain('%PDF');
+  });
+
+  it('keeps a successful roundtrip separate from the formal identity block and strips the local path', async () => {
+    const blockedAssessment: FunctionalSimulationResultV1 = {
+      ...assessment,
+      status: 'BLOCKED',
+      stages: { prewire: 'PASS', plc: 'BLOCKED', devices: 'PASS' },
+      issueCodes: ['PROJECT_IDENTITY_UNVERIFIED'],
+    };
+    const report = await createFunctionalSimulationReportV2({
+      workshop,
+      assessment: blockedAssessment,
+      runtime: {
+        provider: 'xgsim', xg5000Version: '4.78.2.0', xgSimVersion: '1.0.0.1', hostProtocolVersion: 1,
+        cpuModel: 'XGB-XBCH', projectId: 'xbc-dr32h-self-hold-v1', projectSha256: hash, projectIdentityVerified: false,
+      },
+      bindings: [binding],
+      behaviorProfiles: [MY2N_D2_DC24_BEHAVIOR],
+      frames: [frame],
+      unsupportedChecks: ['project-identity-proof'],
+      diagnosticOutcome: 'ROUNDTRIP_PASS',
+      steps: [{ id: 'start-pressed', frameNumber: 1, passed: true, issueCodes: ['PROJECT_IDENTITY_UNVERIFIED'] }],
+      projectDeclaration: {
+        reference: {
+          schemaVersion: 1,
+          absolutePath: 'C:\\Users\\bark\\Desktop\\4층_GEMINI\\4층_GEMINI.xgwx',
+          fileName: '4층_GEMINI.xgwx',
+          sizeBytes: 1024,
+          modifiedAt: '2026-08-09T00:00:00.000Z',
+          sha256: hash,
+        },
+        userConfirmedLoaded: true,
+      },
+      safeStop: {
+        reason: 'automatic-test-complete',
+        attemptedAt: '2026-08-09T00:00:01.000Z',
+        inputBindingIds: ['start-input', 'stop-input'],
+        allInputsForcedOff: true,
+        safeInputValues: { 'start-input': false, 'stop-input': true },
+        runOutputObservedOff: true,
+        disconnected: true,
+        error: null,
+      },
+    });
+
+    expect(report).toMatchObject({
+      schemaVersion: 2,
+      classification: 'BLOCKED',
+      diagnosticOutcome: 'ROUNDTRIP_PASS',
+      projectDeclaration: {
+        fileName: '4층_GEMINI.xgwx',
+        sha256: hash,
+        identityProof: 'USER_DECLARATION_ONLY',
+      },
+      safeStop: {
+        allInputsForcedOff: true,
+        safeInputValues: { 'start-input': false, 'stop-input': true },
+        runOutputObservedOff: true,
+        disconnected: true,
+      },
+    });
+    expect(report.issueCodes).toContain('PROJECT_IDENTITY_UNVERIFIED');
+    expect(JSON.stringify(report)).not.toContain('C:\\XG5000');
+    expect(report.reportHash).toMatch(/^[a-f0-9]{64}$/);
   });
 });

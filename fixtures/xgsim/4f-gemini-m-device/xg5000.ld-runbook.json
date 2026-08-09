@@ -1,0 +1,19 @@
+{
+  "schema": "xg5000.ld-runbook/v1",
+  "project": "4층_GEMINI.xgwx",
+  "actions": [
+    "Open the exact project and run Program Check.",
+    "Do not add P-device diagnostic rungs; the project uses M devices.",
+    "Start XG-SIM from XG5000 Tools only after the app host and manifest hash are ready.",
+    "Run initial, start, hold, stop, release and fail-safe disconnect steps.",
+    "Record M00001, M00002, M00100 and virtual P21/MY2N/lamp state."
+  ],
+  "prohibited": ["physical PLC download", "online force I/O", "automatic RUN/STOP against field hardware"],
+  "expected": {
+    "initial": { "M00001": false, "M00002": false, "M00100": false },
+    "start": { "M00001": true, "M00002": false, "M00100": true },
+    "hold": { "M00001": false, "M00002": false, "M00100": true },
+    "stop": { "M00001": false, "M00002": true, "M00100": false },
+    "safeDisconnect": { "M00001": false, "M00002": true, "M00100": false }
+  }
+}

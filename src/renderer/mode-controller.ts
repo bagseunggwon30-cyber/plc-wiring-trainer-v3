@@ -1,4 +1,5 @@
 import { DEVICE_PROFILES } from '../catalog/profiles';
+import { DEVICE_PROFILES_V3 } from '../catalog/v3-profiles';
 import type { WorkshopMode } from '../domain/types';
 import { LEGACY_PROFILE_MAP } from './legacy-adapter';
 
@@ -16,7 +17,11 @@ const REVIEW_LEGACY_TYPES = new Set(
   Object.entries(LEGACY_PROFILE_MAP)
     .filter(([, profileId]) => {
       const profile = DEVICE_PROFILES[profileId];
-      return Boolean(profile && (profile.boundary || profile.evidence.level !== 'educational'));
+      const v3Profile = DEVICE_PROFILES_V3[profileId];
+      return Boolean(profile && (
+        profile.boundary
+        || (profile.evidence.level !== 'educational' && v3Profile?.reviewCapability === 'full')
+      ));
     })
     .map(([legacyType]) => legacyType),
 );

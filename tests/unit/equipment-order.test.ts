@@ -207,7 +207,7 @@ describe('control-panel BOM order', () => {
     ]);
     expect(built.document.wires).toContainEqual(expect.objectContaining({
       from: { deviceId: byDesignation.PLC1.id, terminalId: 'P00' },
-      to: { deviceId: byDesignation.SB1.id, terminalId: '2' },
+      to: { deviceId: byDesignation.SB1.id, terminalId: '14' },
     }));
     expect(built.document.wires).toContainEqual(expect.objectContaining({
       from: { deviceId: byDesignation.HL1.id, terminalId: '-' },

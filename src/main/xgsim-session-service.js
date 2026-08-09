@@ -9,6 +9,7 @@ const MAX_MESSAGE_BYTES = 1_000_000;
 const MAX_BINDINGS = 256;
 const INPUT_CHANNEL = /^B\d+S\d+\.IN\d+$/i;
 const OUTPUT_CHANNEL = /^B\d+S\d+\.OUT\d+$/i;
+const M_DEVICE_BIT = /^M[0-9]{4}[0-9A-F]$/i;
 
 class XgSimHostError extends Error {
   constructor(code, message, blocked = false) {
@@ -20,9 +21,10 @@ class XgSimHostError extends Error {
 }
 
 class XgSimSessionService {
-  constructor({ hostPath, timeoutMs = 2_000 }) {
+  constructor({ hostPath, timeoutMs = 2_000, startupTimeoutMs = 5_000 }) {
     this.hostPath = hostPath;
     this.timeoutMs = timeoutMs;
+    this.startupTimeoutMs = Math.max(timeoutMs, startupTimeoutMs);
     this.nonce = crypto.randomBytes(32).toString('hex');
     this.process = null;
     this.pending = new Map();
@@ -99,14 +101,14 @@ class XgSimSessionService {
         `XG-SIM host exited (${code ?? 'null'}/${signal ?? 'none'}). ${this.stderrTail}`.trim(),
         true,
       )));
-      await this._send('hello', {});
+      await this._send('hello', {}, this.startupTimeoutMs);
     })().finally(() => {
       this.startPromise = null;
     });
     return this.startPromise;
   }
 
-  _send(command, payload) {
+  _send(command, payload, timeoutMs = this.timeoutMs) {
     if (!this.process?.stdin?.writable) {
       return Promise.reject(new XgSimHostError('HOST_NOT_RUNNING', 'XG-SIM host is not running.', true));
     }
@@ -120,7 +122,7 @@ class XgSimSessionService {
         const error = new XgSimHostError('HOST_TIMEOUT', `XG-SIM host timed out while handling ${command}; the host was terminated for fail-safe cleanup.`, true);
         if (this.process) this.process.kill();
         this._handleExit(error);
-      }, this.timeoutMs);
+      }, timeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
       this.process.stdin.write(`${message}\n`, 'utf8', (error) => {
         if (!error) return;
@@ -186,6 +188,23 @@ function validateConnectPayload(payload) {
   }
   validateAddressList(payload.allowedInputs, INPUT_CHANNEL, 'input');
   validateAddressList(payload.allowedOutputs, OUTPUT_CHANNEL, 'output');
+  validateAddressList(payload.allowedDeviceWrites, M_DEVICE_BIT, 'writable M-device');
+  validateAddressList(payload.allowedDeviceReads, M_DEVICE_BIT, 'readable M-device');
+  validateFailSafeValues(payload.deviceFailSafeValues, payload.allowedDeviceWrites);
+}
+
+function validateFailSafeValues(values, allowedDeviceWrites) {
+  if (!values || Array.isArray(values) || typeof values !== 'object') {
+    throw new XgSimHostError('INVALID_FAIL_SAFE_VALUES', 'M-device fail-safe values must be an object.', true);
+  }
+  const expected = [...allowedDeviceWrites].map((address) => address.toUpperCase()).sort();
+  const actual = Object.keys(values).map((address) => address.toUpperCase()).sort();
+  if (actual.length !== expected.length || actual.some((address, index) => address !== expected[index])) {
+    throw new XgSimHostError('INVALID_FAIL_SAFE_VALUES', 'Every writable M device requires exactly one fail-safe value.', true);
+  }
+  if (Object.entries(values).some(([address, value]) => !M_DEVICE_BIT.test(address) || typeof value !== 'boolean')) {
+    throw new XgSimHostError('INVALID_FAIL_SAFE_VALUES', 'M-device fail-safe values must contain BOOL values only.', true);
+  }
 }
 
 function validateAddressList(values, pattern, name) {
@@ -203,8 +222,8 @@ function validateInputFrame(payload) {
     throw new XgSimHostError('INVALID_INPUT_FRAME', 'Input frame is missing or too large.', true);
   }
   for (const [address, value] of Object.entries(values)) {
-    if (!INPUT_CHANNEL.test(address) || typeof value !== 'boolean') {
-      throw new XgSimHostError('INVALID_INPUT_FRAME', 'Only BOOL input-channel writes are allowed.', true);
+    if ((!INPUT_CHANNEL.test(address) && !M_DEVICE_BIT.test(address)) || typeof value !== 'boolean') {
+      throw new XgSimHostError('INVALID_INPUT_FRAME', 'Only BOOL IN-channel or allowlisted M-device writes are allowed.', true);
     }
   }
 }

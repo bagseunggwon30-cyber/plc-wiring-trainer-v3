@@ -1,12 +1,13 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+using System.Threading;
 using System.Web.Script.Serialization;
 
 namespace XgSimHost
@@ -17,11 +18,12 @@ namespace XgSimHost
         private const int MaxRequestCharacters = 1_000_000;
         private const int MaxBindings = 256;
         private const int BoolChannelType = 1;
-        private const int WatchdogTimeoutMilliseconds = 5000;
+        private const int WatchdogTimeoutMilliseconds = 2000;
 
         private static readonly Regex NoncePattern = new Regex("^[a-f0-9]{32,128}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private static readonly Regex InputPattern = new Regex("^B\\d+S\\d+\\.IN\\d+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private static readonly Regex OutputPattern = new Regex("^B\\d+S\\d+\\.OUT\\d+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        private static readonly Regex MDeviceBitPattern = new Regex("^M[0-9]{4}[0-9A-F]$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private static readonly Regex Sha256Pattern = new Regex("^[a-f0-9]{64}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = MaxRequestCharacters, RecursionLimit = 32 };
 
@@ -33,6 +35,9 @@ namespace XgSimHost
         private static int _slotNumber;
         private static HashSet<string> _allowedInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static HashSet<string> _allowedOutputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static HashSet<string> _allowedDeviceWrites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static HashSet<string> _allowedDeviceReads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static Dictionary<string, bool> _deviceFailSafeValues = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         private static DateTime _lastAuthenticatedRequestUtc = DateTime.UtcNow;
         private static string _declaredCpuModel;
         private static string _declaredProjectId;
@@ -45,18 +50,33 @@ namespace XgSimHost
             Console.OutputEncoding = new System.Text.UTF8Encoding(false);
             Console.Out.Flush();
 
-            Task<string> pendingRead = Console.In.ReadLineAsync();
+            var requestLines = new BlockingCollection<string>();
+            var inputReader = new Thread(() =>
+            {
+                try
+                {
+                    string inputLine;
+                    while ((inputLine = Console.In.ReadLine()) != null) requestLines.Add(inputLine);
+                }
+                finally
+                {
+                    requestLines.CompleteAdding();
+                }
+            });
+            inputReader.IsBackground = true;
+            inputReader.Name = "XgSimHostStdinReader";
+            inputReader.Start();
+
             while (true)
             {
-                if (!pendingRead.Wait(250))
+                string line;
+                if (!requestLines.TryTake(out line, 250))
                 {
+                    if (requestLines.IsCompleted) break;
                     if (_connected && (DateTime.UtcNow - _lastAuthenticatedRequestUtc).TotalMilliseconds >= WatchdogTimeoutMilliseconds)
                         SafeDisconnect();
                     continue;
                 }
-                var line = pendingRead.Result;
-                if (line == null) break;
-                pendingRead = Console.In.ReadLineAsync();
                 if (line.Length > MaxRequestCharacters)
                 {
                     WriteError(null, null, "REQUEST_TOO_LARGE", "Host request exceeded the maximum size.", true);
@@ -158,20 +178,32 @@ namespace XgSimHost
             if (!Sha256Pattern.IsMatch(_declaredProjectSha256)) throw new HostException("INVALID_PROJECT_HASH", "Project SHA-256 must contain exactly 64 hexadecimal characters.", true);
             var inputs = RequiredStringArray(payload, "allowedInputs", MaxBindings);
             var outputs = RequiredStringArray(payload, "allowedOutputs", MaxBindings);
+            var deviceWrites = RequiredStringArray(payload, "allowedDeviceWrites", MaxBindings);
+            var deviceReads = RequiredStringArray(payload, "allowedDeviceReads", MaxBindings);
             if (inputs.Any(value => !InputPattern.IsMatch(value))) throw new HostException("INVALID_INPUT_ALLOWLIST", "Only documented IN channels may be writable.", true);
             if (outputs.Any(value => !OutputPattern.IsMatch(value))) throw new HostException("INVALID_OUTPUT_ALLOWLIST", "Only documented OUT channels may be readable.", true);
+            if (deviceWrites.Any(value => !MDeviceBitPattern.IsMatch(value))) throw new HostException("INVALID_DEVICE_WRITE_ALLOWLIST", "Only explicitly allowlisted M devices may be writable.", true);
+            if (deviceReads.Any(value => !MDeviceBitPattern.IsMatch(value))) throw new HostException("INVALID_DEVICE_READ_ALLOWLIST", "Only explicitly allowlisted M devices may be readable.", true);
             _allowedInputs = new HashSet<string>(inputs, StringComparer.OrdinalIgnoreCase);
             _allowedOutputs = new HashSet<string>(outputs, StringComparer.OrdinalIgnoreCase);
+            _allowedDeviceWrites = new HashSet<string>(deviceWrites, StringComparer.OrdinalIgnoreCase);
+            _allowedDeviceReads = new HashSet<string>(deviceReads, StringComparer.OrdinalIgnoreCase);
+            _deviceFailSafeValues = RequiredBoolMap(payload, "deviceFailSafeValues", _allowedDeviceWrites);
 
             EnsureComObjects();
             var code = Convert.ToInt32(_device.Connect(), CultureInfo.InvariantCulture);
-            if (code != 0 && code != 3) throw new HostException("DEVICE_SERVER_NOT_READY", "XG-SIM device server is not ready. Connect code: " + code, true);
+            if (code != 0 && code != 3)
+            {
+                SafeDisconnect();
+                throw new HostException("DEVICE_SERVER_NOT_READY", "XG-SIM device server is not ready. Connect code: " + code, true);
+            }
             _connected = true;
             _lastAuthenticatedRequestUtc = DateTime.UtcNow;
             return new Dictionary<string, object>
             {
                 { "connected", true }, { "connectCode", code }, { "base", _baseNumber }, { "slot", _slotNumber },
                 { "inputCount", _allowedInputs.Count }, { "outputCount", _allowedOutputs.Count },
+                { "deviceWriteCount", _allowedDeviceWrites.Count }, { "deviceReadCount", _allowedDeviceReads.Count },
                 { "declaredCpuModel", _declaredCpuModel }, { "declaredProjectId", _declaredProjectId },
                 { "declaredProjectSha256", _declaredProjectSha256 }, { "projectIdentityVerified", false },
             };
@@ -180,17 +212,29 @@ namespace XgSimHost
         private static object ReadSnapshot()
         {
             RequireConnected();
-            var inputs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            var outputs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            foreach (var address in _allowedInputs.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
-                inputs[address] = ReadBool(address);
-            foreach (var address in _allowedOutputs.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
-                outputs[address] = ReadBool(address);
-            return new Dictionary<string, object>
+            try
             {
-                { "capturedAt", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture) },
-                { "inputs", inputs }, { "outputs", outputs },
-            };
+                var inputs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                var outputs = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                foreach (var address in _allowedInputs.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+                    inputs[address] = ReadChannelBool(address);
+                foreach (var address in _allowedDeviceWrites.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+                    inputs[address] = ReadDeviceBool(address);
+                foreach (var address in _allowedOutputs.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+                    outputs[address] = ReadChannelBool(address);
+                foreach (var address in _allowedDeviceReads.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+                    outputs[address] = ReadDeviceBool(address);
+                return new Dictionary<string, object>
+                {
+                    { "capturedAt", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture) },
+                    { "inputs", inputs }, { "outputs", outputs },
+                };
+            }
+            catch
+            {
+                SafeDisconnect();
+                throw;
+            }
         }
 
         private static object WriteInputImage(Dictionary<string, object> payload)
@@ -203,10 +247,13 @@ namespace XgSimHost
             {
                 foreach (var entry in values.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (!InputPattern.IsMatch(entry.Key) || !_allowedInputs.Contains(entry.Key))
-                        throw new HostException("INPUT_NOT_ALLOWED", "Input address is not in the session allowlist: " + entry.Key, true);
+                    var channelAllowed = InputPattern.IsMatch(entry.Key) && _allowedInputs.Contains(entry.Key);
+                    var deviceAllowed = MDeviceBitPattern.IsMatch(entry.Key) && _allowedDeviceWrites.Contains(entry.Key);
+                    if (!channelAllowed && !deviceAllowed)
+                        throw new HostException("INPUT_NOT_ALLOWED", "Input/device address is not in the session allowlist: " + entry.Key, true);
                     if (!(entry.Value is bool)) throw new HostException("INPUT_TYPE_MISMATCH", "Only BOOL input frames are supported in the first host version.", true);
-                    _channel.WriteIOChannel(entry.Key, BoolChannelType, (bool)entry.Value);
+                    if (channelAllowed) _channel.WriteIOChannel(entry.Key, BoolChannelType, (bool)entry.Value);
+                    else WriteDeviceBool(entry.Key, (bool)entry.Value);
                     accepted.Add(entry.Key);
                 }
             }
@@ -218,11 +265,51 @@ namespace XgSimHost
             return new Dictionary<string, object> { { "accepted", accepted } };
         }
 
-        private static bool ReadBool(string address)
+        private static bool ReadChannelBool(string address)
         {
             object value;
             _channel.ReadIOChannel(address, BoolChannelType, out value);
             return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+        }
+
+        private static bool ReadDeviceBool(string address)
+        {
+            var bitIndex = ParseMDeviceBit(address);
+            var wordIndex = bitIndex / 16;
+            var byteOffset = wordIndex * 2;
+            var bitMask = (ushort)(1 << (bitIndex % 16));
+            var buffer = new byte[2];
+            var code = Convert.ToInt32(_device.ReadDevice("M", byteOffset, buffer.Length, ref buffer[0]), CultureInfo.InvariantCulture);
+            if (code != 0) throw new HostException("DEVICE_READ_FAILED", "XG-SIM M-device read failed with code " + code + ".", true);
+            var word = (ushort)(buffer[0] | (buffer[1] << 8));
+            return (word & bitMask) != 0;
+        }
+
+        private static void WriteDeviceBool(string address, bool value)
+        {
+            var bitIndex = ParseMDeviceBit(address);
+            var wordIndex = bitIndex / 16;
+            var byteOffset = wordIndex * 2;
+            var bitMask = (ushort)(1 << (bitIndex % 16));
+            var buffer = new byte[2];
+            var readCode = Convert.ToInt32(_device.ReadDevice("M", byteOffset, buffer.Length, ref buffer[0]), CultureInfo.InvariantCulture);
+            if (readCode != 0) throw new HostException("DEVICE_READ_FAILED", "XG-SIM M-device read-before-write failed with code " + readCode + ".", true);
+            var word = (ushort)(buffer[0] | (buffer[1] << 8));
+            word = value ? (ushort)(word | bitMask) : (ushort)(word & ~bitMask);
+            buffer[0] = (byte)(word & 0xff);
+            buffer[1] = (byte)(word >> 8);
+            var writeCode = Convert.ToInt32(_device.WriteDevice("M", byteOffset, buffer.Length, ref buffer[0]), CultureInfo.InvariantCulture);
+            if (writeCode != 0) throw new HostException("DEVICE_WRITE_FAILED", "XG-SIM M-device write failed with code " + writeCode + ".", true);
+        }
+
+        private static int ParseMDeviceBit(string address)
+        {
+            if (!MDeviceBitPattern.IsMatch(address)) throw new HostException("INVALID_DEVICE_ADDRESS", "Unsupported M-device address.", true);
+            // XGB bit-device notation is M + four decimal word digits + one
+            // hexadecimal bit digit. M00100 is word 10, bit 0 (byte offset 20).
+            var wordNumber = Int32.Parse(address.Substring(1, 4), NumberStyles.None, CultureInfo.InvariantCulture);
+            var bitNumber = Int32.Parse(address.Substring(5, 1), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            return checked(wordNumber * 16 + bitNumber);
         }
 
         private static object Status()
@@ -233,6 +320,7 @@ namespace XgSimHost
                 { "executionState", "unknown" },
                 { "base", _baseNumber }, { "slot", _slotNumber },
                 { "inputCount", _allowedInputs.Count }, { "outputCount", _allowedOutputs.Count },
+                { "deviceWriteCount", _allowedDeviceWrites.Count }, { "deviceReadCount", _allowedDeviceReads.Count },
                 { "projectIdentityVerified", false },
             };
         }
@@ -243,7 +331,7 @@ namespace XgSimHost
             {
                 { "provider", "xgsim" }, { "protocolVersion", ProtocolVersion },
                 { "supportsInputChannels", true }, { "supportsOutputChannels", true },
-                { "supportsDeviceRead", false }, { "supportsOutputWrite", false },
+                { "supportsDeviceRead", true }, { "supportsDeviceWrite", true }, { "supportsOutputWrite", false },
                 { "maximumBindings", MaxBindings }, { "transport", "stdio" }, { "processArchitecture", "x86" },
                 { "supportsProjectIdentityVerification", false }, { "watchdogTimeoutMs", WatchdogTimeoutMilliseconds },
             };
@@ -280,6 +368,13 @@ namespace XgSimHost
                     try { _channel.WriteIOChannel(address, BoolChannelType, false); } catch { }
                 }
             }
+            if (_device != null)
+            {
+                foreach (var entry in _deviceFailSafeValues.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    try { WriteDeviceBool(entry.Key, entry.Value); } catch { }
+                }
+            }
             ReleaseCom(_channel);
             ReleaseCom(_device);
             _channel = null;
@@ -287,6 +382,9 @@ namespace XgSimHost
             _connected = false;
             _allowedInputs.Clear();
             _allowedOutputs.Clear();
+            _allowedDeviceWrites.Clear();
+            _allowedDeviceReads.Clear();
+            _deviceFailSafeValues.Clear();
             _declaredCpuModel = null;
             _declaredProjectId = null;
             _declaredProjectSha256 = null;
@@ -342,6 +440,23 @@ namespace XgSimHost
             if (values.Distinct(StringComparer.OrdinalIgnoreCase).Count() != values.Length)
                 throw new HostException("DUPLICATE_ADDRESS", key + " contains duplicate addresses.", true);
             return values;
+        }
+
+        private static Dictionary<string, bool> RequiredBoolMap(
+            Dictionary<string, object> source,
+            string key,
+            HashSet<string> requiredKeys)
+        {
+            var raw = AsObject(Required(source, key), key);
+            if (raw.Count != requiredKeys.Count || raw.Keys.Any(address => !requiredKeys.Contains(address)))
+                throw new HostException("INVALID_FAIL_SAFE_VALUES", "Every writable M device requires exactly one fail-safe value.", true);
+            var result = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in raw)
+            {
+                if (!(entry.Value is bool)) throw new HostException("INVALID_FAIL_SAFE_VALUES", "M-device fail-safe values must be BOOL.", true);
+                result[entry.Key] = (bool)entry.Value;
+            }
+            return result;
         }
 
         private static void WriteSuccess(string requestId, string nonce, object result)

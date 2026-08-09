@@ -1,0 +1,26 @@
+{
+  "schema": "xg5000.ld-plan/v1",
+  "project_name": "4층_GEMINI",
+  "target_series": "XGB/XBC",
+  "cpu_model": "XGB-XBCH",
+  "modifies_project": false,
+  "bindings": [
+    { "address": "M00001", "name": "START_REQUEST", "terminal": "P03", "direction": "internal-request", "normal": false, "communicationLoss": false },
+    { "address": "M00002", "name": "STOP_REQUEST", "terminal": "P02", "direction": "internal-request", "normal": false, "communicationLoss": true },
+    { "address": "M00100", "name": "RUN_LATCH", "terminal": "P21", "direction": "monitor", "normal": false, "communicationLoss": false }
+  ],
+  "existing_ladder_contract": {
+    "kind": "set-reset-v1",
+    "expression": "start_rising_sets_run; stop_resets_run",
+    "steps": [
+      "LOADP M00001; AND NOT M00101; SET M00100",
+      "LOAD M00002; OR M00103; RST M00100"
+    ]
+  },
+  "safe_stop": ["M00001=0", "M00002=1", "wait M00100=0 twice", "disconnect while fail-safe values remain applied"],
+  "verification": {
+    "source": "XG5000 IL clipboard export",
+    "programCheck": "passed with existing warnings: errors 0, warnings 82, messages 13 at 2026-08-09T03:16:58.738Z",
+    "projectIdentity": "official XimUtil API cannot prove the loaded project; formal result remains BLOCKED"
+  }
+}

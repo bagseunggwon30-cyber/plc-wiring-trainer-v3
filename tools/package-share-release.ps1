@@ -50,6 +50,7 @@ $manifest = [ordered]@{
     'pdf'
     'tmp'
     'tests'
+    'fixtures/xgsim'
     'source and draft image directories'
   )
 }

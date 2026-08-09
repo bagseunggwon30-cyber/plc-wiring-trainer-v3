@@ -150,7 +150,7 @@ ROUNDTRIP_EXIT=0
 
 ## Implementation boundary after the PoC
 
-The verified transport is now implemented as a separately built .NET Framework 4.7.2 x86 host under `native/xgsim-host`. Electron x64 communicates with it only through versioned JSON lines over stdio and a session nonce. The renderer can write only allow-listed `IN` BOOL channels; no output-write IPC exists. EOF, explicit shutdown, host error, request timeout, and a five-second authenticated-request watchdog reset every allow-listed virtual input to `false`.
+The verified transport is now implemented as a separately built .NET Framework 4.7.2 x86 host under `native/xgsim-host`. Electron x64 communicates with it only through versioned JSON lines over stdio and a session nonce. The renderer can write only allow-listed `IN` BOOL channels or explicitly declared M request bits; no output-write IPC exists. EOF, explicit shutdown, host error, request timeout, and a two-second authenticated-request watchdog apply each binding's fail-safe value before disconnecting.
 
 The first domain vertical slice is deliberately split into three authorities:
 
@@ -167,6 +167,34 @@ This satisfies the Stage A gate: one official input-channel write propagated thr
 The selected passing project is `C:\XG5000\Projects\15번\15번.xgwx`, with CPU family `XGB-XBCH` and the exact P03-to-P21 mapping recorded above. Its SHA-256 could not be read while XG5000 held the project file open, so project identity remains unverified and the real-interface result remains `BLOCKED` for SIL/prewire approval. `tools/Get-XgSimProjectIdentity.ps1` can calculate the hash after the project is closed.
 
 The official interface, local installation compatibility and physical-output round trip are confirmed. Runtime integration is implemented behind the x86 sidecar boundary with output-write rejection and fail-safe cleanup. It remains diagnostic until project identity and a documented scan-complete signal can be verified.
+
+## `4층_GEMINI` M-device closed-loop proof
+
+The user-selected project was tested without editing its existing ladder or project file:
+
+- project file: `4층_GEMINI.xgwx` (the local absolute path stays only in `XgSimLocalProjectRefV1`)
+- SHA-256: `883a5c1f24820a1a45938dc338fd52650b875876b14620ef375055be1ab7da04`
+- CPU: `XGB-XBCH`
+- XG5000 Program Check: 0 errors, 82 warnings, 13 messages
+- input requests: `M00001` start and `M00002` stop
+- observed run latch: `M00100`
+- virtual output mapping: `M00100` drives the XBC P21 dry contact, MY2N coil and run lamp
+
+The native host uses a little-endian 16-bit word read-modify-write operation so changing one M bit does not overwrite adjacent bits. XGB addresses are parsed as four decimal word digits followed by one hexadecimal bit digit. Therefore `M00100` means decimal word 10, bit 0 and byte offset 20; it is not hexadecimal address `0x100`.
+
+The live Electron-to-XG-SIM-to-circuit round trip passed all five steps:
+
+```text
+initial        M00001=0 M00002=0 M00100=0 relay=OFF lamp=OFF
+start pressed  M00001=1 M00002=0 M00100=1 relay=ON  lamp=ON
+start released M00001=0 M00002=0 M00100=1 relay=ON  lamp=ON
+stop pressed   M00001=0 M00002=1 M00100=0 relay=OFF lamp=OFF
+stop released  M00001=0 M00002=0 M00100=0 relay=OFF lamp=OFF
+```
+
+Each expected output was observed twice consecutively. Safe stop then wrote `M00001=false` and `M00002=true`, observed `M00100=false` twice and disconnected. The app reported `SAFE-STOPPED · ROUNDTRIP_PASS · PROJECT_IDENTITY_UNVERIFIED`.
+
+This proves the requested start, self-hold, stop, relay-coil and lamp behavior in the local simulator. It remains formally `BLOCKED(PROJECT_IDENTITY_UNVERIFIED)` because XimUtil cannot attest which project XG-SIM currently has loaded. No physical PLC I/O, user ladder, device image or SVG asset was changed.
 
 ## Final renderer audit
 

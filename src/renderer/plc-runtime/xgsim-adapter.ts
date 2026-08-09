@@ -1,5 +1,8 @@
 import {
   PlcRuntimeConnectRequestSchema,
+  isInputChannelAddress,
+  isMDeviceBitAddress,
+  isOutputChannelAddress,
   isWritableRuntimeBinding,
   type IoBindingV1,
 } from '../../domain/plc-runtime/io-binding';
@@ -37,14 +40,16 @@ export class XgSimRuntimeAdapter implements PlcRuntimeAdapter {
   #connection: PlcRuntimeConnection | null = null;
 
   async probe(request: PlcRuntimeProbeRequest): Promise<PlcRuntimeProbeResult> {
+    let api: DesktopXgSimApi | null = null;
     try {
-      const result = await desktopApi().probe(request);
+      api = desktopApi();
+      const result = await api.probe(request);
       const channels = Array.isArray(result.channels) ? result.channels.filter((value): value is string => typeof value === 'string') : [];
       return {
         status: result.available === true ? 'available' : 'blocked',
         capabilities: {
           provider: 'xgsim', protocolVersion: 1, supportsInputChannels: true,
-          supportsOutputChannels: true, supportsDeviceRead: false,
+          supportsOutputChannels: true, supportsDeviceRead: true,
           supportsOutputWrite: false, supportsProjectIdentityVerification: false, maximumBindings: 256,
         },
         channelNames: channels,
@@ -55,12 +60,14 @@ export class XgSimRuntimeAdapter implements PlcRuntimeAdapter {
         status: 'blocked',
         capabilities: {
           provider: 'xgsim', protocolVersion: 1, supportsInputChannels: true,
-          supportsOutputChannels: true, supportsDeviceRead: false,
+          supportsOutputChannels: true, supportsDeviceRead: true,
           supportsOutputWrite: false, supportsProjectIdentityVerification: false, maximumBindings: 256,
         },
         channelNames: [],
         reason: error instanceof Error ? error.message : String(error),
       };
+    } finally {
+      await api?.disconnect().catch(() => undefined);
     }
   }
 
@@ -74,8 +81,21 @@ export class XgSimRuntimeAdapter implements PlcRuntimeAdapter {
       cpuModel: request.cpuModel,
       projectId: request.projectId,
       projectSha256: request.projectSha256,
-      allowedInputs: request.bindings.filter(isWritableRuntimeBinding).map((binding) => binding.address),
-      allowedOutputs: request.bindings.filter((binding) => binding.direction === 'output').map((binding) => binding.address),
+      allowedInputs: request.bindings
+        .filter((binding) => isWritableRuntimeBinding(binding) && isInputChannelAddress(binding.address))
+        .map((binding) => binding.address),
+      allowedOutputs: request.bindings
+        .filter((binding) => binding.access.read && isOutputChannelAddress(binding.address))
+        .map((binding) => binding.address),
+      allowedDeviceWrites: request.bindings
+        .filter((binding) => isWritableRuntimeBinding(binding) && isMDeviceBitAddress(binding.address))
+        .map((binding) => binding.address),
+      allowedDeviceReads: request.bindings
+        .filter((binding) => binding.access.read && !binding.access.write && isMDeviceBitAddress(binding.address))
+        .map((binding) => binding.address),
+      deviceFailSafeValues: Object.fromEntries(request.bindings
+        .filter((binding) => isWritableRuntimeBinding(binding) && isMDeviceBitAddress(binding.address))
+        .map((binding) => [binding.address, binding.communicationLossState])),
     });
     if (result.connected !== true) throw new Error('XG-SIM host did not confirm the local simulator connection.');
     this.#sequence = 0;
@@ -109,8 +129,9 @@ export class XgSimRuntimeAdapter implements PlcRuntimeAdapter {
     const acceptedBindingIds: string[] = [];
     for (const [bindingId, value] of Object.entries(image.values)) {
       const binding = this.#bindings.get(bindingId);
-      if (!binding || !isWritableRuntimeBinding(binding) || !binding.address.includes('.IN')) {
-        throw new Error(`Binding is not writable through the XG-SIM channel host: ${bindingId}`);
+      if (!binding || !isWritableRuntimeBinding(binding)
+        || (!isInputChannelAddress(binding.address) && !isMDeviceBitAddress(binding.address))) {
+        throw new Error(`Binding is not writable through the XG-SIM input/device host: ${bindingId}`);
       }
       if (typeof value !== 'boolean') throw new Error(`XG-SIM host v1 accepts BOOL inputs only: ${bindingId}`);
       values[binding.address] = binding.inverted ? !value : value;

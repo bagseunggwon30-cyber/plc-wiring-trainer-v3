@@ -5,6 +5,12 @@ import type {
   RuntimeFrame,
   RuntimeIssueV1,
 } from './contracts';
+import {
+  DEFAULT_STABLE_SNAPSHOT_POLICY,
+  waitForExpectedStableSnapshot,
+  type StableSnapshotClock,
+  type StableSnapshotPolicyV1,
+} from './stable-snapshot';
 
 export interface RuntimeFramePreparation<TPreparation> {
   nextInputs: PlcInputImage;
@@ -18,6 +24,9 @@ export interface RuntimeFrameContext<TCircuitSolution, TPreparation = unknown> {
   sessionId: string;
   projectSha256: string;
   retryCount?: number;
+  expectedOutputs?: Readonly<Record<string, boolean | number>>;
+  stableSnapshotPolicy?: StableSnapshotPolicyV1;
+  stableSnapshotClock?: StableSnapshotClock;
   /** Calculates only the writable PLC input image from the pre-scan snapshot. */
   prepare(snapshot: PlcRuntimeSnapshot): RuntimeFramePreparation<TPreparation>;
   /** Calculates the published circuit/device state from the post-scan snapshot. */
@@ -40,7 +49,15 @@ export async function synchronizeRuntimeFrame<TCircuitSolution, TPreparation>(
   const previous = await adapter.readSnapshot();
   const prepared = context.prepare(previous);
   await adapter.writeInputImage(prepared.nextInputs);
-  const stable = await adapter.readSnapshot();
+  const stableResult = context.expectedOutputs
+    ? await waitForExpectedStableSnapshot(
+        adapter,
+        context.expectedOutputs,
+        context.stableSnapshotPolicy ?? DEFAULT_STABLE_SNAPSHOT_POLICY,
+        context.stableSnapshotClock,
+      )
+    : { snapshot: await adapter.readSnapshot(), attempts: 1 };
+  const stable = stableResult.snapshot;
   const solved = context.solve(stable, prepared.context);
   return Object.freeze({
     frameNumber: context.frameNumber,
@@ -55,6 +72,6 @@ export async function synchronizeRuntimeFrame<TCircuitSolution, TPreparation>(
     deviceStates: solved.deviceStates,
     issues: solved.issues,
     elapsedMs: Math.max(0, now() - startedAt),
-    retryCount: context.retryCount ?? 0,
+    retryCount: context.retryCount ?? Math.max(0, stableResult.attempts - 1),
   });
 }

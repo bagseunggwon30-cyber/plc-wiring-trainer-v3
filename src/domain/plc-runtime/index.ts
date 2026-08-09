@@ -4,3 +4,6 @@ export * from './mock-adapter';
 export * from './runtime-coordinator';
 export * from './functional-simulation';
 export * from './functional-report';
+export * from './project-manifest';
+export * from './stable-snapshot';
+export * from './xbc-closed-loop-session';

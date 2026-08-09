@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { createAcademyExp2Md02Template } from '../../src/domain/academy-panel-template';
+import { PUBLIC_MISSIONS } from '../../src/domain/missions';
 import { expect, test } from './electron.fixture';
 
 const VERIFIED_PREWIRE_TYPES = [
@@ -15,6 +16,7 @@ const VERIFIED_PREWIRE_TYPES = [
   'BOUNDARY-2W-I',
   'BOUNDARY-RS485',
   'EOCR3DE-05DUH',
+  'EXP2-700',
   'MC-22B-DC24',
   'MDR-100',
   'MY2N',
@@ -25,12 +27,10 @@ const VERIFIED_PREWIRE_TYPES = [
   'XBF-AH04A',
 ].sort();
 
-const PREWIRE_MISSIONS = [
-  'MDR AC 입력과 DC24V 배전',
-  'XBC 입력의 소스/싱크 결선',
-  'XBC 릴레이 출력 강제 시험',
-  'XBF-AH04A 전압·전류 채널 결선',
-];
+const PRACTICE_MISSIONS = PUBLIC_MISSIONS.filter((mission) => mission.eligibleModes.includes('practice'));
+const PREWIRE_MISSIONS = PUBLIC_MISSIONS
+  .filter((mission) => mission.eligibleModes.includes('prewire'))
+  .map((mission) => mission.title);
 
 const WORKSHOP_V2_KEY = 'plc-wiring-trainer:workshop-document-v2';
 
@@ -419,7 +419,7 @@ test('startup keyboard flow separates practice and prewire review modes', async 
 
   await expect(page.locator('#stat')).toHaveAttribute('role', 'status');
   await expect(page.locator('#stat')).toHaveAttribute('aria-live', 'polite');
-  await expect(page.locator('.mission-v2-header')).toHaveCount(7);
+  await expect(page.locator('.mission-v2-header')).toHaveCount(PRACTICE_MISSIONS.length);
   await expect(page.locator('#palette .pal[data-type="IG5A"]')).toBeVisible();
   await expect(page.locator('#palette .pal[data-type="MY-MD02"]')).toBeVisible();
   await page.locator('.mission-v2-header').first().click();

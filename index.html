@@ -1282,15 +1282,15 @@ const LIB = {
 'PB-NO':{cat:'switch',label:'푸시버튼 NO',sub:'a접점만 (녹색 운전 단접점)',w:90,h:90,color:'#0a7',
   icon:'pb',
   terminals:[
-    {id:'1',x:0, y:45,side:'L',label:'1',pol:'SW'},
-    {id:'2',x:90,y:45,side:'R',label:'2',pol:'SW'},
+    {id:'13',x:0, y:45,side:'L',label:'13',pol:'SW'},
+    {id:'14',x:90,y:45,side:'R',label:'14',pol:'SW'},
   ]
 },
 'PB-NC':{cat:'switch',label:'푸시버튼 NC',sub:'b접점만 (적색 정지 단접점)',w:90,h:90,color:'#d33',
   icon:'pb',
   terminals:[
-    {id:'1',x:0, y:45,side:'L',label:'1',pol:'SW'},
-    {id:'2',x:90,y:45,side:'R',label:'2',pol:'SW'},
+    {id:'21',x:0, y:45,side:'L',label:'21',pol:'SW'},
+    {id:'22',x:90,y:45,side:'R',label:'22',pol:'SW'},
   ]
 },
 'EMSTOP':{cat:'switch',label:'비상정지',sub:'EMO (NC×2)',w:90,h:120,color:'#900',
@@ -2130,8 +2130,8 @@ Object.assign(LIB['PB-1C'],{
 Object.assign(LIB['PB-NO'],{
   w:170,h:212,image:IMG+'trimmed/pushbutton-trim.png',imageBox:{x:46.5,y:25,w:77,h:152.1},imageHasLabels:true,
   terminals:[
-    {id:'1',x:59,y:158,side:'B',label:'13',pol:'SW'},
-    {id:'2',x:110,y:158,side:'B',label:'14',pol:'SW'},
+    {id:'13',x:59,y:158,side:'B',label:'13',pol:'SW'},
+    {id:'14',x:110,y:158,side:'B',label:'14',pol:'SW'},
   ]
 });
 
@@ -2201,15 +2201,15 @@ Object.assign(LIB['MY-MD02'],{
 Object.assign(LIB['PB-NO'],{
   w:90,h:90,image:FLAT+'pb-no-flat.png',imageHasLabels:false,
   terminals:[
-    {id:'1',x:0,y:45,side:'L',label:'13',pol:'SW'},
-    {id:'2',x:90,y:45,side:'R',label:'14',pol:'SW'},
+    {id:'13',x:0,y:45,side:'L',label:'13',pol:'SW'},
+    {id:'14',x:90,y:45,side:'R',label:'14',pol:'SW'},
   ]
 });
 Object.assign(LIB['PB-NC'],{
   w:90,h:90,image:FLAT+'pb-nc-flat.png',imageHasLabels:false,
   terminals:[
-    {id:'1',x:0,y:45,side:'L',label:'11',pol:'SW'},
-    {id:'2',x:90,y:45,side:'R',label:'12',pol:'SW'},
+    {id:'21',x:0,y:45,side:'L',label:'21',pol:'SW'},
+    {id:'22',x:90,y:45,side:'R',label:'22',pol:'SW'},
   ]
 });
 Object.assign(LIB['EMSTOP'],{image:FLAT+'emstop-flat.png',imageHasLabels:false});

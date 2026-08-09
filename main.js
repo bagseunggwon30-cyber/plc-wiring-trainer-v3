@@ -4,10 +4,12 @@ const { writeFile } = require('fs/promises');
 const path = require('path');
 const { version } = require('./package.json');
 const { XgSimSessionService } = require('./src/main/xgsim-session-service');
+const { inspectXgSimProjectFile } = require('./src/main/xgsim-project-file');
 
 let mainWindow;
 const SAVE_REVIEW_PDF_CHANNEL = 'review-report:save-pdf';
 const XGSIM_CHANNELS = Object.freeze({
+  selectProject: 'xgsim:select-project',
   probe: 'xgsim:probe',
   connect: 'xgsim:connect',
   readSnapshot: 'xgsim:read-snapshot',
@@ -176,6 +178,16 @@ function installXgSimRuntimeHandlers() {
   const trusted = (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('Untrusted XG-SIM IPC sender.');
   };
+  ipcMain.handle(XGSIM_CHANNELS.selectProject, async (event) => {
+    trusted(event);
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'XG-SIM 기능시험 프로젝트 선택',
+      properties: ['openFile'],
+      filters: [{ name: 'XG5000 project', extensions: ['xgwx'] }],
+    });
+    if (result.canceled || result.filePaths.length !== 1) return { selected: false };
+    return { selected: true, reference: await inspectXgSimProjectFile(result.filePaths[0]) };
+  });
   ipcMain.handle(XGSIM_CHANNELS.probe, async (event, payload) => { trusted(event); return xgSimService.probe(payload); });
   ipcMain.handle(XGSIM_CHANNELS.connect, async (event, payload) => { trusted(event); return xgSimService.connect(payload); });
   ipcMain.handle(XGSIM_CHANNELS.readSnapshot, async (event) => { trusted(event); return xgSimService.readSnapshot(); });

@@ -5,6 +5,7 @@ import {
   issueAction,
   missionStateFromDocument,
   resetMissionSessionState,
+  workshopHasEditableContent,
 } from '../../src/renderer/workflow-app';
 import type { WorkshopDocumentV2 } from '../../src/domain/types';
 
@@ -55,12 +56,31 @@ describe('workflow issue actions and loaded mission state', () => {
       'ANALOG_SIGNAL_SHORT', 'ANALOG_POLARITY_REVERSED',
       'ANALOG_DIRECTION_MISMATCH', 'ANALOG_SOURCE_PATH_OPEN', 'ANALOG_RETURN_PATH_OPEN',
       'EOCR_CONFIGURATION_INCOMPLETE', 'FUSE_LINK_REQUIRED', 'FUSE_LINK_PROFILE_UNVERIFIED',
+      'SOURCE_CAPACITY_BLOCKED', 'PROJECT_IDENTITY_UNVERIFIED',
+      'PROJECT_FILE_HASH_MISMATCH', 'PROJECT_LOAD_DECLARATION_REQUIRED',
+      'PROGRAM_CHECK_REQUIRED', 'PLC_OUTPUT_NOT_STABLE',
+      'PLC_OUTPUT_LOAD_INACTIVE', 'RUNTIME_FRAME_IN_FLIGHT',
     ];
 
     for (const code of emittedCodes) {
       expect(ISSUE_ACTIONS[code], code).toBeTruthy();
       expect(issueAction(code), code).not.toContain('관련 단자와 와이어');
     }
+  });
+
+  it('recognizes placed devices, wires and jumpers before replacing the workshop with a diagnostic template', () => {
+    const empty = documentWithSettings({});
+    empty.devices = [];
+    expect(workshopHasEditableContent(empty)).toBe(false);
+    expect(workshopHasEditableContent({ ...empty, devices: documentWithSettings({}).devices.slice(0, 1) })).toBe(true);
+    expect(workshopHasEditableContent({
+      ...empty,
+      wires: [{ id: 'w1', from: { deviceId: 'a', terminalId: '1' }, to: { deviceId: 'b', terminalId: '2' } }],
+    })).toBe(true);
+    expect(workshopHasEditableContent({
+      ...empty,
+      jumpers: [{ id: 'j1', deviceId: 'a', terminalIds: ['1', '2'] }],
+    })).toBe(true);
   });
 
   it('does not leak role bindings from a previously loaded document', () => {

@@ -77,9 +77,9 @@ export function createXgSimDiagnosticsPanel(options: XgSimDiagnosticsPanelOption
   root.setAttribute('aria-labelledby', 'xgsim-diagnostics-heading');
   const heading = document.createElement('h3');
   heading.id = 'xgsim-diagnostics-heading';
-  heading.textContent = 'XG-SIM 공식 인터페이스 진단';
+  heading.textContent = 'XG-SIM 채널 전송 진단(기존·고급)';
   const explanation = document.createElement('p');
-  explanation.textContent = '로컬 시뮬레이터 전송 경로만 점검합니다. PLC 출력 쓰기는 금지되며, 이 결과만으로 SIL 또는 사전 결선 통과가 되지 않습니다.';
+  explanation.textContent = 'B0S 입력/출력 채널을 직접 지정하는 기존 전송 도구입니다. 4층_GEMINI의 M 디바이스 폐루프 시험은 아래 기능시험 패널을 사용하세요. PLC 출력 쓰기는 금지됩니다.';
 
   const grid = document.createElement('div');
   grid.className = 'xgsim-diagnostics-grid';

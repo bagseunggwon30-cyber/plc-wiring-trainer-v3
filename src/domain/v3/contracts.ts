@@ -17,6 +17,8 @@ export interface DcSourceSystem {
   positiveTerminal: string;
   returnTerminal: string;
   voltage: number;
+  /** Maximum continuous output current proven by the selected profile. */
+  maximumCurrentA?: number;
   /** Converter outputs remain electrically inactive until this input element is valid. */
   enabledByElementId?: string;
 }
@@ -363,6 +365,8 @@ export interface CircuitIssueV3 {
     | 'EARTHING_POLICY_REQUIRED'
     | 'EARTHING_POLICY_BOND_COUNT'
     | 'SOURCE_CONDITION_UNMET'
+    | 'SOURCE_CURRENT_EXCEEDED'
+    | 'SOURCE_CAPACITY_BLOCKED'
     | 'PARALLEL_SOURCE'
     | 'PE_MISSING'
     | 'ORDER_CODE_REQUIRED'

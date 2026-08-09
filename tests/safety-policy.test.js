@@ -6,6 +6,7 @@ const test = require('node:test');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
+const xgSimFunctionPanel = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'plc-runtime', 'xgsim-function-test-panel.ts'), 'utf8');
 
 test('Electron keeps the renderer isolated and exposes only bounded report/XG-SIM bridges', () => {
   assert.match(main, /contextIsolation:\s*true/);
@@ -17,11 +18,12 @@ test('Electron keeps the renderer isolated and exposes only bounded report/XG-SI
   assert.match(preload, /contextBridge\.exposeInMainWorld\('WorkshopDesktop'/);
   assert.match(preload, /ipcRenderer\.invoke\(SAVE_REVIEW_PDF_CHANNEL/);
   assert.match(preload, /writeInputImage\(payload\).*XGSIM_CHANNELS\.writeInputImage/);
+  assert.match(preload, /selectProject\(\).*XGSIM_CHANNELS\.selectProject/);
   assert.doesNotMatch(preload, /writeOutput|spawn|exec|filesystem|readFile|writeFile/i);
   assert.doesNotMatch(preload, /exposeInMainWorld\([^]*\brequire\b/);
 });
 
-test('XG-SIM sidecar is x86, local-stdio-only, input-write-only and fail-safe', () => {
+test('XG-SIM sidecar is x86, local-stdio-only, allowlist-write-only and fail-safe', () => {
   const hostProject = fs.readFileSync(path.join(__dirname, '..', 'native', 'xgsim-host', 'XgSimHost.csproj'), 'utf8');
   const host = fs.readFileSync(path.join(__dirname, '..', 'native', 'xgsim-host', 'Program.cs'), 'utf8');
   const service = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'xgsim-session-service.js'), 'utf8');
@@ -29,12 +31,48 @@ test('XG-SIM sidecar is x86, local-stdio-only, input-write-only and fail-safe', 
   assert.match(service, /stdio:\s*\['pipe',\s*'pipe',\s*'pipe'\]/);
   assert.match(service, /windowsHide:\s*true/);
   assert.doesNotMatch(service, /listen\(|createServer|WebSocket|http:/);
-  assert.match(host, /Only documented IN channels may be writable/);
-  const writeInputBody = /private static object WriteInputImage[\s\S]*?private static bool ReadBool/.exec(host)?.[0] ?? '';
+  assert.match(host, /Only explicitly allowlisted M devices may be writable/);
+  const writeInputBody = /private static object WriteInputImage[\s\S]*?private static bool ReadChannelBool/.exec(host)?.[0] ?? '';
   assert.match(writeInputBody, /_allowedInputs\.Contains/);
-  assert.doesNotMatch(writeInputBody, /_allowedOutputs|OutputPattern/);
-  assert.match(host, /WatchdogTimeoutMilliseconds/);
+  assert.match(writeInputBody, /_allowedDeviceWrites\.Contains/);
+  assert.doesNotMatch(writeInputBody, /_allowedOutputs|_allowedDeviceReads/);
+  assert.match(host, /WatchdogTimeoutMilliseconds\s*=\s*2000/);
+  assert.match(host, /BlockingCollection<string>/);
+  assert.match(host, /Console\.In\.ReadLine\(\)/);
+  assert.doesNotMatch(host, /ReadLineAsync/);
   assert.match(host, /foreach \(var address in _allowedInputs\)[\s\S]*WriteIOChannel\(address, BoolChannelType, false\)/);
+  assert.match(host, /foreach \(var entry in _deviceFailSafeValues[\s\S]*WriteDeviceBool\(entry\.Key, entry\.Value\)/);
+  assert.match(host, /new Regex\("\^M\[0-9\]\{4\}\[0-9A-F\]\$"/);
+  assert.match(host, /var wordNumber = Int32\.Parse\(address\.Substring\(1, 4\), NumberStyles\.None/);
+  assert.match(host, /var bitNumber = Int32\.Parse\(address\.Substring\(5, 1\), NumberStyles\.HexNumber/);
+  assert.match(host, /return checked\(wordNumber \* 16 \+ bitNumber\);/);
+  assert.match(host, /var wordIndex = bitIndex \/ 16;/);
+  assert.match(host, /var byteOffset = wordIndex \* 2;/);
+  assert.match(host, /var bitMask = \(ushort\)\(1 << \(bitIndex % 16\)\);/);
+  assert.match(host, /var buffer = new byte\[2\];/);
+  assert.match(host, /ReadDevice\("M", byteOffset, buffer\.Length, ref buffer\[0\]\)/);
+  assert.match(host, /WriteDevice\("M", byteOffset, buffer\.Length, ref buffer\[0\]\)/);
+  assert.match(host, /var word = \(ushort\)\(buffer\[0\] \| \(buffer\[1\] << 8\)\);/);
+  assert.match(host, /buffer\[0\] = \(byte\)\(word & 0xff\);/);
+  assert.match(host, /buffer\[1\] = \(byte\)\(word >> 8\);/);
+  assert.doesNotMatch(host, /bitIndex \/ 8/);
+  assert.doesNotMatch(host, /new byte\[1\]/);
+});
+
+test('XG-SIM cold-start handshake has extra time without weakening the two-second runtime watchdog', () => {
+  const service = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'xgsim-session-service.js'), 'utf8');
+  assert.match(service, /constructor\(\{ hostPath, timeoutMs = 2_000, startupTimeoutMs = 5_000 \}\)/);
+  assert.match(service, /this\.startupTimeoutMs = Math\.max\(timeoutMs, startupTimeoutMs\)/);
+  assert.match(service, /await this\._send\('hello', \{\}, this\.startupTimeoutMs\)/);
+  assert.match(service, /_send\(command, payload, timeoutMs = this\.timeoutMs\)/);
+  assert.match(service, /}, timeoutMs\)/);
+});
+
+test('XG-SIM function panel records every test step while throttling only live values', () => {
+  assert.match(xgSimFunctionPanel, /const appendStepResult = \(step: XbcClosedLoopStepResult\): void =>/);
+  assert.match(xgSimFunctionPanel, /const renderLiveAtMostTenHz = \(step: XbcClosedLoopStepResult\): void =>/);
+  assert.match(xgSimFunctionPanel, /controller\.subscribeFrame\(\(step\) => \{\s*appendStepResult\(step\);\s*renderLiveAtMostTenHz\(step\);\s*\}\)/);
+  assert.doesNotMatch(xgSimFunctionPanel, /controller\.subscribeFrame\(renderLiveAtMostTenHz\)/);
 });
 
 test('only interim-safe legacy missions are published', () => {

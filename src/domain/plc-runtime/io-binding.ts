@@ -5,7 +5,8 @@ const nonEmptyText = z.string().trim().min(1);
 const nonceSchema = z.string().regex(/^[a-f0-9]{32,128}$/i);
 const inputChannelPattern = /^B\d+S\d+\.IN\d+$/i;
 const outputChannelPattern = /^B\d+S\d+\.OUT\d+$/i;
-const deviceAddressPattern = /^(?:[PMDFTU]\d{5})$/i;
+const deviceAddressPattern = /^(?:M[0-9]{4}[0-9A-F]|[PDFTU]\d{5})$/i;
+const writableMDevicePattern = /^M[0-9]{4}[0-9A-F]$/i;
 
 export const PlcRuntimeValueSchema = z.union([z.boolean(), z.number().finite()]);
 
@@ -30,11 +31,14 @@ export const IoBindingV1Schema = z.object({
   if (!isChannel && !deviceAddressPattern.test(binding.address)) {
     context.addIssue({ code: 'custom', path: ['address'], message: 'Unsupported XG5000 address format.' });
   }
-  if (binding.direction === 'input' && !inputChannelPattern.test(binding.address)) {
-    context.addIssue({ code: 'custom', path: ['address'], message: 'Input bindings require a documented IN channel.' });
+  if (binding.direction === 'input' && !inputChannelPattern.test(binding.address) && !writableMDevicePattern.test(binding.address)) {
+    context.addIssue({ code: 'custom', path: ['address'], message: 'Input bindings require a documented IN channel or an M-device bridge.' });
   }
-  if (binding.direction === 'output' && !outputChannelPattern.test(binding.address)) {
-    context.addIssue({ code: 'custom', path: ['address'], message: 'Output bindings require a documented OUT channel.' });
+  if (binding.direction === 'output' && !outputChannelPattern.test(binding.address) && !writableMDevicePattern.test(binding.address)) {
+    context.addIssue({ code: 'custom', path: ['address'], message: 'Output bindings require a documented OUT channel or an M-device monitor.' });
+  }
+  if (binding.direction === 'internal-request' && !writableMDevicePattern.test(binding.address)) {
+    context.addIssue({ code: 'custom', path: ['address'], message: 'Internal request bindings require an M-device address.' });
   }
   if (binding.access.write && binding.direction !== 'input' && binding.direction !== 'internal-request') {
     context.addIssue({ code: 'custom', path: ['access', 'write'], message: 'Only input and internal-request bindings may be writable.' });
@@ -108,4 +112,8 @@ export function isInputChannelAddress(address: string): boolean {
 
 export function isOutputChannelAddress(address: string): boolean {
   return outputChannelPattern.test(address);
+}
+
+export function isMDeviceBitAddress(address: string): boolean {
+  return writableMDevicePattern.test(address);
 }

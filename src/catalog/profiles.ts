@@ -1425,10 +1425,10 @@ const profiles: DeviceProfile[] = [
     evidence: { level: 'educational', documents: [], note: 'Generic a-contact pushbutton. Exact operator and contact-block order codes are required for prewire review.' },
     boundary: false, includeInBom: true,
     terminals: [
-      terminal('1', '1', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
-      terminal('2', '2', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+      terminal('13', '13', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+      terminal('14', '14', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
     ],
-    internalLinks: [{ from: '1', to: '2', kind: 'dynamic-contact', stateKey: 'contact', normally: 'open' }],
+    internalLinks: [{ from: '13', to: '14', kind: 'dynamic-contact', stateKey: 'contact', normally: 'open' }],
     behavior: { kind: 'manual-contact', contactType: 'NO', stateKey: 'contact', exactProductRequiredForPrewire: true },
   },
   {
@@ -1436,10 +1436,10 @@ const profiles: DeviceProfile[] = [
     evidence: { level: 'educational', documents: [], note: 'Generic b-contact pushbutton. Exact operator and contact-block order codes are required for prewire review.' },
     boundary: false, includeInBom: true,
     terminals: [
-      terminal('1', '1', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
-      terminal('2', '2', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+      terminal('21', '21', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+      terminal('22', '22', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
     ],
-    internalLinks: [{ from: '1', to: '2', kind: 'dynamic-contact', stateKey: 'contact', normally: 'closed' }],
+    internalLinks: [{ from: '21', to: '22', kind: 'dynamic-contact', stateKey: 'contact', normally: 'closed' }],
     behavior: { kind: 'manual-contact', contactType: 'NC', stateKey: 'contact', exactProductRequiredForPrewire: true },
   },
   {

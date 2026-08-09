@@ -573,6 +573,8 @@ export async function buildPrewireCircuitV3(
       const hasAdditionalTerminals = profile.terminals.some((terminal) =>
         terminal.id !== positiveTerminal && terminal.id !== returnTerminal);
       const loadElementId = hasAdditionalTerminals ? `${device.id}#supply` : device.id;
+      const assumedCurrentA = positiveNumber(device.configuration.assumedCurrentA);
+      const profileResistanceOhms = positiveNumber(profile.behavior.resistanceOhms);
       if (hasAdditionalTerminals) {
         elements.push({
           kind: 'device',
@@ -589,7 +591,7 @@ export async function buildPrewireCircuitV3(
         parentDeviceId: device.id,
         polarity: 'positive-return',
         required: 'always',
-        resistanceOhms: positiveNumber(profile.behavior.resistanceOhms),
+        resistanceOhms: assumedCurrentA === undefined ? profileResistanceOhms : 24 / assumedCurrentA,
         onThresholdVoltage: positiveNumber(profile.behavior.onThresholdVoltage),
       });
       parentByElement.set(loadElementId, device.id);
@@ -853,6 +855,9 @@ export async function buildPrewireCircuitV3(
       const sourceId = `${device.id}#internal24`;
       sources.push({
         kind: 'dc', id: sourceId, positiveTerminal: '+24V', returnTerminal: '0V', voltage: 24,
+        ...(isXbcPlc && positiveNumber(profile.behavior?.internal24VCurrentA) !== undefined
+          ? { maximumCurrentA: positiveNumber(profile.behavior?.internal24VCurrentA) }
+          : {}),
         enabledByElementId: acInputId,
       });
       const positiveTerminal = device.profileId === 'mean-well:mdr-100-24' ? 'V+1' : '24V';
