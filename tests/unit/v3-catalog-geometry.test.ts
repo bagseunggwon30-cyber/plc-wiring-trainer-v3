@@ -1,8 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { getDeviceProfileV3 } from '../../src/catalog/v3-profiles';
-import { applyV3CalibrationOverride, checkApprovedTerminalGeometryParity, checkTerminalGeometryParity } from '../../src/catalog/v3-geometry';
+import {
+  applyV3CalibrationOverride,
+  checkApprovedTerminalGeometryParity,
+  checkTerminalGeometryParity,
+  measureTerminalCenterCalibration,
+} from '../../src/catalog/v3-geometry';
 
 describe('v3 terminal geometry trust policy', () => {
+  it('calculates RMS and maximum pointer-centre error against the 3px/5px gate', () => {
+    const passing = measureTerminalCenterCalibration([
+      { terminalId: 'A', reference: { x: 10, y: 10 }, observed: { x: 11, y: 12 } },
+      { terminalId: 'B', reference: { x: 20, y: 20 }, observed: { x: 22, y: 20 } },
+    ]);
+    expect(passing.ok).toBe(true);
+    expect(passing.rmsErrorPx).toBeCloseTo(Math.sqrt(4.5));
+    expect(passing.maxErrorPx).toBeCloseTo(Math.sqrt(5));
+    expect(passing.worstTerminalId).toBe('A');
+
+    const failing = measureTerminalCenterCalibration([
+      { terminalId: 'A', reference: { x: 0, y: 0 }, observed: { x: 6, y: 0 } },
+    ]);
+    expect(failing).toMatchObject({ ok: false, sampleCount: 1, maxErrorPx: 6, worstTerminalId: 'A' });
+    expect(measureTerminalCenterCalibration([]).ok).toBe(false);
+  });
+
   it('rejects hidden and extra terminals even when all expected ids are present', () => {
     const profile = getDeviceProfileV3('mean-well:mdr-100-24');
     const geometry = profile.terminals.map((terminal, index) => ({
@@ -30,8 +52,12 @@ describe('v3 terminal geometry trust policy', () => {
   });
 
   it.each([
+    ['ls-electric:xbc-dn32up'],
+    ['ls-electric:xbc-dp32up'],
     ['ls-electric:xbc-dr32h'],
+    ['ls-electric:xbl-c41a'],
     ['ls-electric:xbf-ah04a'],
+    ['ls-electric:xbf-pd02a'],
     ['mean-well:mdr-100-24'],
     ['ls-electric:mc-22b-dc24-1a1b'],
     ['omron:my2n-d2-dc24'],

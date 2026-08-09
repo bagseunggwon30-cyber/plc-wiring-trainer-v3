@@ -251,7 +251,9 @@ function pushProfileTrustIssues(
         ? 'ORDER_CODE_REQUIRED'
         : eligibility.reason === 'order-code-mismatch'
           ? 'ORDER_CODE_MISMATCH'
-          : 'PROFILE_EVIDENCE_INELIGIBLE';
+          : eligibility.reason === 'review-capability-incomplete'
+            ? 'PROFILE_REVIEW_CAPABILITY_INCOMPLETE'
+            : 'PROFILE_EVIDENCE_INELIGIBLE';
       issues.push(issue(code, `${device.id} is not eligible for exact-model prewire review (${eligibility.reason}).`, [device.id, legacyProfile]));
     }
     const snapshot = duplicateSnapshotDeviceIds.has(device.id) ? undefined : snapshotsByDeviceId.get(device.id);
@@ -833,7 +835,10 @@ export async function buildPrewireCircuitV3(
       }
     }
 
-    const isConverter = device.profileId === 'mean-well:mdr-100-24' || device.profileId === 'ls-electric:xbc-dr32h';
+    const isXbcUTransistor = device.profileId === 'ls-electric:xbc-dn32up'
+      || device.profileId === 'ls-electric:xbc-dp32up';
+    const isXbcPlc = device.profileId === 'ls-electric:xbc-dr32h' || isXbcUTransistor;
+    const isConverter = device.profileId === 'mean-well:mdr-100-24' || isXbcPlc;
     if (isConverter) {
       const acInputId = `${device.id}#ac-input`;
       elements.push({
@@ -856,7 +861,8 @@ export async function buildPrewireCircuitV3(
       addAlias(branches, `internal-source:${device.id}:0`, sourceId, '0V', device.id, returnTerminal);
     }
 
-    if (device.profileId === 'ls-electric:xbc-dr32h') {
+    if (isXbcPlc) {
+      const inputCommon = isXbcUTransistor ? 'COMI-A' : 'COMI';
       for (const terminal of profile.terminals.filter((entry) => /^P0[0-9A-F]$/.test(entry.id))) {
         const elementId = `${device.id}#${terminal.id}`;
         elements.push({
@@ -866,16 +872,44 @@ export async function buildPrewireCircuitV3(
         });
         parentByElement.set(elementId, device.id);
         addAlias(branches, `input:${device.id}:${terminal.id}:signal`, device.id, terminal.id, elementId, 'signal');
-        addAlias(branches, `input:${device.id}:${terminal.id}:common`, device.id, 'COMI', elementId, 'common');
+        addAlias(branches, `input:${device.id}:${terminal.id}:common`, device.id, inputCommon, elementId, 'common');
       }
-      for (const terminal of profile.terminals.filter((entry) => /^P2[0-9A-F]$/.test(entry.id))) {
-        const elementId = `${device.id}#${terminal.id}:relay`;
-        const index = Number.parseInt(terminal.id.slice(2), 16);
-        const common = `COM${Math.floor(index / 4)}`;
-        elements.push({ kind: 'contact', id: elementId, terminalA: 'output', terminalB: 'common', stateKey: `${device.id}:${terminal.id}`, normally: 'open' });
-        parentByElement.set(elementId, device.id);
-        addAlias(branches, `relay:${device.id}:${terminal.id}:out`, device.id, terminal.id, elementId, 'output');
-        addAlias(branches, `relay:${device.id}:${terminal.id}:com`, device.id, common, elementId, 'common');
+      if (isXbcUTransistor) {
+        const sinking = device.profileId === 'ls-electric:xbc-dn32up';
+        const supplyPositiveTerminal = sinking ? 'VOUT' : 'COMO';
+        const supplyReturnTerminal = sinking ? 'COMO' : '0VOUT';
+        const supplyElementId = `${device.id}#output-supply`;
+        elements.push({
+          kind: 'load', id: supplyElementId, positiveTerminal: 'positive', returnTerminal: 'return',
+          role: 'module-supply', parentDeviceId: device.id, required: 'scenario', onThresholdVoltage: 10.2,
+        });
+        parentByElement.set(supplyElementId, device.id);
+        addAlias(branches, `output-supply:${device.id}:+`, device.id, supplyPositiveTerminal, supplyElementId, 'positive');
+        addAlias(branches, `output-supply:${device.id}:0`, device.id, supplyReturnTerminal, supplyElementId, 'return');
+        for (const terminal of profile.terminals.filter((entry) => /^P2[0-9A-F]$/.test(entry.id))) {
+          const elementId = `${device.id}#${terminal.id}:transistor`;
+          elements.push({
+            kind: 'transistor-output', id: elementId,
+            supplyPositiveTerminal: 'positive', supplyReturnTerminal: 'return', outputTerminal: 'output',
+            mode: sinking ? 'sinking' : 'sourcing', stateKey: `${device.id}:${terminal.id}`,
+            supplyElementId, controlPowerElementId: `${device.id}#ac-input`,
+            parentDeviceId: device.id, required: 'scenario',
+          });
+          parentByElement.set(elementId, device.id);
+          addAlias(branches, `transistor:${device.id}:${terminal.id}:out`, device.id, terminal.id, elementId, 'output');
+          addAlias(branches, `transistor:${device.id}:${terminal.id}:+`, device.id, supplyPositiveTerminal, elementId, 'positive');
+          addAlias(branches, `transistor:${device.id}:${terminal.id}:0`, device.id, supplyReturnTerminal, elementId, 'return');
+        }
+      } else {
+        for (const terminal of profile.terminals.filter((entry) => /^P2[0-9A-F]$/.test(entry.id))) {
+          const elementId = `${device.id}#${terminal.id}:relay`;
+          const index = Number.parseInt(terminal.id.slice(2), 16);
+          const common = `COM${Math.floor(index / 4)}`;
+          elements.push({ kind: 'contact', id: elementId, terminalA: 'output', terminalB: 'common', stateKey: `${device.id}:${terminal.id}`, normally: 'open' });
+          parentByElement.set(elementId, device.id);
+          addAlias(branches, `relay:${device.id}:${terminal.id}:out`, device.id, terminal.id, elementId, 'output');
+          addAlias(branches, `relay:${device.id}:${terminal.id}:com`, device.id, common, elementId, 'common');
+        }
       }
     }
 
@@ -1167,7 +1201,8 @@ function mergedStatus(issues: readonly CircuitIssueV3[]): Exclude<ValidationResu
   if (issues.some((entry) => failed.has(entry.code))) return 'FAIL';
   const blocked = new Set<CircuitIssueV3['code']>([
     'REVIEW_SCOPE_INCOMPLETE', 'SOURCE_SYSTEM_REQUIRED', 'EARTHING_POLICY_REQUIRED', 'ORDER_CODE_REQUIRED',
-    'ORDER_CODE_MISMATCH', 'PROFILE_EVIDENCE_INELIGIBLE', 'PROFILE_NOT_V3', 'ASSET_GEOMETRY_UNAPPROVED',
+    'ORDER_CODE_MISMATCH', 'PROFILE_EVIDENCE_INELIGIBLE', 'PROFILE_REVIEW_CAPABILITY_INCOMPLETE',
+    'PROFILE_NOT_V3', 'ASSET_GEOMETRY_UNAPPROVED',
     'XBF_CONFIGURATION_INCOMPLETE', 'XBF_SELECTOR_RANGE_MISMATCH', 'IG5A_INPUT_LOGIC_REQUIRED',
     'IG5A_CONTROL_POWER_STATE_REQUIRED', 'NO_INSTALLED_EQUIPMENT',
     'INPUT_LOGIC_MODE_REQUIRED',

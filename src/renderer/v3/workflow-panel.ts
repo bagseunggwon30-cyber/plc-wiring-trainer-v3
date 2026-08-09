@@ -10,6 +10,7 @@ import {
   type XbfChannelIdV3,
   type XbfChannelWorkflowSetting,
 } from './workflow-state';
+import { xgbSlotRange } from '../../domain/plc-rack';
 
 export interface V3WorkflowDevice {
   id: string;
@@ -255,6 +256,46 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
     row.append(checkLabel, designation, orderCode);
     scope.appendChild(row);
 
+    if (device.profileId === 'ls-electric:xbl-c41a' || device.profileId === 'ls-electric:xbf-pd02a') {
+      const rackField = targetDocument.createElement('fieldset');
+      rackField.className = 'v3-xbf-settings';
+      const rackLegend = targetDocument.createElement('legend');
+      rackLegend.textContent = `${device.label} XGB 랙 위치`;
+      const host = targetDocument.createElement('select');
+      host.setAttribute('aria-label', `${device.label} XGB 기본 유닛`);
+      host.add(new Option('기본 유닛 선택', ''));
+      for (const candidate of options.devices.filter((entry) => [
+        'ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dp32up',
+      ].includes(entry.profileId))) {
+        host.add(new Option(`${candidate.label} · ${candidate.id}`, candidate.id));
+      }
+      const slot = targetDocument.createElement('input');
+      slot.type = 'number'; slot.min = '1'; slot.max = '10'; slot.step = '1'; slot.placeholder = '슬롯 1~10';
+      slot.setAttribute('aria-label', `${device.label} XGB 확장 슬롯`);
+      const previous = state.deviceSettings[device.id] ?? { orderCode: null };
+      host.value = previous.rackHostId ?? '';
+      slot.value = previous.rackSlot?.toString() ?? '';
+      const range = targetDocument.createElement('small');
+      range.className = 'v3-workflow-help';
+      const rangeText = (rackSlot: number | null | undefined): string => rackSlot === null || rackSlot === undefined
+        ? '검토 모드에서는 실제 장착 슬롯이 필요합니다.'
+        : `64점 점유: ${xgbSlotRange(rackSlot).start}~${xgbSlotRange(rackSlot).end} · 특수 모듈 U0.${rackSlot}`;
+      const updateRack = (): void => {
+        const latest = state.deviceSettings[device.id] ?? { orderCode: null };
+        const rackSlot = Number(slot.value);
+        latest.rackHostId = host.value || null;
+        latest.rackSlot = Number.isInteger(rackSlot) && rackSlot >= 1 && rackSlot <= 10 ? rackSlot : null;
+        range.textContent = rangeText(latest.rackSlot);
+        state.deviceSettings[device.id] = latest;
+        notify();
+      };
+      host.addEventListener('change', updateRack);
+      slot.addEventListener('change', updateRack);
+      range.textContent = rangeText(previous.rackSlot);
+      rackField.append(rackLegend, host, slot, range);
+      scope.appendChild(rackField);
+    }
+
     if (device.profileId === 'ls-electric:xbf-ah04a') {
       const analog = targetDocument.createElement('fieldset');
       analog.className = 'v3-xbf-settings';
@@ -366,6 +407,9 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
     if (
       device.profileId === 'ls-electric:exp2-0700d'
       || device.profileId === 'ls-electric:xbc-dr32h'
+      || device.profileId === 'ls-electric:xbc-dn32up'
+      || device.profileId === 'ls-electric:xbc-dp32up'
+      || device.profileId === 'ls-electric:xbl-c41a'
       || device.profileId === 'generic:xy-md02'
     ) {
       const serial = targetDocument.createElement('fieldset');
@@ -377,13 +421,18 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       const defaults: Rs485WorkflowSetting = {
         port: device.profileId === 'ls-electric:exp2-0700d'
           ? 'COM1'
-          : device.profileId === 'ls-electric:xbc-dr32h' ? 'BUILT_IN_CNET' : 'RS485',
+          : device.profileId === 'ls-electric:xbl-c41a'
+            ? 'CNET'
+          : ['ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dp32up'].includes(device.profileId)
+            ? 'BUILT_IN_CNET' : 'RS485',
         protocol: null,
         baudRate: null,
         dataBits: null,
         parity: null,
         stopBits: null,
         stationId: null,
+        mode: '2WIRE',
+        termination: null,
       };
       const setting = previous.rs485 ?? defaults;
       state.deviceSettings[device.id] = { ...previous, rs485: setting };
@@ -391,8 +440,10 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       port.setAttribute('aria-label', `${device.label} RS485 포트`);
       const ports = device.profileId === 'ls-electric:exp2-0700d'
         ? [['COM1', 'COM1 DB9 · pin 6(+), pin 1(-)'], ['COM3', 'COM3 RS422/485 단자']] as const
-        : device.profileId === 'ls-electric:xbc-dr32h'
+        : ['ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dp32up'].includes(device.profileId)
           ? [['BUILT_IN_CNET', '내장 485+/485-']] as const
+          : device.profileId === 'ls-electric:xbl-c41a'
+            ? [['CNET', '5핀 Cnet · TX/RX 브리지 필요']] as const
           : [['RS485', 'A+/B-']] as const;
       for (const [value, label] of ports) port.add(new Option(label, value));
       port.value = setting.port ?? ports[0][0];
@@ -401,7 +452,10 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       protocol.setAttribute('aria-label', `${device.label} RS485 프로토콜`);
       protocol.add(new Option('프로토콜 선택 필요', ''));
       if (device.profileId !== 'generic:xy-md02') protocol.add(new Option('XGB Cnet', 'XGB_CNET'));
-      if (device.profileId === 'ls-electric:exp2-0700d') protocol.add(new Option('Modbus RTU Master', 'MODBUS_RTU_MASTER'));
+      if (device.profileId === 'ls-electric:exp2-0700d' || device.profileId === 'ls-electric:xbl-c41a') {
+        protocol.add(new Option('Modbus RTU Master', 'MODBUS_RTU_MASTER'));
+        protocol.add(new Option('Modbus RTU Slave', 'MODBUS_RTU_SLAVE'));
+      }
       if (device.profileId === 'generic:xy-md02') protocol.add(new Option('Modbus RTU Slave', 'MODBUS_RTU_SLAVE'));
       protocol.value = setting.protocol ?? '';
 
@@ -435,7 +489,24 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       station.type = 'number'; station.min = '1'; station.max = '247'; station.placeholder = '국번';
       station.setAttribute('aria-label', `${device.label} Modbus 국번`);
       station.value = setting.stationId === null ? '' : String(setting.stationId);
-      if (device.profileId !== 'generic:xy-md02') station.hidden = true;
+
+      const mode = targetDocument.createElement('select');
+      mode.setAttribute('aria-label', `${device.label} RS485 배선 방식`);
+      mode.add(new Option('2선식 RS485', '2WIRE'));
+      if (device.profileId === 'ls-electric:xbl-c41a') mode.add(new Option('4선식 RS422 (검증 미지원)', '4WIRE'));
+      mode.value = setting.mode ?? '2WIRE';
+
+      const termination = targetDocument.createElement('select');
+      termination.setAttribute('aria-label', `${device.label} RS485 종단저항`);
+      termination.add(new Option('종단 상태 선택', ''));
+      termination.add(new Option('종단 ON', 'ON'));
+      termination.add(new Option('종단 OFF', 'OFF'));
+      termination.value = setting.termination === null ? '' : setting.termination ? 'ON' : 'OFF';
+
+      const updateStationVisibility = (): void => {
+        station.hidden = protocol.value !== 'MODBUS_RTU_SLAVE';
+      };
+      updateStationVisibility();
 
       const updateSerial = (): void => {
         const latest = state.deviceSettings[device.id] ?? { orderCode: null };
@@ -456,18 +527,23 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
           parity: parity.value === 'NONE' || parity.value === 'EVEN' || parity.value === 'ODD' ? parity.value : null,
           stopBits: stopValue === 1 || stopValue === 2 ? stopValue : null,
           stationId: Number.isInteger(stationValue) && stationValue > 0 ? stationValue : null,
+          mode: mode.value === '2WIRE' || mode.value === '4WIRE' ? mode.value : null,
+          termination: termination.value === 'ON' ? true : termination.value === 'OFF' ? false : null,
         };
+        updateStationVisibility();
         state.deviceSettings[device.id] = latest;
         notify();
       };
-      for (const control of [port, protocol, baud, dataBits, parity, stopBits, station]) {
+      for (const control of [port, protocol, baud, dataBits, parity, stopBits, station, mode, termination]) {
         control.addEventListener('change', updateSerial);
       }
-      serial.append(port, protocol, baud, dataBits, parity, stopBits, station);
+      serial.append(port, protocol, baud, dataBits, parity, stopBits, station, mode, termination);
       const help = targetDocument.createElement('small');
       help.className = 'v3-workflow-help';
       help.textContent = device.profileId === 'ls-electric:exp2-0700d'
         ? 'COM1의 물리 극성은 공식 매뉴얼 기준 pin 6(+), pin 1(-)입니다. 실제 XP-Builder 설정도 동일하게 기록하세요.'
+        : device.profileId === 'ls-electric:xbl-c41a'
+          ? '2선식 RS485는 1 TX+↔3 RX+, 2 TX-↔4 RX- 브리지를 실제 점퍼로 결선해야 합니다. 4선식은 현재 BLOCKED입니다.'
         : '통신 준비는 전원, A/B 두 가닥, 프로토콜과 모든 직렬 설정이 함께 맞을 때만 표시됩니다.';
       serial.appendChild(help);
       scope.appendChild(serial);

@@ -71,10 +71,21 @@ test('XBC input overlay exposes only the 24 manual terminals and marks the fabri
   assert.match(html, /imageLabelCorrections:\[\s*\{x:121,y:164,label:'485\+'/);
   assert.doesNotMatch(html, /id:'24G-TOP'/);
   assert.doesNotMatch(html, /id:'PE2'/);
-  assert.match(html, /const REVIEW_PROFILE_TERMINAL_TYPES=new Set\(\['XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2\.5','UT-2\.5-PE','UT-4-HESI'\]\)/);
+  assert.match(html, /const REVIEW_PROFILE_TERMINAL_TYPES=new Set\(\['XBC-DN32UP','XBC-DP32UP','XBC-DR32H','EXP2-700','XBL-C41A','XBF-AH04A','XBF-PD02A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2\.5','UT-2\.5-PE','UT-4-HESI'\]\)/);
   assert.match(html, /fuseLinkOrderCode/);
   assert.match(html, /LIB\[type\]\.assetId&&LIB\[type\]\.geometryHash/);
   assert.match(html, /function geometryOnlyCalibrationEntry\(type,entry\)/);
+});
+
+test('XBC-DN32UP and DP32UP use one manual-backed UP chassis skin with model-specific output terminals', () => {
+  assert.match(html, /const XBC_U_IMAGE=CODEX_EXACT\+'xbc-dn-dp32up-imagen-v1\.png'/);
+  assert.match(html, /'XBC-DN32UP':xbcUPlcDefinition\('XBC-DN32UP','sinking-transistor'\)/);
+  assert.match(html, /'XBC-DP32UP':xbcUPlcDefinition\('XBC-DP32UP','sourcing-transistor'\)/);
+  assert.match(html, /\{id:'N',label:'N',pol:'AC-N'\}.*\{id:'24G',label:'24G',pol:'DC-'\}/s);
+  assert.match(html, /\{id:'VOUT',label:'DC12\/24V',pol:'DC\+'\}.*\{id:'COMO',label:'COM',pol:'DC-'\}/s);
+  assert.match(html, /\{id:'COMO',label:'COM',pol:'DC\+'\}.*\{id:'0VOUT',label:'0V',pol:'DC-'\}/s);
+  assert.match(html, /manualOverlay:true/);
+  assert.match(html, /function drawXbcUManualOverlay\(/);
 });
 
 test('image rendering preserves an explicit device aspect ratio without replacing its asset', () => {

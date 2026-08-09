@@ -2,6 +2,8 @@ import { DEVICE_PROFILES } from '../../catalog/profiles';
 import { DEVICE_PROFILES_V3 } from '../../catalog/v3-profiles';
 import type { IssueSeverity, ValidationIssue, ValidationResult } from '../../domain/engine-types';
 import { PUBLIC_MISSIONS } from '../../domain/missions';
+import { analyzeSerialNetwork } from '../../domain/communication-runtime';
+import { assignXgbRack } from '../../domain/plc-rack';
 import {
   buildPrewireCircuitV3,
   canIssueVerifiedReportV3,
@@ -11,12 +13,14 @@ import {
   type CircuitIssueV3,
 } from '../../domain/v3';
 import type { V3ValidationRequest, V3ValidationResult } from './validation-port';
+import { workflowStateFromDocument } from './workflow-state';
 
 export type SerializableV3ValidationRequest = Omit<V3ValidationRequest, 'validateLegacy'>;
 
 const BLOCKED_CODES = new Set<CircuitIssueV3['code']>([
   'REVIEW_SCOPE_INCOMPLETE', 'SOURCE_SYSTEM_REQUIRED', 'EARTHING_POLICY_REQUIRED', 'ORDER_CODE_REQUIRED',
   'ORDER_CODE_MISMATCH', 'PROFILE_EVIDENCE_INELIGIBLE', 'PROFILE_NOT_V3', 'ASSET_GEOMETRY_UNAPPROVED',
+  'PROFILE_REVIEW_CAPABILITY_INCOMPLETE',
   'TERMINAL_GEOMETRY_MISMATCH', 'XBF_CONFIGURATION_INCOMPLETE', 'XBF_SELECTOR_RANGE_MISMATCH',
   'IG5A_INPUT_LOGIC_REQUIRED', 'IG5A_CONTROL_POWER_STATE_REQUIRED', 'INPUT_LOGIC_MODE_REQUIRED',
   'EOCR_CONFIGURATION_INCOMPLETE', 'FUSE_LINK_REQUIRED', 'FUSE_LINK_PROFILE_UNVERIFIED',
@@ -57,6 +61,35 @@ export async function validateDomainV3(request: SerializableV3ValidationRequest)
     request.terminalGeometry,
   );
   const result = validatePrewireDocumentV3(built);
+  const serial = analyzeSerialNetwork(request.document, DEVICE_PROFILES, result.solution);
+  const rawWorkflow = request.document.settings.v3Workflow;
+  const workflow = rawWorkflow && typeof rawWorkflow === 'object' && !Array.isArray(rawWorkflow)
+    ? rawWorkflow as Record<string, unknown>
+    : {};
+  const workflowState = workflowStateFromDocument(request.document);
+  const canvasUnitsPerMm = typeof workflow.canvasUnitsPerMm === 'number' && workflow.canvasUnitsPerMm > 0
+    ? workflow.canvasUnitsPerMm
+    : 1;
+  const rack = assignXgbRack(request.document.devices.map((device) => {
+    const configuration = device.configuration;
+    const workflowDevice = workflowState.deviceSettings[device.id];
+    const requestedSlot = typeof workflowDevice?.rackSlot === 'number'
+      ? workflowDevice.rackSlot
+      : typeof configuration.rackSlot === 'number' ? configuration.rackSlot : undefined;
+    const requestedHostId = typeof workflowDevice?.rackHostId === 'string'
+      ? workflowDevice.rackHostId
+      : typeof configuration.rackHostId === 'string' ? configuration.rackHostId : undefined;
+    const railId = typeof configuration.railId === 'string' ? configuration.railId : undefined;
+    return {
+      deviceId: device.id,
+      profileId: device.profileId,
+      xMm: device.x / canvasUnitsPerMm,
+      yMm: device.y / canvasUnitsPerMm,
+      ...(requestedSlot === undefined ? {} : { requestedSlot }),
+      ...(requestedHostId === undefined ? {} : { requestedHostId }),
+      ...(railId === undefined ? {} : { railId }),
+    };
+  }), DEVICE_PROFILES_V3);
   const missionId = typeof request.document.settings.missionId === 'string' ? request.document.settings.missionId : null;
   const mission = PUBLIC_MISSIONS.find((entry) => entry.id === missionId);
   const rawBindings = request.document.settings.roleBindings;
@@ -86,16 +119,42 @@ export async function validateDomainV3(request: SerializableV3ValidationRequest)
     refs: [...entry.refs],
     severity: 'blocked',
   }));
+  const serialIssues: ValidationIssue[] = serial.issues.map((entry) => ({ ...entry, refs: [...entry.refs] }));
+  const rackIssues: ValidationIssue[] = rack.issues.map((entry) => ({
+    ...entry,
+    refs: [...entry.refs],
+    severity: 'blocked',
+  }));
+  if (request.mode === 'prewire') {
+    for (const device of request.document.devices) {
+      const profile = DEVICE_PROFILES_V3[device.profileId];
+      if (profile?.rack?.role !== 'module') continue;
+      const workflowDevice = workflowState.deviceSettings[device.id];
+      const configuredSlot = workflowDevice?.rackSlot ?? device.configuration.rackSlot;
+      const configuredHost = workflowDevice?.rackHostId ?? device.configuration.rackHostId;
+      if (typeof configuredSlot === 'number' && typeof configuredHost === 'string' && configuredHost.length > 0) continue;
+      rackIssues.push({
+        code: 'RACK_SLOT_REQUIRED',
+        refs: [device.id],
+        blocking: true,
+        severity: 'blocked',
+        message: `${device.id} requires an explicit XGB base-unit and expansion slot for prewire review.`,
+      });
+    }
+  }
   const missionFailure = missionIssues.some((entry) => entry.blocking && entry.severity !== 'blocked');
-  const combinedStatus: ValidationResult['status'] = result.status === 'FAIL' || missionFailure
+  const serialFailure = serialIssues.some((entry) => entry.blocking && entry.severity !== 'blocked');
+  const combinedStatus: ValidationResult['status'] = result.status === 'FAIL' || missionFailure || serialFailure
     ? 'FAIL'
     : result.status === 'BLOCKED' || physical.status === 'BLOCKED'
       || missionIssues.some((entry) => entry.severity === 'blocked')
+      || serialIssues.some((entry) => entry.severity === 'blocked')
+      || rackIssues.length > 0
       ? 'BLOCKED'
       : 'PASS';
   const validation: ValidationResult = {
     status: combinedStatus,
-    issues: [...result.issues.map(rendererIssue), ...missionIssues, ...physicalIssues],
+    issues: [...result.issues.map(rendererIssue), ...missionIssues, ...serialIssues, ...rackIssues, ...physicalIssues],
     documentRevision: result.documentRevision,
     documentHash: result.documentHash,
     checkedAt: new Date().toISOString(),

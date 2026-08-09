@@ -1,6 +1,6 @@
 # 공식 매뉴얼 보유·미확정 장비 감사
 
-감사 기준일: 2026-08-05
+감사 기준일: 2026-08-09
 
 이 문서는 팔레트의 모든 장비를 다음 세 상태로 구분한다.
 
@@ -15,10 +15,14 @@ PDF는 개발 근거이며 Electron 배포 파일에는 포함하지 않는다.
 | 프로필 / 정확 품번 | 로컬 공식 문서 | SHA-256 |
 |---|---|---|
 | LS ELECTRIC `XBC-DR32H` | `pdf/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf` | `4C1BBB7C60CC2DC80221B67CFE7AD11CA360C9DB12B7F1B36171CF12C8BF18AA` |
+| LS ELECTRIC `XBC-DN32UP` / `XBC-DP32UP` 설치가이드 | `pdf/10_LS_XBC_U_Installation_Guide_KR_EN.pdf` | `1745BCB9E8FD5701FFE24D5ED61FD2E1FE2A038FF1D2224A3BCBE93842A603C4` |
+| LS ELECTRIC `XBC-DN32UP` / `XBC-DP32UP` 사용설명서 | `pdf/10_LS_XBC_U_User_Manual_EN.pdf` | `2928E058FD1027F936CCFD5EA949F422C90118B6FCA4CE423FF71B03B9D494D0` |
 | LS ELECTRIC `eXP2-0700D` | `pdf/official/LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf` | `7B24C37B791224FC7744413589C853A348065C0746ED9AEE258070F99A4EBBF9` |
 | LS ELECTRIC `eXP2-0700D` 통신 | `pdf/official/LS_XP_Communication_Manual_EN_V2.2.pdf` | `DAFD6867E240989A98EF6C5D3184ACEBD5947A3EB23E39150F05FD97C2399F34` |
+| LS ELECTRIC `XBL-C41A` | `pdf/09_LS_XGB_Cnet_XBL-C41A_Manual_KR.pdf` | `D0D9A6C360004550A4936EBA34B8165DE6445E4812E532A41BC71886682D7F16` |
 | LS ELECTRIC `XBF-AH04A` | `pdf/03_LS_XBF-AH04A_Installation_Guide.pdf` | `36ABFD5C521E01DCB35D4032C230D4B486B4A3D447C4E8E40417D3A908E8F2E8` |
 | LS ELECTRIC `XBF-AH04A` 아날로그 상세 | `pdf/03_LS_XGB_Analog_Manual_KR.pdf` | `92BF211773DD2FA2D5C11469546C74E148059F55E53866E05022D229CF9A58AF` |
+| LS ELECTRIC `XBF-PD02A` | `pdf/08_LS_XBF-PD02A_Positioning_Manual_KR.pdf` | `AEEDDA2002AB616A5A02B25224B3AA462A128375AF1C41392502386FA44ED3F7` |
 | MEAN WELL `MDR-100-24` | `pdf/01_MDR-100-24_MeanWell_SPEC.pdf` | `9DE6ABE926DF1D33974544D82989964E828C079F7E8B8E0448AE7667ED16E896` |
 | LS ELECTRIC `MC-22b / DC24 / 1a1b` | `pdf/08_LS_Metasol_MC_Contactor_Catalog.pdf` | `BE22BB71FD62046ED15BAE2CC377F3991016C3FF032ADB7AD441F76417136662` |
 | OMRON `MY2N-D2 DC24V` | `pdf/official/Omron_MY_Series_J219-E1.pdf` | `2C422A3BA468E3140CE4D3D8D716F6C11AD11A842CA1999F5E7339847170242D` |
@@ -32,6 +36,12 @@ PDF는 개발 근거이며 Electron 배포 파일에는 포함하지 않는다.
 - 하드웨어 V1.5: `https://sol.ls-electric.com/uploads/document/17216272742650/XGT%20Panel%20HW%20Manual_eXP2_eng_V1.5.pdf`
 - XGT Panel 통신 V2.2: `https://sol.ls-electric.com/uploads/document/16407609055050/XP%20Communication_Eng_V2.2.pdf?type=attachment`
 - 설치 가이드 V1.1: `https://ssq.ls-electric.com/uploads/document/16825019630460/HMI-7_XGT%2BPanel%2BeXP2_Series_Installation%2BGuide_V1.1.pdf`
+
+2026-08-09에는 보조 ZIP에서 XBL-C41A와 XBF-PD02A 공식 PDF를 원본 해시 그대로 선별 복사했다. XBL은 PDF 195~196쪽의 5핀·RS485 브리지와 217쪽의 20×90×60 mm 외형, PD02A는 PDF 26쪽의 500 mA·65 g 사양과 29~30쪽의 40핀·내부 회로만 근거로 삼는다. PD02A의 정확 외형 치수는 이 문서에서 확인하지 못했으므로 자산 매니페스트에 추정치를 쓰지 않고 `null`로 차단한다. 두 프로필은 단자 데이터가 `manual-verified`지만 랙 전원·동작 엔진과 승인된 geometry가 미완성이므로 `profile-only`이며 `VERIFIED_PREWIRE` 발급은 차단한다.
+
+같은 날 LS 공식 서버에서 XBC-U 설치가이드 V4.5와 사용설명서 V1.2를 보존했다. `XBC-DN32UP`은 NPN 싱크 트랜지스터 출력, `XBC-DP32UP`은 PNP 소스 트랜지스터 출력으로 별도 프로필을 사용한다. 두 프로필은 5점 전원단자, 입력 8+10점, 출력 8+10점, Cnet 5핀, 위치결정 40핀×2와 185×90×64 mm 외형만 공식 근거로 삼는다. Imagen 스킨의 글자와 나사 위치는 전기 근거가 아니며, SVG 단자 오버레이 포인터 교정이 승인될 때까지 `profile-only`다.
+
+현재 `xbc-dn-dp32up-imagen-v1.png`를 픽셀 분석한 결과, 생성 스킨의 녹색 I/O 플러그가 매뉴얼의 상단 8점/하단 10점이 아니라 상단 9공/하단 12공으로 표현되어 자산 자체는 승인하지 않는다. PNG 파일은 원본 그대로 보존하고, 화면에서는 해당 커넥터·전원·Cnet·위치결정 영역을 불투명 마스크 뒤의 매뉴얼 기반 SVG로 다시 그린다. SVG의 126개 가시 중심과 126개 포인터 히트 중심은 실제 브라우저 CSS 픽셀로 비교하며 RMS 3 px 이하, 최대 5 px 이하를 모두 만족해야 한다. 이 geometry 통과는 전기 단자 배치의 적합성만 뜻하며 생성 스킨을 실물 사진이나 전기 근거로 승격하지 않는다.
 
 ## family-only
 

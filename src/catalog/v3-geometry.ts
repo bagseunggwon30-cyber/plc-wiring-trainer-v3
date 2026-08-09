@@ -27,12 +27,71 @@ export interface ApprovedTerminalGeometryParity extends TerminalGeometryParity {
   readonly approved: boolean;
 }
 
+export interface TerminalCenterObservationV3 {
+  readonly terminalId: string;
+  /** Manual-overlay or independently measured reference centre in CSS pixels. */
+  readonly reference: { readonly x: number; readonly y: number };
+  /** Centre reported by the rendered pointer target in the same coordinate space. */
+  readonly observed: { readonly x: number; readonly y: number };
+}
+
+export interface TerminalCenterCalibrationThresholdsV3 {
+  readonly rmsPx: number;
+  readonly maxPx: number;
+}
+
+export interface TerminalCenterCalibrationResultV3 {
+  readonly ok: boolean;
+  readonly sampleCount: number;
+  readonly rmsErrorPx: number;
+  readonly maxErrorPx: number;
+  readonly worstTerminalId: string | null;
+  readonly errors: readonly { readonly terminalId: string; readonly errorPx: number }[];
+  readonly thresholds: TerminalCenterCalibrationThresholdsV3;
+}
+
 export interface TerminalGeometryParity {
   readonly ok: boolean;
   readonly missingTerminalIds: readonly string[];
   readonly hiddenTerminalIds: readonly string[];
   readonly extraTerminalIds: readonly string[];
   readonly duplicateTerminalIds: readonly string[];
+}
+
+export const DEFAULT_TERMINAL_CENTER_THRESHOLDS_V3: TerminalCenterCalibrationThresholdsV3 = {
+  rmsPx: 3,
+  maxPx: 5,
+};
+
+/**
+ * Calculates pointer-centre error without rounding individual observations.
+ * An empty observation set is never a passing calibration.
+ */
+export function measureTerminalCenterCalibration(
+  observations: readonly TerminalCenterObservationV3[],
+  thresholds: TerminalCenterCalibrationThresholdsV3 = DEFAULT_TERMINAL_CENTER_THRESHOLDS_V3,
+): TerminalCenterCalibrationResultV3 {
+  const errors = observations.map((observation) => {
+    const dx = observation.observed.x - observation.reference.x;
+    const dy = observation.observed.y - observation.reference.y;
+    return { terminalId: observation.terminalId, errorPx: Math.hypot(dx, dy) };
+  });
+  const squaredErrorSum = errors.reduce((sum, item) => sum + item.errorPx ** 2, 0);
+  const rmsErrorPx = errors.length === 0 ? Number.POSITIVE_INFINITY : Math.sqrt(squaredErrorSum / errors.length);
+  const worst = errors.reduce<(typeof errors)[number] | null>(
+    (current, item) => current === null || item.errorPx > current.errorPx ? item : current,
+    null,
+  );
+  const maxErrorPx = worst?.errorPx ?? Number.POSITIVE_INFINITY;
+  return {
+    ok: errors.length > 0 && rmsErrorPx <= thresholds.rmsPx && maxErrorPx <= thresholds.maxPx,
+    sampleCount: errors.length,
+    rmsErrorPx,
+    maxErrorPx,
+    worstTerminalId: worst?.terminalId ?? null,
+    errors,
+    thresholds,
+  };
 }
 
 export type V3CalibrationOverride =

@@ -20,6 +20,11 @@ describe('v3 approved asset allowlist', () => {
         generatedAt: '2026-07-09T00:00:00.000Z',
         approval: { status: 'approved', reviewer: 'project-manual-review', approvedAt: '2026-07-10' },
         geometryHash: 'B'.repeat(64),
+        terminalCenterCalibration: {
+          basis: 'manual-overlay', measuredAt: '2026-08-09T00:00:00.000Z', method: 'browser pointer-centre comparison',
+          referenceDocumentId: 'manual.pdf', referencePages: [1], requiredTerminalCount: 1, sampleCount: 1,
+          rmsErrorPx: 0, maxErrorPx: 0, thresholds: { rmsPx: 3, maxPx: 5 }, result: 'pass', note: 'fixture',
+        },
       },
       {
         assetId: 'pending-test-rear',
@@ -44,6 +49,9 @@ describe('v3 approved asset allowlist', () => {
 
   it('registers new Imagen exact-model skins as pending rather than silently approving them', () => {
     const expected = [
+      'codex:xbc-dn-dp32up-imagen-v1',
+      'codex:xbl-c41a-imagen-v1',
+      'codex:xbf-pd02a-imagen-v1',
       'existing:my2n-flat-v1',
       'codex:mc-22b-dc24-imagen-v2',
       'codex:eocr3de-05duh-imagen-v1',
@@ -59,5 +67,20 @@ describe('v3 approved asset allowlist', () => {
       expect(createHash('sha256').update(readFileSync(resolve(process.cwd(), entry?.path ?? '')))
         .digest('hex').toUpperCase()).toBe(entry?.sha256);
     }
+  });
+
+  it('allows unknown physical size only while an asset remains unapproved', () => {
+    expect(() => approvedAssetAllowlist([{
+      assetId: 'unknown-size-approved', model: 'test-model', view: 'front', path: 'asset.png',
+      sha256: 'A'.repeat(64), pixelDimensions: { width: 100, height: 100 }, physicalDimensionsMm: null,
+      prompt: 'Test asset.', generatedAt: '2026-08-09T00:00:00.000Z',
+      approval: { status: 'approved', reviewer: 'reviewer', approvedAt: '2026-08-09' },
+      geometryHash: 'B'.repeat(64),
+      terminalCenterCalibration: {
+        basis: 'manual-overlay', measuredAt: '2026-08-09T00:00:00.000Z', method: 'fixture',
+        referenceDocumentId: 'manual.pdf', referencePages: [1], requiredTerminalCount: 1, sampleCount: 1,
+        rmsErrorPx: 0, maxErrorPx: 0, thresholds: { rmsPx: 3, maxPx: 5 }, result: 'pass', note: 'fixture',
+      },
+    }])).toThrow('manual-backed physical dimensions');
   });
 });

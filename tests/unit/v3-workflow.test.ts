@@ -135,6 +135,31 @@ describe('v3 workflow state', () => {
     });
   });
 
+  it('preserves explicit XGB rack placement and complete RS485 review settings', () => {
+    const state = createV3WorkflowState({
+      deviceSettings: {
+        cnet: {
+          orderCode: ' XBL-C41A ', rackHostId: ' plc-1 ', rackSlot: 3,
+          rs485: {
+            port: 'CNET', protocol: 'MODBUS_RTU_MASTER', baudRate: 19200, dataBits: 8,
+            parity: 'EVEN', stopBits: 1, stationId: null, mode: '2WIRE', termination: true,
+          },
+        },
+        invalid: { rackHostId: ' ', rackSlot: 0 },
+      },
+    });
+
+    expect(state.deviceSettings).toEqual({
+      cnet: {
+        orderCode: 'XBL-C41A', rackHostId: 'plc-1', rackSlot: 3,
+        rs485: {
+          port: 'CNET', protocol: 'MODBUS_RTU_MASTER', baudRate: 19200, dataBits: 8,
+          parity: 'EVEN', stopBits: 1, stationId: null, mode: '2WIRE', termination: true,
+        },
+      },
+    });
+  });
+
   it('uses one injected validation result shape and blocks it on missing mandatory workflow choices', async () => {
     let legacyCalls = 0;
     const port = createV3ValidationPort({

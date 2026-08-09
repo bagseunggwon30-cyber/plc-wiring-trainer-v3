@@ -12,7 +12,7 @@ import {
 const source = { id: 'psu', positiveTerminal: '+24', returnTerminal: '0V', voltage: 24 as const };
 const load = { kind: 'load' as const, id: 'lamp', positiveTerminal: '+', returnTerminal: '-' };
 
-function branch(id: string, from: string, fromTerminal: string, to: string, toTerminal: string, conductor: 'dc' | 'pe' = 'dc') {
+function branch(id: string, from: string, fromTerminal: string, to: string, toTerminal: string, conductor: 'dc' | 'ac' | 'pe' = 'dc') {
   return { id, from: { elementId: from, terminalId: fromTerminal }, to: { elementId: to, terminalId: toTerminal }, conductor };
 }
 
@@ -180,6 +180,48 @@ describe('v3 closed-loop DC solver', () => {
     expect(result.solution.loads.input.energized).toBe(false);
     expect(result.solution.elements['sensor-output'].state).toBe('OUTPUT_UNPOWERED');
     expect(result.solution.issues.map((entry) => entry.code)).toContain('TRANSISTOR_OUTPUT_UNPOWERED');
+  });
+
+  it('does not close a PLC transistor output until both its DC output pair and AC CPU input are powered', () => {
+    const build = (connectCpuPower: boolean): WorkshopDocumentV3 => {
+      const doc = document([
+        branch('out-supply+', 'psu', '+24', 'output-supply', '+'),
+        branch('out-supply0', 'output-supply', '-', 'psu', '0V'),
+        branch('transistor+', 'output-supply', '+', 'output', 'V+'),
+        branch('transistor0', 'output-supply', '-', 'output', 'COM'),
+        branch('lamp+', 'psu', '+24', 'lamp', '+'),
+        branch('lamp-out', 'lamp', '-', 'output', 'OUT'),
+        ...(connectCpuPower ? [
+          branch('cpu-l', 'ac', 'L', 'cpu', 'L', 'ac'),
+          branch('cpu-n', 'cpu', 'N', 'ac', 'N', 'ac'),
+          branch('cpu-pe', 'ac', 'PE', 'cpu', 'PE', 'pe'),
+        ] : []),
+      ]);
+      doc.sources = [
+        source,
+        { kind: 'ac-single-phase', id: 'ac', lineTerminal: 'L', neutralTerminal: 'N', peTerminal: 'PE', lineToNeutralVoltage: 220 },
+      ];
+      doc.elements = [
+        { kind: 'ac-load', id: 'cpu', lineTerminal: 'L', neutralTerminal: 'N', peTerminal: 'PE' },
+        { kind: 'load', id: 'output-supply', positiveTerminal: '+', returnTerminal: '-', role: 'module-supply' },
+        {
+          kind: 'transistor-output', id: 'output', supplyPositiveTerminal: 'V+', supplyReturnTerminal: 'COM',
+          outputTerminal: 'OUT', mode: 'sinking', stateKey: 'plc:P20', supplyElementId: 'output-supply',
+          controlPowerElementId: 'cpu',
+        },
+        load,
+      ];
+      doc.reviewScope = { elementIds: doc.elements.map((element) => element.id) };
+      return doc;
+    };
+
+    const unpowered = simulateScenario(build(false), { id: 'cpu-off', contactStates: { 'plc:P20': true } });
+    const powered = simulateScenario(build(true), { id: 'cpu-on', contactStates: { 'plc:P20': true } });
+
+    expect(unpowered.solution.elements.output.state).toBe('OUTPUT_UNPOWERED');
+    expect(unpowered.solution.loads.lamp.energized).toBe(false);
+    expect(powered.solution.elements.output.state).toBe('OUTPUT_ON');
+    expect(powered.solution.loads.lamp).toMatchObject({ energized: true, state: 'ON' });
   });
 
   it('keeps a fully wired PLC input inactive below its manual voltage/current threshold', () => {

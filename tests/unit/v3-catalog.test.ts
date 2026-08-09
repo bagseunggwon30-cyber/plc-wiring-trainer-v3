@@ -17,9 +17,13 @@ describe('v3 device profile catalog', () => {
 
   it('carries the locally and officially evidenced exact order codes into v3', () => {
     expect(Object.values(DEVICE_PROFILES_V3).map((profile) => profile.orderCode)).toEqual([
+      'XBC-DN32UP',
+      'XBC-DP32UP',
       'XBC-DR32H',
       'eXP2-0700D',
+      'XBL-C41A',
       'XBF-AH04A',
+      'XBF-PD02A',
       'MDR-100-24',
       'MC-22b / DC24 / 1a1b',
       'MY2N-D2 DC24V',
@@ -37,6 +41,12 @@ describe('v3 device profile catalog', () => {
   });
 
   it('uses manual-backed physical dimensions instead of generated-image proportions', () => {
+    expect(getDeviceProfileV3('ls-electric:xbc-dn32up').behavior).toMatchObject({
+      dimensionsMm: { width: 185, height: 90, depth: 64 },
+    });
+    expect(getDeviceProfileV3('ls-electric:xbc-dp32up').behavior).toMatchObject({
+      dimensionsMm: { width: 185, height: 90, depth: 64 },
+    });
     expect(getDeviceProfileV3('ls-electric:xbc-dr32h').behavior).toMatchObject({
       dimensionsMm: { width: 114, height: 100, depth: 64 },
     });
@@ -52,6 +62,20 @@ describe('v3 device profile catalog', () => {
     expect(getDeviceProfileV3('omron:my2n-d2-dc24').behavior).toMatchObject({
       dimensionsMm: { width: 21.5, height: 36, depth: 28 },
     });
+  });
+
+  it('keeps new transistor PLC profiles fail-closed until their pointer geometry is approved', () => {
+    for (const [profileId, orderCode] of [
+      ['ls-electric:xbc-dn32up', 'XBC-DN32UP'],
+      ['ls-electric:xbc-dp32up', 'XBC-DP32UP'],
+    ] as const) {
+      const profile = getDeviceProfileV3(profileId);
+      expect(profile.rack).toMatchObject({ role: 'host', family: 'LS-XGB', occupiedPoints: 64 });
+      expect(validatePrewireEligibility(profile, orderCode)).toEqual({
+        ok: false,
+        reason: 'review-capability-incomplete',
+      });
+    }
   });
 
   it('keeps official a/b contact numbers and power-terminal semantics on the exact protection devices', () => {
@@ -198,6 +222,57 @@ describe('v3 device profile catalog', () => {
     const xbc = getDeviceProfileV3('ls-electric:xbc-dr32h');
     expect(validatePrewireEligibility({ ...xbc, evidence: { ...xbc.evidence, grade: 'educational' } }, 'XBC-DR32H'))
       .toEqual({ ok: false, reason: 'evidence-grade-ineligible' });
+  });
+
+  it('keeps the exact Cnet 5-pin order and blocks profile-only modules from verified review', () => {
+    const cnet = getDeviceProfileV3('ls-electric:xbl-c41a');
+    expect(cnet.terminals.map((terminal) => terminal.id)).toEqual(['TX+', 'TX-', 'RX+', 'RX-', 'SG']);
+    expect(cnet.terminals.map((terminal) => terminal.polarity)).toEqual([
+      'data-positive', 'data-negative', 'data-positive', 'data-negative', 'reference',
+    ]);
+    expect(cnet.evidence.documents).toContainEqual(expect.objectContaining({
+      documentId: '09_LS_XGB_Cnet_XBL-C41A_Manual_KR.pdf',
+      pages: [195, 196, 217],
+      sha256: 'D0D9A6C360004550A4936EBA34B8165DE6445E4812E532A41BC71886682D7F16',
+    }));
+    expect(cnet.rack).toMatchObject({ role: 'module', family: 'LS-XGB', occupiedPoints: 64 });
+    expect(validatePrewireEligibility(cnet, 'XBL-C41A')).toEqual({
+      ok: false,
+      reason: 'review-capability-incomplete',
+    });
+  });
+
+  it('maps all 40 PD02A connector pins and never treats NC pins as conductive terminals', () => {
+    const positioning = getDeviceProfileV3('ls-electric:xbf-pd02a');
+    expect(positioning.terminals).toHaveLength(40);
+    expect(positioning.terminals.map((terminal) => terminal.id)).toEqual(expect.arrayContaining([
+      'B20', 'A20', 'B19', 'A19', 'B18', 'A18', 'B01', 'A01',
+    ]));
+    for (const terminalId of ['A20', 'A19']) {
+      expect(positioning.terminals.find((terminal) => terminal.id === terminalId)).toMatchObject({
+        role: 'input', polarity: 'signal-return',
+      });
+    }
+    for (const terminalId of ['B17', 'A17', 'B15', 'A15']) {
+      expect(positioning.terminals.find((terminal) => terminal.id === terminalId)).toMatchObject({
+        role: 'output', polarity: 'signal-return',
+      });
+    }
+    for (const terminalId of ['B11', 'A11', 'B10', 'A10', 'B08', 'A08', 'B01', 'A01']) {
+      expect(positioning.terminals.find((terminal) => terminal.id === terminalId)).toMatchObject({
+        role: 'not-connected', domain: 'floating', potential: 'floating', polarity: 'none',
+      });
+    }
+    expect(positioning.evidence.documents).toContainEqual(expect.objectContaining({
+      documentId: '08_LS_XBF-PD02A_Positioning_Manual_KR.pdf',
+      pages: [26, 29, 30],
+      sha256: 'AEEDDA2002AB616A5A02B25224B3AA462A128375AF1C41392502386FA44ED3F7',
+    }));
+    expect(positioning.rack).toMatchObject({ role: 'module', moduleClass: 'high-speed', occupiedPoints: 64 });
+    expect(validatePrewireEligibility(positioning, 'XBF-PD02A')).toEqual({
+      ok: false,
+      reason: 'review-capability-incomplete',
+    });
   });
 
   it('blocks an enabled XBF channel whose physical selector disagrees with its parameter range', () => {

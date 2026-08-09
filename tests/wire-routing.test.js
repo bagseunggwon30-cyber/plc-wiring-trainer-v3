@@ -26,6 +26,35 @@ test('automatic routing separates deterministic wire lanes', () => {
   const aStarIndex = html.indexOf('const mid=routeOrthoChannel');
   const outerDetourPickIndex = html.indexOf('pickSafeRoute(outerDetours');
   assert.ok(aStarIndex >= 0 && outerDetourPickIndex > aStarIndex);
+  assert.match(html, /function\s+routeSegmentConflictCost\s*\(/);
+  assert.match(html, /function\s+rememberWireRoute\s*\(/);
+  assert.match(html, /const\s+routeContext=\{obstacles:getObstacles\(\[\]\),occupiedSegments:createRouteOccupancyIndex\(\)\}/);
+  assert.match(html, /function\s+routeOccupancyCandidates\s*\(/);
+  assert.match(html, /routeConflictCost\(clean,occupiedSegments\)/);
+  assert.match(html, /gScore\[cur\]\+step\+routeSegmentConflictCost/);
+  assert.match(html, /return lane\*4/);
+  assert.match(html, /function\s+separateRouteOverlaps\s*\(/);
+  assert.match(html, /chosen=separateRouteOverlaps\(chosen,obs,endpointIds,occupiedSegments\)/);
+  assert.match(html, /function\s+staggerWireTerminalPoint\s*\(/);
+  assert.match(html, /pa=staggerWireTerminalPoint\(pa,fromCount\)/);
+});
+
+test('XBC U manual overlay exposes all 126 visual centres for browser RMS calibration', () => {
+  assert.match(html, /window\.measureRenderedTerminalCenterRms=function/);
+  assert.match(html, /requiredTerminalCount=126/);
+  assert.match(html, /dataset\.manualTerminal/);
+  assert.match(html, /rmsErrorPx<=3&&maxErrorPx<=5/);
+  assert.match(html, /addIoConnector\(454,XBC_U_TOP_IO_Y,inputTopIds\)/);
+  assert.match(html, /addPositionConnector\(620,639,'D','C'\)/);
+});
+
+test('same-device jumpers use one continuous exterior U route', () => {
+  assert.match(html, /function\s+sameDeviceJumperRoute\s*\(/);
+  assert.match(html, /const\s+otherObstacles=getObstacles\(\[devId\]\)/);
+  assert.match(html, /routes\.filter\(route=>!pathHitsObstacles\(route,otherObstacles,\[\]\)\)/);
+  assert.match(html, /devA\s*&&\s*devA===devB/);
+  assert.match(html, /const\s+sameDeviceRoute=sameDeviceJumperRoute\(/);
+  assert.match(html, /if\(sameDeviceRoute\)return ptsToSvg\(sameDeviceRoute\)/);
 });
 
 test('orthogonal simplification preserves an exterior exit when the route reverses direction', () => {

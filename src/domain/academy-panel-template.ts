@@ -106,15 +106,15 @@ export function createAcademyExp2Md02Template(): WorkshopDocumentV2 {
           'academy-ps1': { orderCode: 'MDR-100-24' },
           'academy-plc1': {
             orderCode: 'XBC-DR32H',
-            rs485: { port: 'BUILT_IN_CNET', protocol: 'XGB_CNET', baudRate: 9600, dataBits: 8, parity: 'NONE', stopBits: 1, stationId: null },
+            rs485: { port: 'BUILT_IN_CNET', protocol: 'XGB_CNET', baudRate: 9600, dataBits: 8, parity: 'NONE', stopBits: 1, stationId: null, mode: '2WIRE', termination: true },
           },
           'academy-hmi1': {
             orderCode: 'eXP2-0700D',
-            rs485: { port: 'COM1', protocol: 'XGB_CNET', baudRate: 9600, dataBits: 8, parity: 'NONE', stopBits: 1, stationId: null },
+            rs485: { port: 'COM1', protocol: 'XGB_CNET', baudRate: 9600, dataBits: 8, parity: 'NONE', stopBits: 1, stationId: null, mode: '2WIRE', termination: true },
           },
           'academy-md02': {
             orderCode: null,
-            rs485: { port: 'RS485', protocol: null, baudRate: null, dataBits: null, parity: null, stopBits: null, stationId: null },
+            rs485: { port: 'RS485', protocol: null, baudRate: null, dataBits: null, parity: null, stopBits: null, stationId: null, mode: '2WIRE', termination: false },
           },
         },
         conductorSettings: Object.fromEntries(wires.map((entry) => [entry.id, {

@@ -99,6 +99,29 @@ describe('V2 editor to v3 prewire circuit adapter', () => {
     expect(codesByWire.has('relay-com-return')).toBe(false);
   });
 
+  it.each([
+    { profileId: 'ls-electric:xbc-dn32up', orderCode: 'XBC-DN32UP', mode: 'sinking' },
+    { profileId: 'ls-electric:xbc-dp32up', orderCode: 'XBC-DP32UP', mode: 'sourcing' },
+  ])('maps $orderCode outputs as powered transistors rather than dry relay contacts', async ({
+    profileId,
+    orderCode,
+    mode,
+  }) => {
+    const plc = device('plc', profileId, { orderCode });
+    const built = await buildPrewireCircuitV3(workshop([plc], []), DEVICE_PROFILES, DEVICE_PROFILES_V3);
+    const outputs = built.document.elements.filter((element) => element.kind === 'transistor-output');
+
+    expect(outputs).toHaveLength(16);
+    expect(outputs[0]).toMatchObject({
+      mode,
+      stateKey: 'plc:P20',
+      supplyElementId: 'plc#output-supply',
+      controlPowerElementId: 'plc#ac-input',
+    });
+    expect(built.document.elements.some((element) => element.id === 'plc#P20:relay')).toBe(false);
+    expect(built.issues.map((entry) => entry.code)).toContain('PROFILE_REVIEW_CAPABILITY_INCOMPLETE');
+  });
+
   it('emits distinct endpoint codes for L/N, source paralleling, PE, SG and signal direction', async () => {
     const ac = device('ac', 'boundary:ac-supply');
     const dc = device('dc', 'boundary:dc-supply');
@@ -650,6 +673,11 @@ describe('V2 editor to v3 prewire circuit adapter', () => {
       pixelDimensions: { width: 100, height: 100 }, physicalDimensionsMm: { width: 1, height: 1, depth: 1 },
       prompt: 'test asset', generatedAt: '2026-07-09T00:00:00.000Z',
       approval: { status: 'approved', reviewer: 'test', approvedAt: '2026-07-10' }, geometryHash: 'B'.repeat(64),
+      terminalCenterCalibration: {
+        basis: 'manual-overlay', measuredAt: '2026-08-09T00:00:00.000Z', method: 'fixture',
+        referenceDocumentId: 'manual.pdf', referencePages: [1], requiredTerminalCount: 1, sampleCount: 1,
+        rmsErrorPx: 0, maxErrorPx: 0, thresholds: { rmsPx: 3, maxPx: 5 }, result: 'pass', note: 'fixture',
+      },
     }]);
     const geometry = {
       snapshots: [{
@@ -678,6 +706,11 @@ describe('V2 editor to v3 prewire circuit adapter', () => {
       pixelDimensions: { width: 100, height: 100 }, physicalDimensionsMm: { width: 1, height: 1, depth: 1 },
       prompt: 'test asset', generatedAt: '2026-07-09T00:00:00.000Z',
       approval: { status: 'approved', reviewer: 'test', approvedAt: '2026-07-10' }, geometryHash: 'B'.repeat(64),
+      terminalCenterCalibration: {
+        basis: 'manual-overlay', measuredAt: '2026-08-09T00:00:00.000Z', method: 'fixture',
+        referenceDocumentId: 'manual.pdf', referencePages: [1], requiredTerminalCount: 1, sampleCount: 1,
+        rmsErrorPx: 0, maxErrorPx: 0, thresholds: { rmsPx: 3, maxPx: 5 }, result: 'pass', note: 'fixture',
+      },
     }]);
     const geometry = {
       snapshots: [{

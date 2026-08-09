@@ -77,6 +77,8 @@ svg.canvas.pan:active{cursor:grabbing}
 .device-body{fill:#fdfdfd;stroke:#999;stroke-width:1;fill-opacity:0.96}
 .image-device .device-body{fill:transparent;fill-opacity:0;stroke:none}
 .image-device.sel .device-body{stroke:#f60;stroke-width:2.5;stroke-opacity:1}
+.device.asset-missing .device-body{fill:#f8fafc;fill-opacity:1;stroke:#dc2626;stroke-width:1.5;stroke-dasharray:5 3}
+.asset-missing-label{fill:#991b1b;stroke:#fff;stroke-width:2px;paint-order:stroke fill;font:800 9px 'Segoe UI','Malgun Gothic',sans-serif;text-anchor:middle;pointer-events:none}
 .device-sel-frame{fill:none;stroke:#f60;stroke-width:2.2;pointer-events:none}
 .device-resize-handle{fill:#ffcc33;stroke:#c60;stroke-width:1.4;cursor:nwse-resize;pointer-events:all;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 .device-resize-handle:hover{fill:#ffe066;stroke:#f60;stroke-width:2}
@@ -134,7 +136,14 @@ body.calib-mode .terminal,body.calib-mode .terminal-hit{cursor:grab}
 body.calib-mode #calib-hint{display:block}
 #calib-actions{display:none;gap:4px;align-items:center}
 body.calib-mode #calib-actions{display:inline-flex}
-.terminal-label{font-size:8px;pointer-events:none;user-select:none;fill:#333;font-family:'Consolas','Cascadia Mono',monospace;font-weight:500}
+.terminal-label{
+  font-size:8px;pointer-events:none;user-select:none;fill:#fff;
+  stroke:rgba(10,15,22,.96);stroke-width:2.25px;paint-order:stroke fill;
+  vector-effect:non-scaling-stroke;
+  font-family:'Segoe UI','Malgun Gothic','Cascadia Mono',sans-serif;font-weight:800;
+  letter-spacing:.05px
+}
+.terminal-label.connection-side{font-size:7.5px;letter-spacing:.15px}
 .term-pol{font-size:7px;pointer-events:none;user-select:none;font-weight:700}
 .terminal-pad{fill:#d8d3c8;stroke:#333;stroke-width:.7;pointer-events:none}
 .terminal-screw{fill:#f4f2ed;stroke:#333;stroke-width:.8;pointer-events:none}
@@ -232,8 +241,8 @@ body.sim-mode .device.coil-on{filter:drop-shadow(0 0 6px rgba(255,200,0,.6))}
 .qc-item.bad:before{content:'!';color:#d44}
 .qc-item.warn{color:#fc8}
 .qc-item.warn:before{content:'△';color:#fa0}
-.wire-tag{font-size:8px;font-family:Consolas,monospace;font-weight:700;fill:#111;pointer-events:none}
-.wire-tag-bg{fill:#fff8;stroke:#333;stroke-width:.6;pointer-events:none}
+.wire-tag{font-size:8px;font-family:'Segoe UI','Malgun Gothic','Cascadia Mono',sans-serif;font-weight:800;fill:#111827;pointer-events:none}
+.wire-tag-bg{fill:rgba(255,255,255,.94);stroke:#111827;stroke-width:.7;pointer-events:none}
 .netchip{display:inline-block;padding:1px 5px;border-radius:8px;color:#fff;font-size:10px;margin:1px;font-family:'Consolas',monospace}
 #legend{font-size:10px;color:#aaa;line-height:1.6}
 #legend span{display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:4px;border-radius:2px}
@@ -1644,6 +1653,8 @@ Object.assign(LIB,{
 /* 팔레트에서 새로 배치한 장비에만 명시적 v2 프로필 ID를 기록한다.
    구형 저장본의 type 문자열만으로는 검증 프로필에 승격하지 않는다. */
 for(const [type,profileId] of Object.entries({
+  'XBC-DN32UP':'ls-electric:xbc-dn32up',
+  'XBC-DP32UP':'ls-electric:xbc-dp32up',
   'XBC-DR32H':'ls-electric:xbc-dr32h',
   'EXP2-700':'ls-electric:exp2-0700d',
   'XBF-AH04A':'ls-electric:xbf-ah04a',
@@ -1694,6 +1705,159 @@ const ORTHO='assets/devices/orthographic/';
 const GPT='assets/devices/gpt/';
 const CODEX='assets/devices/codex/';
 const CODEX_EXACT=CODEX+'exact/';
+
+const XBC_U_IMAGE=CODEX_EXACT+'xbc-dn-dp32up-imagen-v1.png';
+const XBC_U_GEOMETRY_HASH='00ECCB7BB941BEB62EFCD24EF5BCB2DC4DFF66314A029E1BBC1187D37E1084CC';
+const XBC_U_TOP_IO_Y=[82,96.5,111,125.5,140,154.5,169,183.5];
+const XBC_U_BOTTOM_IO_Y=[210,224.5,239,253.5,268,282.5,297,311.5,326,340.5];
+const XBC_U_POSITION_Y=Array.from({length:20},(_,index)=>94+index*12.05);
+function xbcUPositionTerminals(){
+  const columns=[
+    {letter:'D',axis:'AX4',x:620},
+    {letter:'C',axis:'AX3',x:639},
+    {letter:'B',axis:'AX2',x:687},
+    {letter:'A',axis:'AX1',x:706}
+  ];
+  const signalByPin={18:'FP+',17:'FP-',16:'RP+',15:'RP-',14:'OV+',13:'OV-',12:'DOG',11:'EMG/STOP',10:'COM1',9:'DR',8:'DR COM',7:'SVON',6:'ARMRST',5:'SV/RST COM',4:'HOME +5V',3:'HOME COM'};
+  return columns.flatMap(column=>Array.from({length:20},(_,index)=>{
+    const pin=20-index;
+    const y=XBC_U_POSITION_Y[index];
+    let signal=signalByPin[pin]||'NC';
+    if(pin===20||pin===19){
+      if(column.letter==='A')signal=pin===20?'MPG A+':'MPG B+';
+      else if(column.letter==='B')signal=pin===20?'MPG A-':'MPG B-';
+      else signal='NC';
+    }
+    const isNc=signal==='NC';
+    const isOutput=['FP+','FP-','RP+','RP-','SVON','ARMRST'].includes(signal);
+    const isCommon=['COM1','DR COM','SV/RST COM','HOME COM'].includes(signal);
+    const pol=isNc?'NC':isOutput?'DO':isCommon?'COM':'DI';
+    return {
+      id:`${column.letter}${String(pin).padStart(2,'0')}`,
+      x:column.x,y,visual:{x:column.x,y},hit:{x:column.x,y,r:5.4},anchor:{x:column.x,y},
+      side:'R',label:`${pin}${column.letter} ${column.axis} ${signal}`,pol,r:2.55,forceLabel:false
+    };
+  }));
+}
+function xbcUPlcDefinition(model,outputMode){
+  const isSink=outputMode==='sinking-transistor';
+  const inputTop=Array.from({length:8},(_,index)=>({
+    id:`P0${index.toString(16).toUpperCase()}`,x:454,y:XBC_U_TOP_IO_Y[index],side:'T',
+    visual:{x:454,y:XBC_U_TOP_IO_Y[index]},hit:{x:454,y:XBC_U_TOP_IO_Y[index],r:7},
+    anchor:{x:454,y:XBC_U_TOP_IO_Y[index]},label:`P0${index.toString(16).toUpperCase()}`,pol:'DI',r:4.1,forceLabel:false
+  }));
+  const inputBottom=[...Array.from({length:8},(_,index)=>({
+    id:`P0${(index+8).toString(16).toUpperCase()}`,label:`P0${(index+8).toString(16).toUpperCase()}`,pol:'DI'
+  })),{id:'COMI-A',label:'COM',pol:'COM'},{id:'COMI-B',label:'COM',pol:'COM'}]
+    .map((terminal,index)=>({...terminal,x:454,y:XBC_U_BOTTOM_IO_Y[index],side:'B',
+      visual:{x:454,y:XBC_U_BOTTOM_IO_Y[index]},hit:{x:454,y:XBC_U_BOTTOM_IO_Y[index],r:7},
+      anchor:{x:454,y:XBC_U_BOTTOM_IO_Y[index]},r:4.1,forceLabel:false}));
+  const outputTop=Array.from({length:8},(_,index)=>({
+    id:`P2${index.toString(16).toUpperCase()}`,x:520,y:XBC_U_TOP_IO_Y[index],side:'T',
+    visual:{x:520,y:XBC_U_TOP_IO_Y[index]},hit:{x:520,y:XBC_U_TOP_IO_Y[index],r:7},
+    anchor:{x:520,y:XBC_U_TOP_IO_Y[index]},label:`P2${index.toString(16).toUpperCase()}`,pol:'DO',r:4.1,forceLabel:false
+  }));
+  const outputTail=isSink
+    ? [{id:'VOUT',label:'DC12/24V',pol:'DC+'},{id:'COMO',label:'COM',pol:'DC-'}]
+    : [{id:'COMO',label:'COM',pol:'DC+'},{id:'0VOUT',label:'0V',pol:'DC-'}];
+  const outputBottom=[...Array.from({length:8},(_,index)=>({
+    id:`P2${(index+8).toString(16).toUpperCase()}`,label:`P2${(index+8).toString(16).toUpperCase()}`,pol:'DO'
+  })),...outputTail].map((terminal,index)=>({...terminal,x:520,y:XBC_U_BOTTOM_IO_Y[index],side:'B',
+    visual:{x:520,y:XBC_U_BOTTOM_IO_Y[index]},hit:{x:520,y:XBC_U_BOTTOM_IO_Y[index],r:7},
+    anchor:{x:520,y:XBC_U_BOTTOM_IO_Y[index]},r:4.1,forceLabel:false}));
+  const powerXs=[84,111,138,165,192];
+  const power=[
+    {id:'N',label:'N',pol:'AC-N'},{id:'L',label:'L',pol:'AC-L'},{id:'PE',label:'PE',pol:'PE'},
+    {id:'24V',label:'24V',pol:'DC+'},{id:'24G',label:'24G',pol:'DC-'}
+  ].map((terminal,index)=>({...terminal,x:powerXs[index],y:311,side:'B',visual:{x:powerXs[index],y:311},
+    hit:{x:powerXs[index],y:311,r:10},anchor:{x:powerXs[index],y:311},r:6.4,forceLabel:false}));
+  const cnet=[
+    {id:'485-',label:'1 485-',pol:'COMM'},{id:'485+',label:'2 485+',pol:'COMM'},
+    {id:'SG',label:'3 SG',pol:'COMM'},{id:'TX',label:'4 TX',pol:'COMM'},{id:'RX',label:'5 RX',pol:'COMM'}
+  ].map((terminal,index)=>({...terminal,x:270+index*15,y:342,side:'B',visual:{x:270+index*15,y:342},
+    hit:{x:270+index*15,y:342,r:7},anchor:{x:270+index*15,y:342},r:4,forceLabel:false}));
+  return {
+    cat:'plc',label:model,
+    sub:`LS XGB U · DI16 · ${isSink?'NPN 싱크':'PNP 소스'} TR DO16 · 4축 위치결정`,
+    w:740,h:360,color:isSink?'#1d4ed8':'#7c3aed',icon:'plc',image:XBC_U_IMAGE,
+    imageBox:{x:0,y:0,w:740,h:360},imageHasLabels:true,overlaySkin:'xbc-u-manual',
+    exactProfile:true,defaultConfiguration:{orderCode:model},workshopProfileId:`ls-electric:${model.toLowerCase()}`,
+    assetId:'codex:xbc-dn-dp32up-imagen-v1',geometryHash:XBC_U_GEOMETRY_HASH,
+    assetApproval:'pending',manualOverlay:true,
+    outputMode,terminals:[...power,...cnet,...inputTop,...inputBottom,...outputTop,...outputBottom,...xbcUPositionTerminals()],
+    netHints:[['COMI-A','COMI-B']],
+    notes:`공식 XBC-U V1.2/V4.5 기준. ${isSink?'DN=NPN 싱크: +24V→부하→P2x, COMO→0V':'DP=PNP 소스: COMO→+24V, P2x→부하+→0VOUT'}; 위치결정 40핀×2는 AX1~AX4 개별 핀으로 제공.`
+  };
+}
+Object.assign(LIB,{
+  'XBC-DN32UP':xbcUPlcDefinition('XBC-DN32UP','sinking-transistor'),
+  'XBC-DP32UP':xbcUPlcDefinition('XBC-DP32UP','sourcing-transistor')
+});
+
+const PD02_OVERLAY_ROWS=[
+  ['B20','MPG A+','input'],['A20','MPG A-','input'],['B19','MPG B+','input'],['A19','MPG B-','input'],
+  ['B18','Y FP+','output'],['A18','X FP+','output'],['B17','Y FP-','output'],['A17','X FP-','output'],
+  ['B16','Y RP+','output'],['A16','X RP+','output'],['B15','Y RP-','output'],['A15','X RP-','output'],
+  ['B14','Y OV+','input'],['A14','X OV+','input'],['B13','Y OV-','input'],['A13','X OV-','input'],
+  ['B12','Y DOG','input'],['A12','X DOG','input'],['B11','NC','not-connected'],['A11','NC','not-connected'],
+  ['B10','NC','not-connected'],['A10','NC','not-connected'],['B09','Y COM','common'],['A09','X COM','common'],
+  ['B08','NC','not-connected'],['A08','NC','not-connected'],['B07','Y INP','input'],['A07','X INP','input'],
+  ['B06','Y INP COM','common'],['A06','X INP COM','common'],['B05','Y CLR','output'],['A05','X CLR','output'],
+  ['B04','Y CLR COM','common'],['A04','X CLR COM','common'],['B03','Y HOME +5V','input'],['A03','X HOME +5V','input'],
+  ['B02','Y HOME COM','common'],['A02','X HOME COM','common'],['B01','NC','not-connected'],['A01','NC','not-connected']
+];
+const pd02OverlayTerminals=PD02_OVERLAY_ROWS.map(([id,label,role])=>{
+  const pin=Number(id.slice(1));
+  const isB=id.startsWith('B');
+  const y=170+(20-pin)*16.5;
+  return {
+    id,x:isB?145:165,y,side:isB?'L':'R',label:`${id} ${label}`,
+    pol:role==='not-connected'?'NC':role==='output'?'DO':role==='input'?'DI':'COM',
+    role,
+    domain:role==='not-connected'?'floating':'signal',
+    potential:role==='not-connected'?'floating':'signal',
+    polarity:role==='not-connected'?'none':role==='common'?'signal-return':'signal-positive',
+    forceLabel:true,hit:{x:isB?145:165,y,r:6},anchor:{x:isB?145:165,y}
+  };
+});
+
+Object.assign(LIB,{
+  'XBL-C41A':{
+    cat:'plc',label:'XBL-C41A',sub:'Cnet RS-422/485 · 5핀 · 공식 매뉴얼 프로필',
+    w:230,h:500,color:'#e5e7eb',image:CODEX_EXACT+'xbl-c41a-imagen-v1.png',
+    imageBox:{x:0,y:0,w:230,h:500},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false,
+    exactProfile:true,workshopProfileId:'ls-electric:xbl-c41a',
+    defaultConfiguration:{
+      orderCode:'XBL-C41A',rackSlot:null,
+      rs485:{port:'CNET',protocol:null,baudRate:null,dataBits:null,parity:null,stopBits:null,stationId:null,mode:'2WIRE',termination:null}
+    },
+    terminals:[
+      {id:'TX+',x:115,y:185,side:'R',label:'1 TX+',pol:'COMM',forceLabel:true},
+      {id:'TX-',x:115,y:225,side:'R',label:'2 TX-',pol:'COMM',forceLabel:true},
+      {id:'RX+',x:115,y:265,side:'R',label:'3 RX+',pol:'COMM',forceLabel:true},
+      {id:'RX-',x:115,y:305,side:'R',label:'4 RX-',pol:'COMM',forceLabel:true},
+      {id:'SG',x:115,y:345,side:'R',label:'5 SG',pol:'COMM',forceLabel:true}
+    ],
+    assetId:'codex:xbl-c41a-imagen-v1',
+    geometryHash:'922EC7D324760AEEF381FC6EE3EA4FDDB281E00CB02F6ED87316C15ABB31B528',
+    assetApproval:'pending',manualOverlay:true,
+    rack:{role:'module',family:'LS-XGB',moduleClass:'communication',occupiedPoints:64},
+    notes:'PDF 195~196쪽. 2선식 RS485는 TX+/RX+와 TX-/RX-를 각각 실제 점퍼로 연결해야 한다.'
+  },
+  'XBF-PD02A':{
+    cat:'motion',label:'XBF-PD02A',sub:'2축 라인드라이브 위치결정 · 40핀 · 공식 매뉴얼 프로필',
+    w:310,h:620,color:'#e5e7eb',image:CODEX_EXACT+'xbf-pd02a-imagen-v1.png',
+    imageBox:{x:0,y:0,w:310,h:620},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false,
+    exactProfile:true,workshopProfileId:'ls-electric:xbf-pd02a',
+    defaultConfiguration:{orderCode:'XBF-PD02A',rackSlot:null},
+    terminals:pd02OverlayTerminals,
+    assetId:'codex:xbf-pd02a-imagen-v1',
+    geometryHash:'2A1ECF074090E2BE152D1E5CB22392ABF90F4A85ED456DDDB41FADF485EE3041',
+    assetApproval:'pending',manualOverlay:true,
+    rack:{role:'module',family:'LS-XGB',moduleClass:'high-speed',occupiedPoints:64},
+    notes:'PDF 29~30쪽의 A01~A20/B01~B20 핀을 그대로 사용한다. NC 8핀은 결선 금지다.'
+  }
+});
 
 /* 정확 품번 신규 자산. 기존 MC/EOCR/TB 이미지는 교체하지 않고 별도 타입으로만 제공한다. */
 Object.assign(LIB['MC-22B-DC24'],{
@@ -3195,8 +3359,8 @@ function terminalHitRadius(def,t){
   return t.r || (def.terminals.length>32 ? 7.2 : 8.5);
 }
 /** 교육용 기본 등록 타입(초기 스냅샷). 보정 시 다른 장비 타입도 자동 추가됨 */
-const TERMINAL_DATA_DEVICE_TYPES=['XBC-DR32H','EXP2-700','MDR-100','XBF-AH04A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
-const REVIEW_PROFILE_TERMINAL_TYPES=new Set(['XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI']);
+const TERMINAL_DATA_DEVICE_TYPES=['XBC-DN32UP','XBC-DP32UP','XBC-DR32H','EXP2-700','XBL-C41A','MDR-100','XBF-AH04A','XBF-PD02A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
+const REVIEW_PROFILE_TERMINAL_TYPES=new Set(['XBC-DN32UP','XBC-DP32UP','XBC-DR32H','EXP2-700','XBL-C41A','XBF-AH04A','XBF-PD02A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI']);
 const LSK_CALIB='wiring-workshop-terminal-calib-v1';
 function cloneTerminalData(value){
   return value==null ? value : JSON.parse(JSON.stringify(value));
@@ -4550,6 +4714,8 @@ function markDinCenterMount(type, extra={}){
   });
 }
 markDinCenterMount('XBC-DR32H',{tags:['din','plc'],minClearance:{left:24,right:24,top:24,bottom:32}});
+markDinCenterMount('XBC-DN32UP',{tags:['din','plc'],minClearance:{left:24,right:24,top:24,bottom:32}});
+markDinCenterMount('XBC-DP32UP',{tags:['din','plc'],minClearance:{left:24,right:24,top:24,bottom:32}});
 markDinCenterMount('MDR-100',{tags:['din','power']});
 markDinCenterMount('MC-22B-DC24',{tags:['din','power','contactor']});
 markDinCenterMount('MY2N',{tags:['din','relay','socket']});
@@ -5303,7 +5469,10 @@ function nearestDuctEntry(p){
       if(dist<bestDist){bestDist=dist;best={duct:d,point:pt,axis:'v'};}
     }
   }
-  return bestDist<400?best:null;
+  // Door-mounted operators can sit beyond the cabinet-to-door gap. Keep them
+  // eligible for the right vertical duct instead of falling back to a broken
+  // two-segment route that appears to drill through equipment.
+  return bestDist<650?best:null;
 }
 function findDuctPath(entry1, entry2){
   if(!entry1||!entry2)return [];
@@ -5497,12 +5666,12 @@ function drawMountedCableAssembly(wire, pa, pb, fromDef, toDef, stroke){
     elWire.appendChild(g);
   }
 }
-function routePanelWire(p1,p2,wire,excludeIds,laneOffset=0){
+function routePanelWire(p1,p2,wire,excludeIds,laneOffset=0,routeContext=null){
   const ids=excludeIds||[wire?.from?.dev,wire?.to?.dev].filter(Boolean);
   const offA=28+cableBoostForDev(wire?.from?.dev);
   const offB=28+cableBoostForDev(wire?.to?.dev);
   // 항상 장애물 회피 직각 라우팅 우선 (덕트는 routeOrtho 내부 후보로 포함)
-  return routeOrtho(p1,p2,offA,offB,wire?.waypoints,ids,laneOffset);
+  return routeOrtho(p1,p2,offA,offB,wire?.waypoints,ids,laneOffset,routeContext);
 }
 
 function serializeState(){
@@ -6946,7 +7115,7 @@ function renderPendingWireGhost(pt,exactTargetRef=null){
     : snapWireEndPoint(pt,descriptor.ref);
   const waypoints=S.pending?.waypoints||[];
   const path=(S.routerOrtho||waypoints.length)
-    ? routeOrtho(startPoint,snap.point,20,5,waypoints,[descriptor.ref.dev,snap.target?.dev||null])
+    ? routeOrtho(startPoint,snap.point,20,5,waypoints,[descriptor.ref.dev,snap.target?.dev||null],0,lastRenderedRouteContext)
     : routeCurve(startPoint,snap.point);
   // 끝점 X 표시는 수평/수직 직선에서도 실제 스냅 위치를 분명히 보이고,
   // SVG 경로의 가시 영역이 0px로 계산되는 것을 방지한다.
@@ -7185,6 +7354,204 @@ function drawExp2ManualOverlay(g,def,scale=1){
   return true;
 }
 
+function drawXbcUManualOverlay(g,def,scale=1){
+  const addText=(x,y,value,size=7,anchor='middle',fill='#e5e7eb',weight='700')=>{
+    const node=document.createElementNS(SVGNS,'text');
+    node.setAttribute('x',x*scale);node.setAttribute('y',y*scale);
+    node.setAttribute('font-size',size*scale);node.setAttribute('font-weight',weight);
+    node.setAttribute('text-anchor',anchor);node.setAttribute('fill',fill);
+    node.setAttribute('font-family',"'Segoe UI','Malgun Gothic','Cascadia Mono',sans-serif");
+    node.setAttribute('pointer-events','none');node.textContent=value;g.appendChild(node);
+  };
+  const addRect=(x,y,w,h,fill,stroke='#111827',rx=1)=>{
+    const node=document.createElementNS(SVGNS,'rect');
+    node.setAttribute('x',x*scale);node.setAttribute('y',y*scale);
+    node.setAttribute('width',w*scale);node.setAttribute('height',h*scale);
+    node.setAttribute('rx',rx*scale);node.setAttribute('fill',fill);
+    node.setAttribute('stroke',stroke);node.setAttribute('stroke-width',Math.max(.7,scale*.7));
+    node.setAttribute('pointer-events','none');g.appendChild(node);return node;
+  };
+  const addCircle=(x,y,r,fill,stroke='#111827',manualTerminalId=null)=>{
+    const node=document.createElementNS(SVGNS,'circle');
+    node.setAttribute('cx',x*scale);node.setAttribute('cy',y*scale);node.setAttribute('r',r*scale);
+    node.setAttribute('fill',fill);node.setAttribute('stroke',stroke);
+    node.setAttribute('stroke-width',Math.max(.6,scale*.6));node.setAttribute('pointer-events','none');
+    if(manualTerminalId)node.dataset.manualTerminal=manualTerminalId;
+    g.appendChild(node);return node;
+  };
+
+  // The generated raster is an appearance-only chassis skin. Its connector
+  // cavity counts are not trusted. Mask those regions and redraw the exact
+  // manual-backed 8+10 digital I/O, 5-point power/Cnet and 2 x 40-pin
+  // positioning connectors so the visible centres and clickable anchors have
+  // a strict 1:1 relationship.
+  const addIoConnector=(x,ys,terminalIds)=>{
+    const top=ys[0]-8,bottom=ys[ys.length-1]+8;
+    addRect(x-15,top,30,bottom-top,'#79bd87','#214a2c',2);
+    ys.forEach((y,index)=>{
+      addRect(x-9.2,y-5.2,18.4,10.4,'#111827','#15331e',1.2);
+      addCircle(x,y,1.25,'#e8bd43','#5b4611',terminalIds[index]);
+    });
+  };
+  const addPositionConnector=(leftX,rightX,leftColumn,rightColumn)=>{
+    const top=XBC_U_POSITION_Y[0]-8;
+    const bottom=XBC_U_POSITION_Y[XBC_U_POSITION_Y.length-1]+8;
+    addRect(leftX-10,top,rightX-leftX+20,bottom-top,'#111318','#020617',2);
+    XBC_U_POSITION_Y.forEach((y,index)=>{
+      const pin=String(20-index).padStart(2,'0');
+      addCircle(leftX,y,1.45,'#d8aa35','#4b3505',`${leftColumn}${pin}`);
+      addCircle(rightX,y,1.45,'#d8aa35','#4b3505',`${rightColumn}${pin}`);
+    });
+  };
+
+  // Opaque masks intentionally cover untrusted generated holes. The outer
+  // enclosure remains untouched and the source PNG is preserved on disk.
+  addRect(430,66,128,286,'#555b64','#3f4650',1);
+  const inputTopIds=Array.from({length:8},(_,index)=>`P0${index.toString(16).toUpperCase()}`);
+  const inputBottomIds=[...Array.from({length:8},(_,index)=>`P0${(index+8).toString(16).toUpperCase()}`),'COMI-A','COMI-B'];
+  const outputTopIds=Array.from({length:8},(_,index)=>`P2${index.toString(16).toUpperCase()}`);
+  const outputBottomIds=[...Array.from({length:8},(_,index)=>`P2${(index+8).toString(16).toUpperCase()}`),
+    ...(def.outputMode==='sinking-transistor'?['VOUT','COMO']:['COMO','0VOUT'])];
+  addIoConnector(454,XBC_U_TOP_IO_Y,inputTopIds);
+  addIoConnector(454,XBC_U_BOTTOM_IO_Y,inputBottomIds);
+  addIoConnector(520,XBC_U_TOP_IO_Y,outputTopIds);
+  addIoConnector(520,XBC_U_BOTTOM_IO_Y,outputBottomIds);
+
+  addRect(594,66,132,286,'#4c515a','#363c45',1);
+  addPositionConnector(620,639,'D','C');
+  addPositionConnector(687,706,'B','A');
+
+  addRect(65,284,146,49,'#22262d','#111827',2);
+  [84,111,138,165,192].forEach((x,index)=>{
+    addRect(x-10,299,20,24,'#171a20','#020617',1.5);
+    addCircle(x,311,7.1,'#d8dde2','#111827',['N','L','PE','24V','24G'][index]);
+    const slot=document.createElementNS(SVGNS,'line');
+    slot.setAttribute('x1',(x-4.2)*scale);slot.setAttribute('x2',(x+4.2)*scale);
+    slot.setAttribute('y1',311*scale);slot.setAttribute('y2',311*scale);
+    slot.setAttribute('stroke','#4b5563');slot.setAttribute('stroke-width',1.4*scale);
+    slot.setAttribute('pointer-events','none');g.appendChild(slot);
+  });
+
+  addRect(258,329,84,24,'#24272d','#0f172a',2);
+  [270,285,300,315,330].forEach((x,index)=>{
+    addRect(x-5.2,336,10.4,12,'#0f172a','#020617',1);
+    addCircle(x,342,1.15,'#d8aa35','#4b3505',['485-','485+','SG','TX','RX'][index]);
+  });
+
+  addRect(104,32,28,10,'#d71920','#d71920',0);
+  addText(118,40,'XGB',7,'middle','#fff','800');
+  addText(104,55,def.label,8,'start','#111827','800');
+  addText(104,66,'LS ELECTRIC',5.3,'start','#475569','700');
+
+  // Manual front-view items 1, 2 and 5-8. These labels are SVG data,
+  // deliberately independent of the generated raster skin.
+  addRect(220,16,93,46,'#20242a','#111827',1);
+  [['PWR','#22c55e'],['RUN','#22c55e'],['ERR','#ef4444']].forEach(([label,color],index)=>{
+    addCircle(231,28+index*11,2.4,color,'#0f172a');
+    addText(238,30+index*11,label,5.2,'start','#f8fafc','700');
+  });
+  addText(273,29,'STATE',5.2,'middle','#f8fafc','700');
+  addCircle(268,39,2.1,'#22c55e','#0f172a');addText(273,41,'RD',4.4,'start','#f8fafc','700');
+  addCircle(268,50,2.1,'#f59e0b','#0f172a');addText(273,52,'WR',4.4,'start','#f8fafc','700');
+  addRect(225,70,98,78,'rgba(226,232,240,.88)','#475569',2);
+  addText(233,83,'MODE SW',5.2,'start','#111827','700');
+  addText(233,94,'SD CARD',5.2,'start','#111827','700');
+  addText(233,105,'USB',5.2,'start','#111827','700');
+  addRect(292,76,18,9,'#334155','#0f172a',1);
+  addRect(292,91,18,11,'#475569','#0f172a',1);
+  addRect(292,109,18,16,'#111827','#0f172a',1);
+  addText(347,231,'TX1',5.2,'start','#111827','800');
+  addText(347,297,'TX2',5.2,'start','#111827','800');
+  addText(487,55,'IN',8,'middle','#111827','800');
+  addText(553,55,'OUT',8,'middle','#111827','800');
+  addText(630,55,'AX4 / AX3',7,'middle','#e5e7eb','700');
+  addText(697,55,'AX2 / AX1',7,'middle','#e5e7eb','700');
+
+  const topLabels=Array.from({length:8},(_,index)=>index.toString(16).toUpperCase().padStart(2,'0'));
+  const bottomLabels=Array.from({length:8},(_,index)=>(index+8).toString(16).toUpperCase().padStart(2,'0'));
+  XBC_U_TOP_IO_Y.forEach((y,index)=>{
+    addText(442,y+2.5,topLabels[index],5.8,'end','#111827','800');
+    addText(532,y+2.5,topLabels[index],5.8,'start','#111827','800');
+  });
+  XBC_U_BOTTOM_IO_Y.slice(0,8).forEach((y,index)=>{
+    addText(442,y+2.5,bottomLabels[index],5.8,'end','#111827','800');
+    addText(532,y+2.5,bottomLabels[index],5.8,'start','#111827','800');
+  });
+  addText(442,XBC_U_BOTTOM_IO_Y[8]+2.5,'COM',5.4,'end','#111827','800');
+  addText(442,XBC_U_BOTTOM_IO_Y[9]+2.5,'COM',5.4,'end','#111827','800');
+  const outputTail=def.outputMode==='sinking-transistor'?['V+','COM']:['COM','0V'];
+  addText(532,XBC_U_BOTTOM_IO_Y[8]+2.5,outputTail[0],5.4,'start','#111827','800');
+  addText(532,XBC_U_BOTTOM_IO_Y[9]+2.5,outputTail[1],5.4,'start','#111827','800');
+
+  ['N','L','PE','24V','24G'].forEach((label,index)=>addText([84,111,138,165,192][index],292,label,6.4,'middle','#e5e7eb','800'));
+
+  ['485-','485+','SG','TX','RX'].forEach((label,index)=>{
+    addText(270+index*15,334,label,4.4,'middle','#e5e7eb','700');
+  });
+  addText(300,326,'CNET 1–5',5.4,'middle','#111827','800');
+
+  for(let index=0;index<20;index+=1){
+    const pin=20-index;
+    const y=XBC_U_POSITION_Y[index]+2;
+    if(pin%2===0||pin===1){
+      addText(607,y,String(pin),4.4,'end','#e5e7eb','700');
+      addText(719,y,String(pin),4.4,'start','#e5e7eb','700');
+    }
+  }
+  return true;
+}
+
+/** Browser-level pointer calibration used by the release gate at real zoom/DPI. */
+window.measureRenderedTerminalCenterRms=function(deviceId){
+  const targetId=deviceId||Object.keys(S.devices).find(id=>['XBC-DN32UP','XBC-DP32UP'].includes(S.devices[id]?.type));
+  if(!targetId)return {ok:false,reason:'XBC_U_DEVICE_NOT_FOUND',sampleCount:0,requiredTerminalCount:126};
+  const deviceGroup=elDev.querySelector(`.device[data-id="${CSS.escape(targetId)}"]`);
+  const terminalGroup=elTerm.querySelector(`g[data-id="${CSS.escape(targetId)}"]`);
+  if(!deviceGroup||!terminalGroup)return {ok:false,reason:'RENDER_GROUP_NOT_FOUND',sampleCount:0,requiredTerminalCount:126};
+  const referenceNodes=[...deviceGroup.querySelectorAll('[data-manual-terminal]')];
+  const observations=[];
+  const missing=[];
+  for(const referenceNode of referenceNodes){
+    const terminalId=referenceNode.dataset.manualTerminal;
+    const hit=terminalGroup.querySelector(`.terminal-hit[data-term="${CSS.escape(terminalId)}"]`);
+    if(!hit){missing.push(terminalId);continue;}
+    const referenceRect=referenceNode.getBoundingClientRect();
+    const hitRect=hit.getBoundingClientRect();
+    const reference={x:referenceRect.left+referenceRect.width/2,y:referenceRect.top+referenceRect.height/2};
+    const observed={x:hitRect.left+hitRect.width/2,y:hitRect.top+hitRect.height/2};
+    const errorPx=Math.hypot(observed.x-reference.x,observed.y-reference.y);
+    observations.push({terminalId,reference,observed,errorPx});
+  }
+  const squared=observations.reduce((sum,item)=>sum+item.errorPx**2,0);
+  const rmsErrorPx=observations.length?Math.sqrt(squared/observations.length):Infinity;
+  const worst=observations.reduce((current,item)=>!current||item.errorPx>current.errorPx?item:current,null);
+  const requiredTerminalCount=126;
+  const maxErrorPx=worst?.errorPx??Infinity;
+  return {
+    ok:referenceNodes.length===requiredTerminalCount&&observations.length===requiredTerminalCount&&missing.length===0&&rmsErrorPx<=3&&maxErrorPx<=5,
+    deviceId:targetId,referenceCount:referenceNodes.length,requiredTerminalCount,sampleCount:observations.length,
+    rmsErrorPx,maxErrorPx,worstTerminalId:worst?.terminalId??null,missing,thresholds:{rmsPx:3,maxPx:5},observations
+  };
+};
+window.getDeviceAssetAudit=function(){
+  const entries=Object.entries(LIB).map(([type,definition])=>({
+    type,label:definition.label||type,exactProfile:!!definition.exactProfile,
+    rendering:definition.image?'raster':(definition.skin||definition.icon?'svg':'missing'),
+    image:definition.image||null
+  }));
+  const runtimeMissing=[...(window.__missingDeviceAssets||new Set())];
+  return {
+    total:entries.length,
+    raster:entries.filter(entry=>entry.rendering==='raster').length,
+    svgFallback:entries.filter(entry=>entry.rendering==='svg').length,
+    missingDefinitions:entries.filter(entry=>entry.rendering==='missing'),
+    exactProfilesWithoutRaster:entries.filter(entry=>entry.exactProfile&&entry.rendering!=='raster'),
+    runtimeMissing,
+    ok:entries.every(entry=>entry.rendering!=='missing'&&(!entry.exactProfile||entry.rendering==='raster'))&&runtimeMissing.length===0,
+    entries
+  };
+};
+
 function drawDisabledTerminalSpots(group,def,scale=1){
   for(const correction of def.imageLabelCorrections||[]){
     if(correction.mask){
@@ -7281,8 +7648,26 @@ function renderDevices(){
       img.setAttribute('x',box.x*s); img.setAttribute('y',box.y*s);
       img.setAttribute('width',box.w*s); img.setAttribute('height',box.h*s);
       img.setAttribute('preserveAspectRatio',def.imagePreserveAspectRatio||'none');
+      img.addEventListener('error',()=>{
+        if(g.dataset.assetFallback==='1')return;
+        g.dataset.assetFallback='1';g.classList.add('asset-missing');
+        img.setAttribute('display','none');
+        body.setAttribute('fill','#f8fafc');body.setAttribute('fill-opacity','1');
+        const fallbackDef=s===1?def:{...def,w:sw,h:sh};
+        const fallbackGroup=document.createElementNS(SVGNS,'g');
+        fallbackGroup.setAttribute('class','asset-missing-fallback');g.appendChild(fallbackGroup);
+        drawRealisticFallbackSkin(fallbackGroup,fallbackDef,dev,dev.colorOverride||def.color||'#64748b');
+        drawTerminalHardware(fallbackGroup,fallbackDef);
+        const warning=document.createElementNS(SVGNS,'text');
+        warning.setAttribute('class','asset-missing-label');
+        warning.setAttribute('x',sw/2);warning.setAttribute('y',Math.max(16,sh-6));
+        warning.textContent='이미지 누락 · SVG 안전 대체';fallbackGroup.appendChild(warning);
+        window.__missingDeviceAssets=window.__missingDeviceAssets||new Set();
+        window.__missingDeviceAssets.add(def.image);
+      });
       g.appendChild(img);
       if(def.overlaySkin==='exp2-manual')drawExp2ManualOverlay(g,def,s);
+      if(def.overlaySkin==='xbc-u-manual')drawXbcUManualOverlay(g,def,s);
       drawDisabledTerminalSpots(g,def,s);
     } else {
     const drawDef=s===1?def:{...def,w:sw,h:sh};
@@ -7516,7 +7901,7 @@ function renderDevices(){
       // 플러그형은 기본 라벨 숨김(호버 툴팁만). forceLabel만 표시
       if(S.showLabels && (!def.imageHasLabels || t.forceLabel) && !(isPlug && !t.forceLabel)){
         const tl=document.createElementNS(SVGNS,'text');
-        tl.setAttribute('class','terminal-label');
+        tl.setAttribute('class','terminal-label'+(connectionPoint?' connection-side':''));
         let tx=visual.x,ty=visual.y,a='start';
         if(pose.side==='L'){tx+=8;ty+=3;}
         else if(pose.side==='R'){tx-=8;ty+=3;a='end';}
@@ -7526,7 +7911,7 @@ function renderDevices(){
         if(Number.isFinite(t.labelDy))ty+=t.labelDy;
         if(t.labelAnchor)a=t.labelAnchor;
         tl.setAttribute('x',tx); tl.setAttribute('y',ty); tl.setAttribute('text-anchor',a);
-        tl.textContent=terminalMarker;
+        tl.textContent=connectionPoint?`${terminalMarker}·${connectionPoint}`:terminalMarker;
         tg.appendChild(tl);
       }
       const terminalVisual=resolvedTerminalVisual(effectiveTerminal);
@@ -7593,6 +7978,28 @@ function exteriorExitPoint(p, devId, minDist=ROUTE_EXIT_PAD){
     else exit={x:p.x, y:Math.min(p.y-safeLeadOut, d.y-pad)};
   }
   return {x:exit.x, y:exit.y, side};
+}
+/** 같은 장비의 동일 면 단자 점퍼는 본체 바깥을 도는 연속 U자로 표시한다. */
+function sameDeviceJumperRoute(p1,p2,devId,laneOffset=0,occupiedSegments=[]){
+  const device=devId?S.devices[devId]:null;
+  const def=device?LIB[device.type]:null;
+  if(!device || !def || !p1 || !p2)return null;
+  const wh=deviceWH(device);
+  const lane=ROUTE_CHANNEL_MARGINS[0]+Math.abs(laneOffset||0);
+  const pad=ROUTE_DEVICE_PAD+(def.image?14:10)+lane;
+  const right=device.x+wh.w+pad,left=device.x-pad;
+  const top=device.y-pad,bottom=device.y+wh.h+pad;
+  // 동일 x/y 단자도 한쪽 리드를 lane만큼 벌려 선이 왕복 중첩되지 않게 한다.
+  const routes=[
+    [{x:p1.x,y:p1.y},{x:right,y:p1.y},{x:right,y:p2.y},{x:p2.x,y:p2.y}],
+    [{x:p1.x,y:p1.y},{x:left,y:p1.y},{x:left,y:p2.y},{x:p2.x,y:p2.y}],
+    [{x:p1.x,y:p1.y},{x:p1.x,y:top},{x:p2.x+lane,y:top},{x:p2.x+lane,y:p2.y},{x:p2.x,y:p2.y}],
+    [{x:p1.x,y:p1.y},{x:p1.x,y:bottom},{x:p2.x+lane,y:bottom},{x:p2.x+lane,y:p2.y},{x:p2.x,y:p2.y}]
+  ];
+  const otherObstacles=getObstacles([devId]);
+  const safe=routes.filter(route=>!pathHitsObstacles(route,otherObstacles,[]))
+    .sort((a,b)=>(routeConflictCost(a,occupiedSegments)+pathLen(a))-(routeConflictCost(b,occupiedSegments)+pathLen(b)));
+  return safe[0]||null;
 }
 function findDeviceAtPoint(p){
   for(const id in S.devices){
@@ -7663,6 +8070,144 @@ function pathLen(pts){
   for(let i=0;i<pts.length-1;i++)
     s+=Math.abs(pts[i].x-pts[i+1].x)+Math.abs(pts[i].y-pts[i+1].y);
   return s;
+}
+function routeSegmentsFromPoints(points,wireId=''){
+  const segments=[];
+  for(let index=0;index<(points?.length||0)-1;index++){
+    const a=points[index],b=points[index+1];
+    if(!a||!b || (Math.abs(a.x-b.x)<.25&&Math.abs(a.y-b.y)<.25))continue;
+    segments.push({x1:a.x,y1:a.y,x2:b.x,y2:b.y,wireId});
+  }
+  return segments;
+}
+function createRouteOccupancyIndex(cellSize=64){
+  return {cellSize,segments:[],buckets:new Map()};
+}
+function routeOccupancyBucketKeys(segment,index,padding=10){
+  const size=index.cellSize||64;
+  const minX=Math.floor((Math.min(segment.x1,segment.x2)-padding)/size);
+  const maxX=Math.floor((Math.max(segment.x1,segment.x2)+padding)/size);
+  const minY=Math.floor((Math.min(segment.y1,segment.y2)-padding)/size);
+  const maxY=Math.floor((Math.max(segment.y1,segment.y2)+padding)/size);
+  const keys=[];
+  for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++)keys.push(`${x}|${y}`);
+  return keys;
+}
+function addRouteOccupancySegment(index,segment){
+  const segmentIndex=index.segments.length;
+  index.segments.push(segment);
+  for(const key of routeOccupancyBucketKeys(segment,index,10)){
+    const bucket=index.buckets.get(key)||[];
+    bucket.push(segmentIndex);index.buckets.set(key,bucket);
+  }
+}
+function routeOccupancyCandidates(a,b,occupied){
+  if(Array.isArray(occupied))return occupied;
+  if(!occupied?.segments||!occupied?.buckets)return [];
+  const probe={x1:a.x,y1:a.y,x2:b.x,y2:b.y};
+  const indices=new Set();
+  for(const key of routeOccupancyBucketKeys(probe,occupied,10)){
+    for(const index of occupied.buckets.get(key)||[])indices.add(index);
+  }
+  return [...indices].map(index=>occupied.segments[index]);
+}
+function svgRoutePoints(pathData){
+  const points=[];
+  for(const match of String(pathData||'').matchAll(/[ML]\s*(-?(?:\d+\.?\d*|\.\d+))\s+(-?(?:\d+\.?\d*|\.\d+))/g)){
+    points.push({x:Number(match[1]),y:Number(match[2])});
+  }
+  return points;
+}
+function routeSegmentConflictCost(a,b,occupiedSegments=[]){
+  const horizontal=Math.abs(a.y-b.y)<.5;
+  const vertical=Math.abs(a.x-b.x)<.5;
+  if(!horizontal&&!vertical)return 50000;
+  const lo=(v1,v2)=>Math.min(v1,v2),hi=(v1,v2)=>Math.max(v1,v2);
+  let cost=0;
+  for(const segment of routeOccupancyCandidates(a,b,occupiedSegments)){
+    const otherHorizontal=Math.abs(segment.y1-segment.y2)<.5;
+    const otherVertical=Math.abs(segment.x1-segment.x2)<.5;
+    if(horizontal&&otherHorizontal){
+      const overlap=Math.max(0,Math.min(hi(a.x,b.x),hi(segment.x1,segment.x2))-Math.max(lo(a.x,b.x),lo(segment.x1,segment.x2)));
+      if(overlap<=.5)continue;
+      const distance=Math.abs(a.y-segment.y1);
+      if(distance<.5)cost+=overlap*34+900;
+      else if(distance<10)cost+=overlap*(10-distance)*1.8;
+    }else if(vertical&&otherVertical){
+      const overlap=Math.max(0,Math.min(hi(a.y,b.y),hi(segment.y1,segment.y2))-Math.max(lo(a.y,b.y),lo(segment.y1,segment.y2)));
+      if(overlap<=.5)continue;
+      const distance=Math.abs(a.x-segment.x1);
+      if(distance<.5)cost+=overlap*34+900;
+      else if(distance<10)cost+=overlap*(10-distance)*1.8;
+    }else if(horizontal&&otherVertical){
+      const crosses=segment.x1>lo(a.x,b.x)+.5&&segment.x1<hi(a.x,b.x)-.5&&
+        a.y>lo(segment.y1,segment.y2)+.5&&a.y<hi(segment.y1,segment.y2)-.5;
+      if(crosses)cost+=650;
+    }else if(vertical&&otherHorizontal){
+      const crosses=a.x>lo(segment.x1,segment.x2)+.5&&a.x<hi(segment.x1,segment.x2)-.5&&
+        segment.y1>lo(a.y,b.y)+.5&&segment.y1<hi(a.y,b.y)-.5;
+      if(crosses)cost+=650;
+    }
+  }
+  return cost;
+}
+function routeConflictCost(points,occupiedSegments=[]){
+  let cost=0;
+  for(let index=0;index<(points?.length||0)-1;index++){
+    cost+=routeSegmentConflictCost(points[index],points[index+1],occupiedSegments);
+  }
+  return cost;
+}
+function routeSegmentOverlapLength(a,b,occupiedSegments=[]){
+  const horizontal=Math.abs(a.y-b.y)<.5;
+  const vertical=Math.abs(a.x-b.x)<.5;
+  if(!horizontal&&!vertical)return 0;
+  let total=0;
+  for(const segment of routeOccupancyCandidates(a,b,occupiedSegments)){
+    if(horizontal&&Math.abs(segment.y1-segment.y2)<.5&&Math.abs(a.y-segment.y1)<.5){
+      total+=Math.max(0,Math.min(Math.max(a.x,b.x),Math.max(segment.x1,segment.x2))-
+        Math.max(Math.min(a.x,b.x),Math.min(segment.x1,segment.x2)));
+    }else if(vertical&&Math.abs(segment.x1-segment.x2)<.5&&Math.abs(a.x-segment.x1)<.5){
+      total+=Math.max(0,Math.min(Math.max(a.y,b.y),Math.max(segment.y1,segment.y2))-
+        Math.max(Math.min(a.y,b.y),Math.min(segment.y1,segment.y2)));
+    }
+  }
+  return total;
+}
+/** 이미 그린 심선과 같은 직선을 공유하면 짧은 직각 우회로를 삽입한다. */
+function separateRouteOverlaps(points,obs,endpointIds,occupiedSegments=[]){
+  let current=simplifyOrthoPoints(points||[]);
+  if(current.length<3)return current;
+  for(let repair=0;repair<4;repair++){
+    let target=-1,targetOverlap=.5;
+    // 첫/끝 스텁은 실제 단자 중심에 붙어야 하므로 내부 간선만 분리한다.
+    for(let index=1;index<current.length-2;index++){
+      const overlap=routeSegmentOverlapLength(current[index],current[index+1],occupiedSegments);
+      if(overlap>targetOverlap){target=index;targetOverlap=overlap;}
+    }
+    if(target<0)break;
+    const a=current[target],b=current[target+1];
+    const horizontal=Math.abs(a.y-b.y)<.5;
+    let best=current,bestConflict=routeConflictCost(current,occupiedSegments);
+    for(const delta of [4,-4,8,-8,12,-12,16,-16]){
+      const shiftedA=horizontal?{x:a.x,y:a.y+delta}:{x:a.x+delta,y:a.y};
+      const shiftedB=horizontal?{x:b.x,y:b.y+delta}:{x:b.x+delta,y:b.y};
+      const candidate=simplifyOrthoPoints([
+        ...current.slice(0,target+1),shiftedA,shiftedB,...current.slice(target+1)
+      ]);
+      if(pathHitsObstacles(candidate,obs,endpointIds))continue;
+      const conflict=routeConflictCost(candidate,occupiedSegments);
+      if(conflict<bestConflict){best=candidate;bestConflict=conflict;}
+    }
+    if(best===current)break;
+    current=best;
+  }
+  return current;
+}
+function rememberWireRoute(pathData,wireId,occupiedSegments){
+  const segments=routeSegmentsFromPoints(svgRoutePoints(pathData),wireId);
+  if(Array.isArray(occupiedSegments))occupiedSegments.push(...segments);
+  else for(const segment of segments)addRouteOccupancySegment(occupiedSegments,segment);
 }
 function simplifyOrthoPoints(pts){
   if(!pts||pts.length<=2)return pts||[];
@@ -7736,7 +8281,7 @@ function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs,laneOffset=0){
   if(!isFinite(topY))return [];
   const routes=[];
   for(const baseMargin of [28, 48, 80, 120, 160]){
-    const margin=baseMargin+laneOffset;
+    const margin=baseMargin+Math.abs(laneOffset);
     const up=topY-margin, dn=botY+margin, lf=leftX-margin, rt=rightX+margin;
     routes.push([{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:up},{x:bx,y:up},{x:bx,y:by},{x:p2.x,y:p2.y}]);
     routes.push([{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:dn},{x:bx,y:dn},{x:bx,y:by},{x:p2.x,y:p2.y}]);
@@ -7751,7 +8296,7 @@ function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs,laneOffset=0){
   const midA={x:ax,y:ay}, midB={x:bx,y:by};
   for(const ob of obs){
     for(const baseMargin of [20, 36, 56]){
-      const m=baseMargin+laneOffset;
+      const m=baseMargin+Math.abs(laneOffset);
       for(const skirt of skirtRoutesAroundBox(midA, midB, ob, m)){
         routes.push([{x:p1.x,y:p1.y}, ...skirt, {x:p2.x,y:p2.y}]);
       }
@@ -7763,7 +8308,7 @@ function detourAroundObstacles(p1,p2,ax,ay,bx,by,obs,laneOffset=0){
  * 채널 그래프 직교 A* — 장애물 가장자리 라인으로 우회.
  * start/end 는 이미 장비 밖 탈출점.
  */
-function routeOrthoChannel(start, end, obs, laneOffset=0){
+function routeOrthoChannel(start, end, obs, laneOffset=0,occupiedSegments=[]){
   if(!start||!end)return null;
   if(!obs.length){
     // 장애물 없으면 단순 1-엘보
@@ -7781,7 +8326,7 @@ function routeOrthoChannel(start, end, obs, laneOffset=0){
     minX=Math.min(minX,ob.x1); maxX=Math.max(maxX,ob.x2);
     minY=Math.min(minY,ob.y1); maxY=Math.max(maxY,ob.y2);
     for(const baseMargin of ROUTE_CHANNEL_MARGINS){
-      const m=baseMargin+laneOffset;
+      const m=baseMargin+Math.abs(laneOffset);
       xs.add(ob.x1-m); xs.add(ob.x2+m);
       ys.add(ob.y1-m); ys.add(ob.y2+m);
     }
@@ -7808,7 +8353,7 @@ function routeOrthoChannel(start, end, obs, laneOffset=0){
     const xs2=new Set([start.x,end.x,minX-hullPad,maxX+hullPad]);
     const ys2=new Set([start.y,end.y,minY-hullPad,maxY+hullPad]);
     for(const ob of obs){
-      const margin=28+laneOffset;
+      const margin=28+Math.abs(laneOffset);
       xs2.add(ob.x1-margin); xs2.add(ob.x2+margin);
       ys2.add(ob.y1-margin); ys2.add(ob.y2+margin);
     }
@@ -7883,16 +8428,21 @@ function routeOrthoChannel(start, end, obs, laneOffset=0){
     const xk=Math.round(n.x*2)/2, yk=Math.round(n.y*2)/2;
     const col=byX.get(xk)||[];
     const row=byY.get(yk)||[];
-    // 열에서 위/아래 인접 후보들 — 바로 옆만 보면 중간 장애물에 막힌 채 끊길 수 있어
-    // 같은 채널의 모든 노드 중 세그먼트가 자유인 것 연결 (노드 수 제한이므로 OK)
-    for(const j of col){
-      if(j===i)continue;
-      if(segFree(n, nodes[j]))out.push(j);
-    }
-    for(const j of row){
-      if(j===i)continue;
-      if(segFree(n, nodes[j]))out.push(j);
-    }
+    // 각 방향의 가장 가까운 자유 노드만 연결한다. 이전 구현은 같은 행/열의
+    // 모든 노드를 매 확장마다 훑어 와이어 수가 늘면 급격히 느려졌다.
+    const scanAxis=(axis)=>{
+      const position=axis.indexOf(i);
+      if(position<0)return;
+      for(const direction of [-1,1]){
+        for(let cursor=position+direction;cursor>=0&&cursor<axis.length;cursor+=direction){
+          const candidate=axis[cursor];
+          if(!segFree(n,nodes[candidate]))break;
+          out.push(candidate);
+          break;
+        }
+      }
+    };
+    scanAxis(col);scanAxis(row);
     return out;
   };
 
@@ -7936,7 +8486,7 @@ function routeOrthoChannel(start, end, obs, laneOffset=0){
     for(const nb of neighbors(cur)){
       if(closed[nb])continue;
       const step=Math.abs(nodes[cur].x-nodes[nb].x)+Math.abs(nodes[cur].y-nodes[nb].y);
-      const tg=gScore[cur]+step;
+      const tg=gScore[cur]+step+routeSegmentConflictCost(nodes[cur],nodes[nb],occupiedSegments);
       if(tg>=gScore[nb])continue;
       came[nb]=cur;
       gScore[nb]=tg;
@@ -7946,21 +8496,23 @@ function routeOrthoChannel(start, end, obs, laneOffset=0){
   }
   return null;
 }
-function pickSafeRoute(candidates, obs, endpointIds){
+function pickSafeRoute(candidates, obs, endpointIds,occupiedSegments=[]){
   const scored=[];
   for(const pts0 of candidates){
     if(!pts0||pts0.length<2)continue;
     const clean=forceOrthoChain(pts0, obs, endpointIds);
     const hits=pathHitsObstacles(clean, obs, endpointIds);
     const hitN=hits?pathHitCount(clean, obs, endpointIds):0;
-    scored.push({pts:clean, hits, hitN, len:pathLen(clean)});
+    const bends=Math.max(0,clean.length-2);
+    const conflict=routeConflictCost(clean,occupiedSegments);
+    scored.push({pts:clean, hits, hitN, len:pathLen(clean), conflict, bends});
   }
-  const safe=scored.filter(s=>!s.hits).sort((a,b)=>a.len-b.len);
+  const safe=scored.filter(s=>!s.hits).sort((a,b)=>(a.len+a.bends*12+a.conflict)-(b.len+b.bends*12+b.conflict));
   if(safe.length)return safe[0].pts;
   // 안전 경로 없으면 null — 호출측에서 채널 A* 시도
   return null;
 }
-function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=0){
+function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=0,routeContext=null){
   // 겹친 장비 위 단자라도 실제 와이어의 명시적 끝점 장비를 우선한다.
   const devA=excludeIds?.[0] || findDeviceAtPoint(p1) || null;
   const devB=excludeIds?.[1] || findDeviceAtPoint(p2) || null;
@@ -7968,16 +8520,30 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
   // 장비 밖으로 충분히 탈출한 뒤 라우팅
   const exitA=exteriorExitPoint(p1, devA, Math.max(offsetA, ROUTE_EXIT_PAD));
   const exitB=exteriorExitPoint(p2, devB, Math.max(offsetB, ROUTE_EXIT_PAD));
-  const ax=exitA.x, ay=exitA.y, bx=exitB.x, by=exitB.y;
+  const fanPoint=(exit,side,offset)=>{
+    const spread=Math.abs(offset||0);
+    if(!spread)return {x:exit.x,y:exit.y};
+    // 단자 면의 바깥 방향으로 리드아웃 길이를 늘려 각 심선의 주 간선을
+    // 서로 다른 x/y 채널에 놓는다. 이전 방식처럼 면과 평행하게 이동하면
+    // 단순화 과정에서 그 점이 사라져 여러 와이어가 같은 직선을 공유했다.
+    if(side==='L')return {x:exit.x-spread,y:exit.y};
+    if(side==='R')return {x:exit.x+spread,y:exit.y};
+    if(side==='T')return {x:exit.x,y:exit.y-spread};
+    return {x:exit.x,y:exit.y+spread};
+  };
+  const fanA=fanPoint(exitA,p1.side,laneOffset);
+  const fanB=fanPoint(exitB,p2.side,laneOffset);
+  const ax=fanA.x, ay=fanA.y, bx=fanB.x, by=fanB.y;
 
   // 모든 장비를 장애물로 (끝점 포함 — 중간 경로가 본체를 가로지르지 않게)
-  const obs=getObstacles([], endpointIds.map(id=>({id})).filter(e=>e.id));
+  const obs=routeContext?.obstacles||getObstacles([], endpointIds.map(id=>({id})).filter(e=>e.id));
+  const occupiedSegments=routeContext?.occupiedSegments||[];
 
   const ptsToSvg=(pts)=>pts.map((p,i)=>(i===0?'M':'L')+` ${p.x} ${p.y}`).join(' ');
   const safeChannel=(offset)=>{
-    const mid=routeOrthoChannel({x:ax,y:ay}, {x:bx,y:by}, obs, offset);
+    const mid=routeOrthoChannel({x:ax,y:ay}, {x:bx,y:by}, obs, offset,occupiedSegments);
     if(!mid || mid.length<2)return null;
-    const clean=forceOrthoChain([{x:p1.x,y:p1.y}, ...mid, {x:p2.x,y:p2.y}], obs, endpointIds);
+    const clean=forceOrthoChain([{x:p1.x,y:p1.y},{x:exitA.x,y:exitA.y}, ...mid, {x:exitB.x,y:exitB.y},{x:p2.x,y:p2.y}], obs, endpointIds);
     return pathHitsObstacles(clean, obs, endpointIds)?null:clean;
   };
   const safeStub=(from,to,endpointIndex)=>{
@@ -7991,7 +8557,7 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
   };
 
   if(waypoints && waypoints.length){
-    const pts=[{x:p1.x,y:p1.y},{x:ax,y:ay}];
+    const pts=[{x:p1.x,y:p1.y},{x:exitA.x,y:exitA.y},{x:ax,y:ay}];
     let cur={x:ax,y:ay};
     for(const wp of waypoints){
       if(Math.abs(cur.x-wp.x)>0.5)pts.push({x:wp.x,y:cur.y});
@@ -7999,7 +8565,7 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
       cur={x:wp.x,y:wp.y};
     }
     if(Math.abs(cur.x-bx)>0.5)pts.push({x:bx,y:cur.y});
-    pts.push({x:bx,y:by},{x:p2.x,y:p2.y});
+    pts.push({x:bx,y:by},{x:exitB.x,y:exitB.y},{x:p2.x,y:p2.y});
     const clean=forceOrthoChain(pts, obs, endpointIds);
     if(!pathHitsObstacles(clean, obs, endpointIds)){
       return ptsToSvg(clean);
@@ -8007,15 +8573,20 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
     // waypoint가 막히면 자동 우회로 계속
   }
 
+  if(devA && devA===devB){
+    const sameDeviceRoute=sameDeviceJumperRoute(p1,p2,devA,laneOffset,occupiedSegments);
+    if(sameDeviceRoute)return ptsToSvg(sameDeviceRoute);
+  }
+
   const isP1H=(p1.side==='L'||p1.side==='R');
   const isP2H=(p2.side==='L'||p2.side==='R');
   const sameLineH = isP1H && isP2H && Math.abs(ay-by)<10;
   const sameLineV = !isP1H && !isP2H && Math.abs(ax-bx)<10;
-  const stub=64+laneOffset;
+  const stub=64+Math.abs(laneOffset);
 
   const candidates=[];
-  const base=[{x:p1.x,y:p1.y},{x:ax,y:ay}];
-  const tail=[{x:bx,y:by},{x:p2.x,y:p2.y}];
+  const base=[{x:p1.x,y:p1.y},{x:exitA.x,y:exitA.y},{x:ax,y:ay}];
+  const tail=[{x:bx,y:by},{x:exitB.x,y:exitB.y},{x:p2.x,y:p2.y}];
   // 다양한 탈출 오프셋으로 후보 확대
   const stubs=[stub, stub+30, stub+60];
   if(isP1H && isP2H){
@@ -8076,15 +8647,15 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
     if(e1&&e2){
       const ductPts=findDuctPath(e1,e2);
       candidates.push([
-        {x:p1.x,y:p1.y},{x:ax,y:ay}, e1.point,
+        ...base, e1.point,
         ...ductPts,
-        e2.point, {x:bx,y:by},{x:p2.x,y:p2.y}
+        e2.point, ...tail
       ]);
     }
   }
 
   // 1) 짧은 직접 후보 중 완전 안전 경로
-  let chosen=pickSafeRoute(candidates, obs, endpointIds);
+  let chosen=pickSafeRoute(candidates, obs, endpointIds,occupiedSegments);
 
   // 2) 채널 A* — 장애물 가장자리를 따라 우회 (이미지 관통 금지)
   if(!chosen){
@@ -8093,7 +8664,7 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
 
   // 3) 내부 통로가 없을 때만 장비군 외곽 우회
   if(!chosen){
-    chosen=pickSafeRoute(outerDetours, obs, endpointIds);
+    chosen=pickSafeRoute(outerDetours, obs, endpointIds,occupiedSegments);
   }
 
   // 4) 외곽 hull 강제 우회
@@ -8103,14 +8674,14 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
       topY=Math.min(topY,ob.y1); botY=Math.max(botY,ob.y2);
       leftX=Math.min(leftX,ob.x1); rightX=Math.max(rightX,ob.x2);
     }
-    const pad=90+laneOffset;
+    const pad=90+Math.abs(laneOffset);
     const hullCands=[
       [{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:topY-pad},{x:bx,y:topY-pad},{x:bx,y:by},{x:p2.x,y:p2.y}],
       [{x:p1.x,y:p1.y},{x:ax,y:ay},{x:ax,y:botY+pad},{x:bx,y:botY+pad},{x:bx,y:by},{x:p2.x,y:p2.y}],
       [{x:p1.x,y:p1.y},{x:ax,y:ay},{x:leftX-pad,y:ay},{x:leftX-pad,y:by},{x:bx,y:by},{x:p2.x,y:p2.y}],
       [{x:p1.x,y:p1.y},{x:ax,y:ay},{x:rightX+pad,y:ay},{x:rightX+pad,y:by},{x:bx,y:by},{x:p2.x,y:p2.y}]
     ];
-    chosen=pickSafeRoute(hullCands, obs, endpointIds);
+    chosen=pickSafeRoute(hullCands, obs, endpointIds,occupiedSegments);
   }
 
   // 5) 레인 여유값 때문에 좁은 통로가 닫힌 경우 더 작은 값부터 재탐색한다.
@@ -8121,6 +8692,11 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
     }
   }
   if(!chosen){
+    // 전용 레인이 좁은 장비 간격을 닫은 경우에는 기본 리드아웃으로 한 번 더
+    // 탐색한다. 점유 비용은 그대로 유지되므로 가능한 다른 통로가 우선된다.
+    if(Math.abs(laneOffset)>0.1){
+      return routeOrtho(p1,p2,offsetA,offsetB,waypoints,excludeIds,0,routeContext);
+    }
     // 관통 경로를 그려 정상처럼 보이게 하지 않는다. 양 끝 스텁만 표시하면
     // 사용자는 ROUTE_BLOCKED_BY_OBSTACLES 상태를 보고 장비 간격을 넓힐 수 있다.
     console.warn('ROUTE_BLOCKED_BY_OBSTACLES',devA,devB);
@@ -8128,6 +8704,7 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
     const stubB=safeStub(p2,{x:bx,y:by},1);
     return `${ptsToSvg(stubA)} ${ptsToSvg(stubB)}`;
   }
+  chosen=separateRouteOverlaps(chosen,obs,endpointIds,occupiedSegments);
   return ptsToSvg(chosen);
 }
 function routeCurve(p1,p2){
@@ -8145,6 +8722,7 @@ let highlightedTerms=new Set();
 let tracedForwardWires=new Set();
 let tracedReturnWires=new Set();
 let tracedPeWires=new Set();
+let lastRenderedRouteContext=null;
 let activeWiringFlowSteps=[];
 let wiringFlowSourceTerms=new Set();
 let wiringFlowSignalTerms=new Set();
@@ -8192,7 +8770,7 @@ function renderWiringFlow(){
     if(!from||!to||!S.devices[from.dev]||!S.devices[to.dev])continue;
     const pa=termAbs(S.devices[from.dev],from.term),pb=termAbs(S.devices[to.dev],to.term);
     if(!pa||!pb)continue;
-    const d=routeOrtho(pa,pb,44,44,null,[from.dev,to.dev],index*2);
+    const d=routeOrtho(pa,pb,44,44,null,[from.dev,to.dev],index*2,lastRenderedRouteContext);
     const routeBlocked=(d.match(/\bM\b/g)||[]).length>1;
     const path=document.createElementNS(SVGNS,'path');
     const role=step.circuitRole||'signal';
@@ -8226,9 +8804,18 @@ function wireRouteLaneOffset(wire,laneUse){
   const bundle=`${devicePair}|${family==='communication'?'communication':'conductors'}`;
   const lane=laneUse.get(bundle)||0;
   laneUse.set(bundle,lane+1);
-  // 같은 장비쌍의 심선을 작은 간격으로 분리한다. 큰 간격은 좁은 내부 통로를
-  // 스스로 막아 외곽을 한 바퀴 도는 경로를 만들므로 작은 간격만 사용한다.
-  return (lane%8)*2;
+  // 단자 면 바깥쪽에 0,8,16… 간격으로 전용 리드아웃 채널을 만든다.
+  // 부호를 번갈아 쓰면 바깥 방향 계산에서 같은 절댓값이 중복되어 두 선이
+  // 다시 같은 간선을 공유하므로 각 묶음 안에서는 단조 증가시킨다.
+  return lane*4;
+}
+function staggerWireTerminalPoint(point,ordinal){
+  if(!point||!ordinal)return point;
+  const magnitude=Math.ceil(ordinal/2)*4;
+  const offset=ordinal%2===1?magnitude:-magnitude;
+  return point.side==='L'||point.side==='R'
+    ? {...point,y:point.y+offset}
+    : {...point,x:point.x+offset};
 }
 
 function renderWires(){
@@ -8243,6 +8830,11 @@ function renderWires(){
   const termOutCount = new Map();
   const seen=new Map();
   const routeLaneUse=new Map();
+  // 장애물 목록은 장비 배치가 같은 한 번의 렌더 동안 불변이다. 와이어마다
+  // 재구축하지 않고 공유하며, 이미 선택된 선분은 다음 선의 겹침/교차 비용에
+  // 반영한다.
+  const routeContext={obstacles:getObstacles([]),occupiedSegments:createRouteOccupancyIndex()};
+  lastRenderedRouteContext=routeContext;
   const errors=lastErrors;
   for(let wi=0;wi<S.wires.length;wi++){
     const w=S.wires[wi];
@@ -8265,24 +8857,31 @@ function renderWires(){
     const toKey=w.to.dev+'.'+w.to.term;
     const fromCount=termOutCount.get(fromKey)||0; termOutCount.set(fromKey,fromCount+1);
     const toCount=termOutCount.get(toKey)||0; termOutCount.set(toKey,toCount+1);
+    // 한 나사에 여러 심선이 물리면 단자 원 안에서 접속점을 4px씩 벌린다.
+    // 전기적 종점 ID는 그대로이며, 화면에서만 각 심선을 식별할 수 있다.
+    if(!portA)pa=staggerWireTerminalPoint(pa,fromCount);
+    if(!portB)pb=staggerWireTerminalPoint(pb,toCount);
     const boostA=(fromDef?.plugPort?.boost||fromDef?.cablePort?.boost||0);
     const boostB=(toDef?.plugPort?.boost||toDef?.cablePort?.boost||0);
     // 탈출 거리: 단자가 많을수록 살짝 벌려 겹침 감소 + 본체 밖 확보
     const offA = 32 + fromCount*8 + idx*5 + (wi%3)*3 + boostA;
     const offB = 32 + toCount*8 + idx*5 + (wi%3)*3 + boostB;
-    const laneOffset=wireRouteLaneOffset(w,routeLaneUse);
+    // 같은 장비 쌍뿐 아니라 동일 단자에서 갈라지는 심선도 서로 다른
+    // 리드아웃 채널을 사용한다. 단자 공통 스텁을 벗어난 뒤에는 겹치지 않는다.
+    const laneOffset=Math.min(10,wireRouteLaneOffset(w,routeLaneUse)+Math.max(fromCount,toCount)*4);
     let d;
     if(S.routerOrtho){
       // 패널/자유 모두 장애물 회피 라우팅 (이미지 위 통과 금지)
       if(isPanelConstrained() && Object.keys(S.ducts||{}).length && !(w.waypoints&&w.waypoints.length)){
-        d=routePanelWire(pa,pb,w,[w.from.dev,w.to.dev],laneOffset);
+        d=routePanelWire(pa,pb,w,[w.from.dev,w.to.dev],laneOffset,routeContext);
       }else{
-        d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset);
+        d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset,routeContext);
       }
     }else{
-      d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset);
+      d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset,routeContext);
     }
     const routeBlocked=(d.match(/\bM\b/g)||[]).length>1;
+    if(!routeBlocked)rememberWireRoute(d,w.id,routeContext.occupiedSegments);
     const hitPath=document.createElementNS(SVGNS,'path');
     hitPath.setAttribute('d',d);
     hitPath.setAttribute('class','wire wire-hit'+(routeBlocked?' route-blocked':''));
@@ -10049,12 +10648,14 @@ const CATS=[
   ['wiring','🔌 배선/접지'],
 ];
 const EXACT_MANUAL_DEVICE_TYPES=new Set([
-  'XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24',
-  'MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI'
+  'XBC-DN32UP','XBC-DP32UP','XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24',
+  'MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','XBL-C41A','XBF-PD02A'
 ]);
+const PROFILE_ONLY_DEVICE_TYPES=new Set(['XBC-DN32UP','XBC-DP32UP','XBL-C41A','XBF-PD02A']);
 const FAMILY_MANUAL_DEVICE_TYPES=new Set(['IG5A','SERVO-DRV','MC','EOCR']);
 function paletteManualStatus(type){
   if(type.startsWith('BOUNDARY-'))return {kind:'boundary',label:'시험 경계 · 제품 아님'};
+  if(PROFILE_ONLY_DEVICE_TYPES.has(type))return {kind:'family',label:'공식 핀 확인 · 검토 기능 미완'};
   if(EXACT_MANUAL_DEVICE_TYPES.has(type))return {kind:'exact',label:'정확 품번 · 공식 매뉴얼'};
   if(FAMILY_MANUAL_DEVICE_TYPES.has(type))return {kind:'family',label:'계열 매뉴얼 · 전체 품번 필요'};
   if(type==='MY-MD02')return {kind:'unresolved',label:'공식 제조사·매뉴얼 미확인'};
@@ -10414,6 +11015,27 @@ elSvg.addEventListener('mousedown',e=>{
   render();
 });
 
+let interactiveRenderFrame=0;
+let interactiveRenderFlags={devices:false,wires:false,flow:false,jumpers:false};
+function scheduleInteractiveRender(flags){
+  interactiveRenderFlags={
+    devices:interactiveRenderFlags.devices||!!flags.devices,
+    wires:interactiveRenderFlags.wires||!!flags.wires,
+    flow:interactiveRenderFlags.flow||!!flags.flow,
+    jumpers:interactiveRenderFlags.jumpers||!!flags.jumpers
+  };
+  if(interactiveRenderFrame)return;
+  interactiveRenderFrame=requestAnimationFrame(()=>{
+    interactiveRenderFrame=0;
+    const pending=interactiveRenderFlags;
+    interactiveRenderFlags={devices:false,wires:false,flow:false,jumpers:false};
+    if(pending.devices)renderDevices();
+    if(pending.wires)renderWires();
+    if(pending.flow)renderWiringFlow();
+    if(pending.jumpers)renderJumpers();
+  });
+}
+
 elSvg.addEventListener('mousemove',e=>{
   if(S.panning){
     S.pan.x=e.clientX-S.panning.x;
@@ -10432,8 +11054,7 @@ elSvg.addEventListener('mousemove',e=>{
     if(dev&&def){
       const local=localPointForDevice(dev,pt);
       setTerminalCalibrationPoint(drag.dev,drag.term,'anchor',local);
-      renderDevices();
-      renderWires();
+      scheduleInteractiveRender({devices:true,wires:true});
       const t=LIB[dev.type]?.terminals?.find(x=>x.id===drag.term);
       status(`단자보정: ${def.label}.${t?.label||drag.term} → (${roundCoord(local.x)}, ${roundCoord(local.y)})`);
     }
@@ -10462,7 +11083,7 @@ elSvg.addEventListener('mousemove',e=>{
     if(w && w.waypoints){
       // 그리드 스냅
       w.waypoints[S.wireDragging.wpIdx]={x:Math.round(pt.x/10)*10, y:Math.round(pt.y/10)*10};
-      renderWires();
+      scheduleInteractiveRender({wires:true});
     }
     return;
   }
@@ -10518,7 +11139,7 @@ elSvg.addEventListener('mousemove',e=>{
     }
     S.draggingDev.moved=true;
     S.draggingDev.snapOk=snapOk;
-    renderDevices(); renderWires(); renderWiringFlow(); renderJumpers();
+    scheduleInteractiveRender({devices:true,wires:true,flow:true,jumpers:true});
     return;
   }
   if(S.boxSelect){
@@ -11658,11 +12279,58 @@ window.LegacyTrainerBridge={
       panelConfig:S.panelConfig,terminalCalibration:S.terminalCalibration
     });
   },
+  readEquipmentCatalog(){
+    const profileByType={
+      'MCCB':'educational:mccb-3p','MCCB1P':'educational:mccb-2p',
+      'XBC-DN32UP':'ls-electric:xbc-dn32up','XBC-DP32UP':'ls-electric:xbc-dp32up',
+      'XBC-DR32H':'ls-electric:xbc-dr32h','EXP2-700':'ls-electric:exp2-0700d',
+      'XBL-C41A':'ls-electric:xbl-c41a','XBF-AH04A':'ls-electric:xbf-ah04a','XBF-PD02A':'ls-electric:xbf-pd02a',
+      'MDR-100':'mean-well:mdr-100-24','MC-22B-DC24':'ls-electric:mc-22b-dc24-1a1b',
+      'MY2N':'omron:my2n-d2-dc24','EOCR3DE-05DUH':'schneider:eocr3de-05duh',
+      'UT-2.5':'phoenix-contact:ut-2.5-3044076','UT-2.5-PE':'phoenix-contact:ut-2.5-pe-3044092',
+      'UT-4-HESI':'phoenix-contact:ut-4-hesi-3046032','IG5A':'ls-electric:sv-ig5a','MY-MD02':'generic:xy-md02',
+      'PROX-NPN':'generic:prox-npn-3wire','PROX-PNP':'generic:prox-pnp-3wire','PSU24':'educational:dc24-source-box',
+      'MOTOR-3P':'educational:three-phase-motor','LAMP':'educational:dc24-load','LAMP-G':'educational:dc24-load',
+      'LAMP-Y':'educational:dc24-load','LAMP-W':'educational:dc24-load','BUZZER':'educational:dc24-load',
+      'PB-NO':'educational:pushbutton-no','PB-NC':'educational:pushbutton-nc','EMSTOP':'educational:emergency-stop-nc2',
+      'SOL-Y':'educational:dc24-solenoid',
+      'TB4':'educational:terminal-block-4','TB10':'educational:terminal-block-10',
+      'TB-24V-10':'educational:distribution-24v-10','TB-0V-10':'educational:distribution-0v-10',
+      'TB-PE-10':'educational:distribution-pe-10',
+      'BOUNDARY-AC':'boundary:ac-supply','BOUNDARY-DC':'boundary:dc-supply','BOUNDARY-CONTACT':'boundary:dry-contact',
+      'BOUNDARY-LOAD':'boundary:load','BOUNDARY-ANALOG-V':'boundary:analog-voltage-source',
+      'BOUNDARY-ANALOG-I':'boundary:analog-current-source','BOUNDARY-ANALOG-V-IN':'boundary:analog-voltage-input',
+      'BOUNDARY-ANALOG-I-IN':'boundary:analog-current-input','BOUNDARY-2W-I':'boundary:two-wire-current-transmitter',
+      'BOUNDARY-RS485':'boundary:communication-peer'
+    };
+    return structuredClone(Object.entries(profileByType).flatMap(([legacyType,profileId])=>{
+      const def=LIB[legacyType];
+      if(!def)return [];
+      return [{
+        profileId,legacyType,label:def.label||legacyType,
+        width:Number(def.w)||240,height:Number(def.h)||220,
+        mountTags:[...(def.mount?.tags||[])]
+      }];
+    }));
+  },
+  createPanelLayoutV2(rows){
+    const built=buildCustomPanelLayout({rows:clamp(Math.round(Number(rows)||3),1,6),cols:1,door:true});
+    return structuredClone({
+      boardMode:'panel-layout',cabinet:built.cabinet,
+      rails:Object.fromEntries(built.rails.map(rail=>[rail.id,rail])),
+      ducts:Object.fromEntries(built.ducts.map(duct=>[duct.id,duct])),
+      doorPanel:built.doorPanel,panelConfig:built.config
+    });
+  },
   readTerminalGeometryV3(){
     const profileByType={
+      'XBC-DN32UP':'ls-electric:xbc-dn32up',
+      'XBC-DP32UP':'ls-electric:xbc-dp32up',
       'XBC-DR32H':'ls-electric:xbc-dr32h',
       'EXP2-700':'ls-electric:exp2-0700d',
+      'XBL-C41A':'ls-electric:xbl-c41a',
       'XBF-AH04A':'ls-electric:xbf-ah04a',
+      'XBF-PD02A':'ls-electric:xbf-pd02a',
       'MDR-100':'mean-well:mdr-100-24',
       'MC-22B-DC24':'ls-electric:mc-22b-dc24-1a1b',
       'MY2N':'omron:my2n-d2-dc24',
@@ -11714,7 +12382,9 @@ window.LegacyTrainerBridge={
     cancelPendingWire('',{render:false});
     S.history=[];S.future=[];
     const profileToLegacy={
-      'ls-electric:xbc-dr32h':'XBC-DR32H','ls-electric:exp2-0700d':'EXP2-700','ls-electric:xbf-ah04a':'XBF-AH04A','mean-well:mdr-100-24':'MDR-100',
+      'educational:mccb-3p':'MCCB','educational:mccb-2p':'MCCB1P',
+      'ls-electric:xbc-dn32up':'XBC-DN32UP','ls-electric:xbc-dp32up':'XBC-DP32UP',
+      'ls-electric:xbc-dr32h':'XBC-DR32H','ls-electric:exp2-0700d':'EXP2-700','ls-electric:xbl-c41a':'XBL-C41A','ls-electric:xbf-ah04a':'XBF-AH04A','ls-electric:xbf-pd02a':'XBF-PD02A','mean-well:mdr-100-24':'MDR-100',
       'ls-electric:mc-22b-dc24-1a1b':'MC-22B-DC24','schneider:eocr3de-05duh':'EOCR3DE-05DUH',
       'omron:my2n-d2-dc24':'MY2N',
       'phoenix-contact:ut-2.5-3044076':'UT-2.5','phoenix-contact:ut-2.5-pe-3044092':'UT-2.5-PE',
@@ -11724,6 +12394,9 @@ window.LegacyTrainerBridge={
       'educational:dc24-source-box':'PSU24','educational:three-phase-motor':'MOTOR-3P',
       'educational:dc24-load':'LAMP','educational:dc24-solenoid':'SOL-Y',
       'educational:terminal-block-4':'TB4','educational:terminal-block-10':'TB10',
+      'educational:pushbutton-no':'PB-NO','educational:pushbutton-nc':'PB-NC','educational:emergency-stop-nc2':'EMSTOP',
+      'educational:distribution-24v-10':'TB-24V-10','educational:distribution-0v-10':'TB-0V-10',
+      'educational:distribution-pe-10':'TB-PE-10',
       'boundary:ac-supply':'BOUNDARY-AC',
       'boundary:dc-supply':'BOUNDARY-DC','boundary:dry-contact':'BOUNDARY-CONTACT','boundary:load':'BOUNDARY-LOAD',
       'boundary:analog-voltage-source':'BOUNDARY-ANALOG-V','boundary:analog-current-source':'BOUNDARY-ANALOG-I',

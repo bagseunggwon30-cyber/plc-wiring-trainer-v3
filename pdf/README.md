@@ -18,7 +18,11 @@
 | `03_LS_XGB_Analog_Manual_KR.pdf` | XGB 아날로그 모듈 (AH04A 등) |
 | `04_LS_SV-iG5A_User_Manual.pdf` | SV-iG5A 인버터 |
 | `04b_LS_iG5A_Troubleshooting.pdf` | iG5A 트러블슈팅 |
+| `08_LS_XBF-PD02A_Positioning_Manual_KR.pdf` | XBF-PD02A 2축 위치결정 모듈 · A/B 40핀 |
 | `08_LS_Metasol_MC_Contactor_Catalog.pdf` | Metasol MC 전자접촉기 |
+| `09_LS_XGB_Cnet_XBL-C41A_Manual_KR.pdf` | XBL-C41A Cnet · TX/RX/SG 5핀과 RS422/485 배선 |
+| `10_LS_XBC_U_Installation_Guide_KR_EN.pdf` | XBC-DN32UP / XBC-DP32UP UP 섀시 · 전면 구조·전원·입출력 커넥터·외형치수 |
+| `10_LS_XBC_U_User_Manual_EN.pdf` | XBC-DN32UP / XBC-DP32UP · 입력·NPN/PNP 출력·Cnet·4축 위치결정 40핀 |
 
 현재 코드가 직접 참조하는 iG5A 근거는 `pdf/official/LS_SV-iG5A_User_Manual_EN_V2.4.pdf`의 PDF 21쪽(제어 I/O 단자), 26쪽(제어단자 정격), 27쪽(S8 NPN/PNP 선택)입니다. 이 자료로 `CM`, `MG`, `MO`, `24`, `VR`, `V1`, `I`, `AM`, `3A/3B/3C`, `S+/S-` 의미를 구분하고, NPN의 내부 24V→입력회로→P→접점→CM 경로와 PNP의 외부 +24V→접점→P→입력회로→CM→외부 0V 경로를 별도로 풉니다. 전체 주문코드와 전원 등급이 확정되지 않아 프로필 등급은 계속 `educational`입니다.
 
@@ -49,6 +53,12 @@
 | `Phoenix_UT-4-HESI-5x20_3046032.pdf` | `3046032` | 5×20 퓨즈형, 500V/6.3A, 퓨즈 링크 별도, 도체·토크·치수 |
 
 이 PDF들은 프로필 근거 해시 검증을 위한 개발 자료이며 Electron 출시 파일에는 포함하지 않습니다. 앱 리포트에는 문서 ID·쪽·SHA-256만 기록합니다.
+
+`XBC-DN32UP`/`XBC-DP32UP`은 185×90×64 mm UP 섀시, 전원 N/L/PE/24V/24G, DI16, 모델별 NPN 싱크/PNP 소스 DO16, 내장 Cnet 5핀과 4축 위치결정 40핀×2를 공식 자료로 분리했습니다. 생성 이미지는 외형 스킨일 뿐이며 단자 ID·클릭 좌표·전기 의미는 SVG 오버레이와 프로필이 담당합니다. 포인터 교정 승인이 끝나기 전에는 `profile-only`로 차단합니다.
+
+현재 생성 스킨의 I/O 구멍 수는 공식 8+10 배열과 달라 승인 대상이 아닙니다. 앱은 잘못된 구멍을 그대로 클릭 대상으로 쓰지 않고 매뉴얼 기반 SVG 커넥터로 덮으며, 126개 가시 중심과 히트 중심의 브라우저 RMS/최대오차를 별도로 기록합니다. 외형 자산과 전기 geometry 승인은 서로 독립입니다.
+
+`XBL-C41A`는 5핀·RS485 브리지·20×90×60 mm 외형까지, `XBF-PD02A`는 500 mA·65 g 사양과 40핀·내부 회로까지 확인했습니다. PD02A의 정확 외형 치수, 두 장비의 승인된 화면 geometry와 전체 동작 모델은 아직 없으므로 검토 모드에서는 `profile-only`로 차단합니다. 매뉴얼 보유가 곧 통과 자격을 뜻하지 않습니다.
 
 팔레트 전체의 공식 문서 보유·품번 미확정 상태는 `docs/official-manual-inventory.md`에 기록합니다. 전체 품번이 없는 일반 장비에는 비슷한 제품의 매뉴얼을 임의 연결하지 않습니다.
 

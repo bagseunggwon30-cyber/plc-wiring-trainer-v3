@@ -163,6 +163,7 @@ export function auditProfileTerminalSemantics(
 
   const terminalsById = new Map(profile.terminals.map((terminal) => [terminal.id, terminal]));
   const changeoverLinks = new Map<string, typeof profile.internalLinks>();
+  const isMultipoleProtection = profile.behavior?.kind === 'protection';
   for (const link of profile.internalLinks) {
     const from = terminalsById.get(link.from);
     const to = terminalsById.get(link.to);
@@ -180,6 +181,7 @@ export function auditProfileTerminalSemantics(
       terminal.role === 'dry-contact'
       || terminal.commonType === 'dry-contact'
       || terminal.commonType === 'fused-power'
+      || (isMultipoleProtection && (terminal.role === 'supply-input' || terminal.role === 'output'))
       || profile.boundary;
     if (!switchingTerminal(from) || !switchingTerminal(to)) {
       issues.push({
@@ -197,7 +199,7 @@ export function auditProfileTerminalSemantics(
         message: `${profile.profileId}.${link.from}-${link.to} crosses two different contact groups.`,
       });
     }
-    if (link.stateKey) {
+    if (link.stateKey && !isMultipoleProtection) {
       changeoverLinks.set(link.stateKey, [...(changeoverLinks.get(link.stateKey) ?? []), link]);
     }
   }

@@ -5,7 +5,11 @@ import { DeviceProfileSchema } from '../../src/domain/schema';
 describe('device profile catalog', () => {
   it('manual-verifies only exact profiles backed by retained official evidence', () => {
     expect(verifiedProfiles().map((profile) => profile.profileId)).toEqual([
+      'ls-electric:xbc-dn32up',
+      'ls-electric:xbc-dp32up',
       'ls-electric:xbc-dr32h',
+      'ls-electric:xbl-c41a',
+      'ls-electric:xbf-pd02a',
       'ls-electric:exp2-0700d',
       'ls-electric:xbf-ah04a',
       'mean-well:mdr-100-24',
@@ -79,6 +83,27 @@ describe('device profile catalog', () => {
     expect(byId.get('COM0')).toMatchObject({
       polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'COM0',
     });
+  });
+
+  it('separates the exact DN sink and DP source output contracts without inventing connector pins', () => {
+    const dn = DEVICE_PROFILES['ls-electric:xbc-dn32up'];
+    const dp = DEVICE_PROFILES['ls-electric:xbc-dp32up'];
+    const dnById = new Map(dn.terminals.map((terminal) => [terminal.id, terminal]));
+    const dpById = new Map(dp.terminals.map((terminal) => [terminal.id, terminal]));
+
+    expect(dn.terminals).toHaveLength(126);
+    expect(dp.terminals).toHaveLength(126);
+    expect(dn.behavior).toMatchObject({ kind: 'plc-transistor', outputMode: 'sinking-transistor' });
+    expect(dp.behavior).toMatchObject({ kind: 'plc-transistor', outputMode: 'sourcing-transistor' });
+    expect(dnById.get('P20')).toMatchObject({ polarity: 'signal-return', outputMode: 'sinking-transistor' });
+    expect(dpById.get('P20')).toMatchObject({ polarity: 'signal-positive', outputMode: 'sourcing-transistor' });
+    expect(dnById.get('VOUT')).toMatchObject({ potential: '+24V', role: 'supply-input' });
+    expect(dnById.get('COMO')).toMatchObject({ potential: '0V', role: 'common' });
+    expect(dpById.get('COMO')).toMatchObject({ potential: '+24V', role: 'common' });
+    expect(dpById.get('0VOUT')).toMatchObject({ potential: '0V', role: 'supply-input' });
+    expect(dn.internalLinks).toContainEqual({ from: 'COMI-A', to: 'COMI-B', kind: 'conductive' });
+    expect(dnById.get('A20')).toMatchObject({ label: '20A MPG A+', channel: 'MPG-A' });
+    expect(dnById.get('D20')).toMatchObject({ role: 'not-connected' });
   });
 
   it('keeps XBF channel G/return and MDR DC OK contacts separate from power 0V', () => {

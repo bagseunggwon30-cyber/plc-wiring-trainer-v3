@@ -64,6 +64,19 @@ export interface XbfAh04aContract {
   readonly supplyTerminalIds: readonly ['+24V', '0V'];
 }
 
+export type ReviewCapabilityV3 = 'full' | 'profile-only';
+export type RackModuleClassV3 = 'io' | 'communication' | 'high-speed' | 'special';
+
+export interface RackContractV3 {
+  readonly family: 'LS-XGB';
+  readonly role: 'host' | 'module';
+  readonly occupiedPoints: 64;
+  readonly maxExpansionSlots?: number;
+  readonly moduleClass?: RackModuleClassV3;
+  readonly inputTerminalIds?: readonly string[];
+  readonly outputTerminalIds?: readonly string[];
+}
+
 export interface DeviceProfileV3 {
   readonly catalogVersion: 3;
   readonly profileId: string;
@@ -72,6 +85,8 @@ export interface DeviceProfileV3 {
   readonly model: string;
   readonly orderCode: string;
   readonly evidence: EvidenceV3;
+  readonly reviewCapability: ReviewCapabilityV3;
+  readonly rack?: RackContractV3;
   readonly terminals: readonly DeviceTerminalV3[];
   readonly internalLinks: readonly Readonly<InternalLinkSpec>[];
   readonly behavior?: Readonly<Record<string, unknown>>;
@@ -95,7 +110,11 @@ export type PrewireEligibilityValidation =
   | { readonly ok: true }
   | {
     readonly ok: false;
-    readonly reason: 'order-code-required' | 'order-code-mismatch' | 'evidence-grade-ineligible';
+    readonly reason:
+      | 'order-code-required'
+      | 'order-code-mismatch'
+      | 'evidence-grade-ineligible'
+      | 'review-capability-incomplete';
   };
 
 export type XbfConfigurationValidation =
@@ -109,6 +128,8 @@ export type XbfConfigurationValidation =
 interface DeviceProfileV3AdapterOptions {
   readonly orderCode: string;
   readonly evidenceGrade: EvidenceGradeV3;
+  readonly reviewCapability?: ReviewCapabilityV3;
+  readonly rack?: RackContractV3;
   readonly analogIo?: XbfAh04aContract;
   readonly behaviorProfile?: DeviceBehaviorProfile;
 }
@@ -167,6 +188,8 @@ export function adaptDeviceProfileToV3(profile: DeviceProfile, options: DevicePr
     model: profile.model,
     orderCode: options.orderCode,
     evidence: toV3Evidence(profile, options.evidenceGrade),
+    reviewCapability: options.reviewCapability ?? 'full',
+    ...(options.rack === undefined ? {} : { rack: options.rack }),
     terminals: profile.terminals.map(toV3Terminal),
     internalLinks: profile.internalLinks.map((link) => ({ ...link })),
     ...(profile.behavior === undefined ? {} : { behavior: structuredClone(profile.behavior) }),
@@ -207,18 +230,55 @@ export const XBF_AH04A_CONTRACT: XbfAh04aContract = {
 };
 
 const V3_PROFILE_LIST: readonly DeviceProfileV3[] = [
+  adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbc-dn32up'], {
+    orderCode: 'XBC-DN32UP',
+    evidenceGrade: 'manual-verified',
+    reviewCapability: 'profile-only',
+    rack: {
+      family: 'LS-XGB', role: 'host', occupiedPoints: 64, maxExpansionSlots: 10,
+      inputTerminalIds: Array.from({ length: 16 }, (_, index) => `P0${index.toString(16).toUpperCase()}`),
+      outputTerminalIds: Array.from({ length: 16 }, (_, index) => `P2${index.toString(16).toUpperCase()}`),
+    },
+  }),
+  adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbc-dp32up'], {
+    orderCode: 'XBC-DP32UP',
+    evidenceGrade: 'manual-verified',
+    reviewCapability: 'profile-only',
+    rack: {
+      family: 'LS-XGB', role: 'host', occupiedPoints: 64, maxExpansionSlots: 10,
+      inputTerminalIds: Array.from({ length: 16 }, (_, index) => `P0${index.toString(16).toUpperCase()}`),
+      outputTerminalIds: Array.from({ length: 16 }, (_, index) => `P2${index.toString(16).toUpperCase()}`),
+    },
+  }),
   adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbc-dr32h'], {
     orderCode: 'XBC-DR32H',
     evidenceGrade: 'manual-verified',
+    rack: {
+      family: 'LS-XGB', role: 'host', occupiedPoints: 64, maxExpansionSlots: 10,
+      inputTerminalIds: Array.from({ length: 16 }, (_, index) => `P0${index.toString(16).toUpperCase()}`),
+      outputTerminalIds: Array.from({ length: 16 }, (_, index) => `P2${index.toString(16).toUpperCase()}`),
+    },
   }),
   adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:exp2-0700d'], {
     orderCode: 'eXP2-0700D',
     evidenceGrade: 'manual-verified',
   }),
+  adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbl-c41a'], {
+    orderCode: 'XBL-C41A',
+    evidenceGrade: 'manual-verified',
+    reviewCapability: 'profile-only',
+    rack: { family: 'LS-XGB', role: 'module', moduleClass: 'communication', occupiedPoints: 64 },
+  }),
   adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbf-ah04a'], {
     orderCode: 'XBF-AH04A',
     evidenceGrade: 'manual-verified',
     analogIo: XBF_AH04A_CONTRACT,
+  }),
+  adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbf-pd02a'], {
+    orderCode: 'XBF-PD02A',
+    evidenceGrade: 'manual-verified',
+    reviewCapability: 'profile-only',
+    rack: { family: 'LS-XGB', role: 'module', moduleClass: 'high-speed', occupiedPoints: 64 },
   }),
   adaptDeviceProfileToV3(DEVICE_PROFILES['mean-well:mdr-100-24'], {
     orderCode: 'MDR-100-24',
@@ -277,9 +337,12 @@ export function validatePrewireEligibility(
 ): PrewireEligibilityValidation {
   const orderCodeValidation = validateExactOrderCode(profile, suppliedOrderCode);
   if (!orderCodeValidation.ok) return orderCodeValidation;
-  return profile.evidence.grade === 'manual-verified' || profile.evidence.grade === 'bench-verified'
+  if (profile.evidence.grade !== 'manual-verified' && profile.evidence.grade !== 'bench-verified') {
+    return { ok: false, reason: 'evidence-grade-ineligible' };
+  }
+  return profile.reviewCapability === 'full'
     ? { ok: true }
-    : { ok: false, reason: 'evidence-grade-ineligible' };
+    : { ok: false, reason: 'review-capability-incomplete' };
 }
 
 function selectorForRange(range: XbfParameterRange): XbfSelectorPosition {

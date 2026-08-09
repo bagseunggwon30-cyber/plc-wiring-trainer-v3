@@ -5,11 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { DEVICE_PROFILES, verifiedProfiles } from '../../src/catalog/profiles';
 
 const EVIDENCE_PATHS: Readonly<Record<string, string>> = {
+  '10_LS_XBC_U_Installation_Guide_KR_EN.pdf': 'pdf/10_LS_XBC_U_Installation_Guide_KR_EN.pdf',
+  '10_LS_XBC_U_User_Manual_EN.pdf': 'pdf/10_LS_XBC_U_User_Manual_EN.pdf',
   '02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf': 'pdf/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf',
   'LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf': 'pdf/official/LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf',
   'LS_XP_Communication_Manual_EN_V2.2.pdf': 'pdf/official/LS_XP_Communication_Manual_EN_V2.2.pdf',
   '03_LS_XBF-AH04A_Installation_Guide.pdf': 'pdf/03_LS_XBF-AH04A_Installation_Guide.pdf',
   '03_LS_XGB_Analog_Manual_KR.pdf': 'pdf/03_LS_XGB_Analog_Manual_KR.pdf',
+  '08_LS_XBF-PD02A_Positioning_Manual_KR.pdf': 'pdf/08_LS_XBF-PD02A_Positioning_Manual_KR.pdf',
+  '09_LS_XGB_Cnet_XBL-C41A_Manual_KR.pdf': 'pdf/09_LS_XGB_Cnet_XBL-C41A_Manual_KR.pdf',
   '01_MDR-100-24_MeanWell_SPEC.pdf': 'pdf/01_MDR-100-24_MeanWell_SPEC.pdf',
   '08_LS_Metasol_MC_Contactor_Catalog.pdf': 'pdf/08_LS_Metasol_MC_Contactor_Catalog.pdf',
   'Omron_MY_Series_J219-E1.pdf': 'pdf/official/Omron_MY_Series_J219-E1.pdf',

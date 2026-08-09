@@ -64,7 +64,7 @@ const elementSchema = z.discriminatedUnion('kind', [
     kind: z.literal('transistor-output'), id: textSchema,
     supplyPositiveTerminal: textSchema, supplyReturnTerminal: textSchema, outputTerminal: textSchema,
     mode: z.enum(['sinking', 'sourcing']), stateKey: textSchema, defaultState: z.boolean().optional(),
-    supplyElementId: textSchema.optional(),
+    supplyElementId: textSchema.optional(), controlPowerElementId: textSchema.optional(),
     parentDeviceId: textSchema.optional(), required: z.enum(['always', 'scenario']).optional(),
   }).strict(),
   z.object({

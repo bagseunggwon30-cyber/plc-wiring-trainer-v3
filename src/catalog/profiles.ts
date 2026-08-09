@@ -55,6 +55,41 @@ function terminal(
   return { id, label, domain, potential, role, polarity: inferredPolarity(domain, potential, role), ...extra };
 }
 
+function commonDistributionProfile(
+  profileId: string,
+  model: string,
+  domain: ElectricalDomain,
+  potential: ElectricalPotential,
+): DeviceProfile {
+  const terminals = Array.from({ length: 10 }, (_, index) => {
+    const marker = String(index + 1);
+    return [
+      terminal(marker, marker, domain, potential, 'common', {
+        marker, connectionPoint: 'A', channel: 'distribution', maxConductors: 1,
+      }),
+      terminal(`${marker}'`, marker, domain, potential, 'common', {
+        marker, connectionPoint: 'B', channel: 'distribution', maxConductors: 1,
+      }),
+    ];
+  }).flat();
+  return {
+    profileId,
+    version: '0.1.0',
+    manufacturer: 'Generic educational model',
+    model,
+    evidence: {
+      level: 'educational',
+      documents: [],
+      note: 'Generic all-common distribution strip. Exact manufacturer, order code and current rating are required for prewire review.',
+    },
+    boundary: false,
+    includeInBom: true,
+    terminals,
+    internalLinks: terminals.slice(1).map((entry) => ({ from: terminals[0].id, to: entry.id, kind: 'conductive' as const })),
+    behavior: { kind: 'distribution-terminal-strip', potential, positions: 10, exactProductRequiredForPrewire: true },
+  };
+}
+
 const xbcInputs = Array.from({ length: 16 }, (_, index) => {
   const id = `P0${index.toString(16).toUpperCase()}`;
   return terminal(id, id, 'signal', 'signal', 'input', {
@@ -74,6 +109,37 @@ const xbcOutputs = Array.from({ length: 16 }, (_, index) => {
     channel: id,
   });
 });
+
+const pd02PinRows = [
+  ['B20', 'MPG A+', 'input', 'MPG-A+', 'signal-positive'], ['A20', 'MPG A-', 'input', 'MPG-A-', 'signal-return'],
+  ['B19', 'MPG B+', 'input', 'MPG-B+', 'signal-positive'], ['A19', 'MPG B-', 'input', 'MPG-B-', 'signal-return'],
+  ['B18', 'Y FP+', 'output', 'Y-FP+', 'signal-positive'], ['A18', 'X FP+', 'output', 'X-FP+', 'signal-positive'],
+  ['B17', 'Y FP-', 'output', 'Y-FP-', 'signal-return'], ['A17', 'X FP-', 'output', 'X-FP-', 'signal-return'],
+  ['B16', 'Y RP+', 'output', 'Y-RP+', 'signal-positive'], ['A16', 'X RP+', 'output', 'X-RP+', 'signal-positive'],
+  ['B15', 'Y RP-', 'output', 'Y-RP-', 'signal-return'], ['A15', 'X RP-', 'output', 'X-RP-', 'signal-return'],
+  ['B14', 'Y OV+', 'input', 'Y-OV+', 'signal-positive'], ['A14', 'X OV+', 'input', 'X-OV+', 'signal-positive'],
+  ['B13', 'Y OV-', 'input', 'Y-OV-', 'signal-positive'], ['A13', 'X OV-', 'input', 'X-OV-', 'signal-positive'],
+  ['B12', 'Y DOG', 'input', 'Y-DOG', 'signal-positive'], ['A12', 'X DOG', 'input', 'X-DOG', 'signal-positive'],
+  ['B11', 'NC', 'not-connected', 'Y-NC1', 'none'], ['A11', 'NC', 'not-connected', 'X-NC1', 'none'],
+  ['B10', 'NC', 'not-connected', 'Y-NC2', 'none'], ['A10', 'NC', 'not-connected', 'X-NC2', 'none'],
+  ['B09', 'Y COM', 'common', 'Y-COM', 'signal-return'], ['A09', 'X COM', 'common', 'X-COM', 'signal-return'],
+  ['B08', 'NC', 'not-connected', 'Y-NC3', 'none'], ['A08', 'NC', 'not-connected', 'X-NC3', 'none'],
+  ['B07', 'Y INP', 'input', 'Y-INP', 'signal-positive'], ['A07', 'X INP', 'input', 'X-INP', 'signal-positive'],
+  ['B06', 'Y INP COM', 'common', 'Y-INP-COM', 'signal-return'], ['A06', 'X INP COM', 'common', 'X-INP-COM', 'signal-return'],
+  ['B05', 'Y CLR', 'output', 'Y-CLR', 'signal-positive'], ['A05', 'X CLR', 'output', 'X-CLR', 'signal-positive'],
+  ['B04', 'Y CLR COM', 'common', 'Y-CLR-COM', 'signal-return'], ['A04', 'X CLR COM', 'common', 'X-CLR-COM', 'signal-return'],
+  ['B03', 'Y HOME +5V', 'input', 'Y-HOME', 'signal-positive'], ['A03', 'X HOME +5V', 'input', 'X-HOME', 'signal-positive'],
+  ['B02', 'Y HOME COM', 'common', 'Y-HOME-COM', 'signal-return'], ['A02', 'X HOME COM', 'common', 'X-HOME-COM', 'signal-return'],
+  ['B01', 'NC', 'not-connected', 'Y-NC4', 'none'], ['A01', 'NC', 'not-connected', 'X-NC4', 'none'],
+] as const satisfies readonly (readonly [string, string, TerminalRole, string, TerminalPolarity])[];
+
+const pd02Terminals = pd02PinRows.map(([id, label, role, channel, polarity]) => role === 'not-connected'
+  ? terminal(id, `${id} ${label}`, 'floating', 'floating', role)
+  : terminal(id, `${id} ${label}`, 'signal', 'signal', role, {
+      channel,
+      polarity,
+      ...(id === 'B03' || id === 'A03' ? { ratedVoltage: { min: 5, max: 5, unit: 'VDC' as const } } : {}),
+    }));
 
 function boundaryProfile(
   profileId: string,
@@ -96,7 +162,163 @@ function boundaryProfile(
   };
 }
 
+type XbcUOutputMode = 'sinking-transistor' | 'sourcing-transistor';
+
+const xbcUDigitalInputs = Array.from({ length: 16 }, (_, index) => {
+  const id = `P0${index.toString(16).toUpperCase()}`;
+  return terminal(id, id, 'signal', 'signal', 'input', {
+    polarity: 'signal-positive',
+    comGroup: 'COMI',
+    channel: id,
+    ratedVoltage: { min: 20.4, max: 28.8, unit: 'VDC' },
+  });
+});
+
+function xbcUPositioningTerminal(column: 'A' | 'B' | 'C' | 'D', pin: number): TerminalSpec {
+  const id = `${column}${String(pin).padStart(2, '0')}`;
+  const axis = ({ A: 'AX1', B: 'AX2', C: 'AX3', D: 'AX4' } as const)[column];
+  const nc = (): TerminalSpec => terminal(id, `${pin}${column} NC`, 'floating', 'floating', 'not-connected');
+
+  if (pin === 20 || pin === 19) {
+    if (column === 'C' || column === 'D') return nc();
+    const phase = pin === 20 ? 'A' : 'B';
+    const polarity = column === 'A' ? 'signal-positive' : 'signal-return';
+    return terminal(id, `${pin}${column} MPG ${phase}${column === 'A' ? '+' : '-'}`, 'signal', 'signal', 'input', {
+      polarity,
+      channel: `MPG-${phase}`,
+    });
+  }
+
+  const definitions: Readonly<Record<number, {
+    label: string;
+    role: TerminalRole;
+    polarity: TerminalPolarity;
+    group?: string;
+    outputMode?: XbcUOutputMode;
+  }>> = {
+    18: { label: 'FP+', role: 'output', polarity: 'signal-positive' },
+    17: { label: 'FP-', role: 'output', polarity: 'signal-return' },
+    16: { label: 'RP+', role: 'output', polarity: 'signal-positive' },
+    15: { label: 'RP-', role: 'output', polarity: 'signal-return' },
+    14: { label: 'OV+', role: 'input', polarity: 'signal-positive', group: `${axis}-COM1` },
+    13: { label: 'OV-', role: 'input', polarity: 'signal-positive', group: `${axis}-COM1` },
+    12: { label: 'DOG', role: 'input', polarity: 'signal-positive', group: `${axis}-COM1` },
+    11: { label: 'EMG/STOP', role: 'input', polarity: 'signal-positive', group: `${axis}-COM1` },
+    10: { label: 'COM1', role: 'common', polarity: 'signal-return', group: `${axis}-COM1` },
+    9: { label: 'DR', role: 'input', polarity: 'signal-positive', group: `${axis}-DR` },
+    8: { label: 'DR COM', role: 'common', polarity: 'signal-return', group: `${axis}-DR` },
+    7: { label: 'SVON', role: 'output', polarity: 'signal-return', group: `${axis}-SV`, outputMode: 'sinking-transistor' },
+    6: { label: 'ARMRST', role: 'output', polarity: 'signal-return', group: `${axis}-SV`, outputMode: 'sinking-transistor' },
+    5: { label: 'SVON/RST COM', role: 'common', polarity: 'signal-return', group: `${axis}-SV` },
+    4: { label: 'HOME +5V', role: 'input', polarity: 'signal-positive', group: `${axis}-HOME` },
+    3: { label: 'HOME COM', role: 'common', polarity: 'signal-return', group: `${axis}-HOME` },
+  };
+  const definition = definitions[pin];
+  if (definition === undefined) return nc();
+  return terminal(id, `${pin}${column} ${axis} ${definition.label}`, 'signal', 'signal', definition.role, {
+    polarity: definition.polarity,
+    channel: `${axis}-${definition.label}`,
+    ...(definition.group === undefined ? {} : { comGroup: definition.group }),
+    ...(definition.outputMode === undefined ? {} : { outputMode: definition.outputMode }),
+    ...(pin === 4 ? { ratedVoltage: { min: 5, max: 5, unit: 'VDC' as const } } : {}),
+  });
+}
+
+const xbcUPositioningTerminals = (['A', 'B', 'C', 'D'] as const).flatMap((column) =>
+  Array.from({ length: 20 }, (_, index) => xbcUPositioningTerminal(column, 20 - index)));
+
+function xbcUTransistorProfile(
+  profileId: string,
+  model: 'XBC-DN32UP' | 'XBC-DP32UP',
+  outputMode: XbcUOutputMode,
+): DeviceProfile {
+  const isSink = outputMode === 'sinking-transistor';
+  const outputs = Array.from({ length: 16 }, (_, index) => {
+    const id = `P2${index.toString(16).toUpperCase()}`;
+    return terminal(id, id, 'signal', 'signal', 'output', {
+      polarity: isSink ? 'signal-return' : 'signal-positive',
+      outputMode,
+      comGroup: 'COMO',
+      channel: id,
+      ratedVoltage: { min: 10.2, max: 26.4, unit: 'VDC' },
+    });
+  });
+  const outputSupply = isSink
+    ? [
+        terminal('VOUT', 'DC12/24V', 'dc', '+24V', 'supply-input', { ratedVoltage: { min: 10.8, max: 26.4, unit: 'VDC' } }),
+        terminal('COMO', 'COM', 'dc', '0V', 'common', { polarity: 'return', comGroup: 'COMO' }),
+      ]
+    : [
+        terminal('COMO', 'COM', 'dc', '+24V', 'common', { polarity: 'positive', comGroup: 'COMO', ratedVoltage: { min: 10.8, max: 26.4, unit: 'VDC' } }),
+        terminal('0VOUT', '0V', 'dc', '0V', 'supply-input', { ratedVoltage: { min: 0, max: 0, unit: 'VDC' } }),
+      ];
+  return {
+    profileId,
+    version: '1.0.0',
+    manufacturer: 'LS ELECTRIC',
+    model,
+    evidence: {
+      level: 'manual-verified',
+      documents: [
+        {
+          documentId: '10_LS_XBC_U_Installation_Guide_KR_EN.pdf',
+          revision: 'C/N 10310001354 V4.5 (2024.6)',
+          pages: [1],
+          sha256: '1745BCB9E8FD5701FFE24D5ED61FD2E1FE2A038FF1D2224A3BCBE93842A603C4',
+          notes: 'PDF page 1: 185 x 90 x 64 mm UP chassis, five power terminals, 8+10 input/output connectors, dual Ethernet and two 40-pin positioning connectors.',
+        },
+        {
+          documentId: '10_LS_XBC_U_User_Manual_EN.pdf',
+          revision: 'C/N 10310001374 V1.2 (2019.08)',
+          pages: [33, 36, 48, 173, 174, 175, 392, 393, 394, 1187],
+          sha256: '2928E058FD1027F936CCFD5EA949F422C90118B6FCA4CE423FF71B03B9D494D0',
+          notes: 'Product classification, positioning-type front parts, 16-point input, NPN/PNP output circuits, 4-axis 40-pin connector assignment and built-in Cnet five-pin assignment.',
+        },
+      ],
+      ...reviewedExact,
+      note: 'Manual-backed terminal contract. The generated skin is not electrical evidence and remains pending pointer calibration.',
+    },
+    boundary: false,
+    includeInBom: true,
+    terminals: [
+      terminal('N', 'N', 'ac', 'N', 'supply-input', { phase: 'N', ratedVoltage: { min: 85, max: 264, unit: 'VAC' } }),
+      terminal('L', 'L', 'ac', 'L1', 'supply-input', { phase: 'L1', ratedVoltage: { min: 85, max: 264, unit: 'VAC' } }),
+      terminal('PE', 'PE', 'pe', 'PE', 'protective-earth'),
+      terminal('24V', '24V', 'dc', '+24V', 'source', { ratedVoltage: { min: 24, max: 24, unit: 'VDC' } }),
+      terminal('24G', '24G', 'dc', '0V', 'source', { ratedVoltage: { min: 0, max: 0, unit: 'VDC' } }),
+      terminal('485-', '1 485-', 'communication', 'signal', 'communication', { polarity: 'data-negative', protocol: 'RS485', channel: 'B' }),
+      terminal('485+', '2 485+', 'communication', 'signal', 'communication', { polarity: 'data-positive', protocol: 'RS485', channel: 'A' }),
+      terminal('SG', '3 SG', 'communication', 'signal', 'common', { polarity: 'reference', commonType: 'communication-reference', protocol: 'RS485', channel: 'SG' }),
+      terminal('TX', '4 TX', 'communication', 'signal', 'communication', { protocol: 'RS232', channel: 'TX' }),
+      terminal('RX', '5 RX', 'communication', 'signal', 'communication', { protocol: 'RS232', channel: 'RX' }),
+      ...xbcUDigitalInputs,
+      terminal('COMI-A', 'COM', 'floating', 'floating', 'common', { polarity: 'configurable', commonType: 'configurable-dc', comGroup: 'COMI' }),
+      terminal('COMI-B', 'COM', 'floating', 'floating', 'common', { polarity: 'configurable', commonType: 'configurable-dc', comGroup: 'COMI' }),
+      ...outputs,
+      ...outputSupply,
+      ...xbcUPositioningTerminals,
+    ],
+    internalLinks: [{ from: 'COMI-A', to: 'COMI-B', kind: 'conductive' }],
+    behavior: {
+      kind: 'plc-transistor',
+      outputMode,
+      internal24VCurrentA: 0.4,
+      inputComTerminals: ['COMI-A', 'COMI-B'],
+      outputSupplyTerminals: isSink
+        ? { positive: 'VOUT', return: 'COMO' }
+        : { positive: 'COMO', return: '0VOUT' },
+      inputRatings: { onVoltageV: 19, onCurrentA: 0.003, offVoltageV: 6, offCurrentA: 0.001 },
+      outputRatings: { pointCurrentA: 0.5, commonCurrentA: 2, offLeakageCurrentA: 0.0001, onVoltageDropV: 0.4 },
+      dimensionsMm: { width: 185, height: 90, depth: 64 },
+      positioning: { axes: 4, connectorCount: 2, pinsPerConnector: 40, pulseOutput: 'differential-line-driver', maxPulseRatePps: 2_000_000 },
+      communicationPorts: [{ id: 'CNET', protocol: 'RS485', positiveTerminal: '485+', negativeTerminal: '485-', terminationSetting: 'termination', defaultTermination: false }],
+    },
+  };
+}
+
 const profiles: DeviceProfile[] = [
+  xbcUTransistorProfile('ls-electric:xbc-dn32up', 'XBC-DN32UP', 'sinking-transistor'),
+  xbcUTransistorProfile('ls-electric:xbc-dp32up', 'XBC-DP32UP', 'sourcing-transistor'),
   {
     profileId: 'ls-electric:xbc-dr32h',
     version: '1.0.0',
@@ -108,9 +330,9 @@ const profiles: DeviceProfile[] = [
         {
           documentId: '02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf',
           revision: 'repository-copy-sha256',
-          pages: [43, 125, 130, 253],
+          pages: [39, 43, 95, 96, 125, 130, 253],
           sha256: '4C1BBB7C60CC2DC80221B67CFE7AD11CA360C9DB12B7F1B36171CF12C8BF18AA',
-          notes: 'PDF pages 43, 125, 130 and 253: AC supply/internal 24V, source-sink inputs, relay outputs, and XBC-DR32H 114×100×64 mm dimensions.',
+          notes: 'PDF pages 39, 43, 95-96, 125, 130 and 253: expansion stages, 64-point slot allocation, AC supply/internal 24V, source-sink inputs, relay outputs, and XBC-DR32H 114×100×64 mm dimensions.',
         },
       ],
       ...reviewed,
@@ -161,6 +383,88 @@ const profiles: DeviceProfile[] = [
       inputComGroup: 'COMI',
       outputGroupSize: 4,
       dimensionsMm: { width: 114, height: 100, depth: 64 },
+    },
+  },
+  {
+    profileId: 'ls-electric:xbl-c41a',
+    version: '1.0.0',
+    manufacturer: 'LS ELECTRIC',
+    model: 'XBL-C41A',
+    evidence: {
+      level: 'manual-verified',
+      documents: [{
+        documentId: '09_LS_XGB_Cnet_XBL-C41A_Manual_KR.pdf',
+        revision: 'repository-copy-sha256',
+        pages: [195, 196, 217],
+        sha256: 'D0D9A6C360004550A4936EBA34B8165DE6445E4812E532A41BC71886682D7F16',
+        notes: 'PDF pages 195-196 and 217: exact 5-pin TX+/TX-/RX+/RX-/SG assignment, RS-422/RS-485 wiring, and 20 x 90 x 60 mm dimensions.',
+      }],
+      ...reviewedExact,
+      note: 'Terminal contract is manual-verified. Verified prewire remains blocked until rack-power behavior and approved terminal geometry are completed.',
+    },
+    boundary: false,
+    includeInBom: true,
+    terminals: [
+      terminal('TX+', '1 TX+', 'communication', 'signal', 'communication', {
+        polarity: 'data-positive', protocol: 'RS485', channel: 'TX+',
+      }),
+      terminal('TX-', '2 TX-', 'communication', 'signal', 'communication', {
+        polarity: 'data-negative', protocol: 'RS485', channel: 'TX-',
+      }),
+      terminal('RX+', '3 RX+', 'communication', 'signal', 'communication', {
+        polarity: 'data-positive', protocol: 'RS485', channel: 'RX+',
+      }),
+      terminal('RX-', '4 RX-', 'communication', 'signal', 'communication', {
+        polarity: 'data-negative', protocol: 'RS485', channel: 'RX-',
+      }),
+      terminal('SG', '5 SG', 'communication', 'signal', 'common', {
+        polarity: 'reference', commonType: 'communication-reference', protocol: 'RS485', channel: 'SG',
+      }),
+    ],
+    internalLinks: [],
+    behavior: {
+      kind: 'rack-communication-module',
+      communicationPorts: [{
+        id: 'CNET', protocol: 'RS485',
+        positiveTerminal: 'TX+', negativeTerminal: 'TX-',
+        receivePositiveTerminal: 'RX+', receiveNegativeTerminal: 'RX-',
+        requiresTwoWireBridge: true,
+        terminationSetting: 'termination', defaultTermination: false,
+      }],
+    },
+  },
+  {
+    profileId: 'ls-electric:xbf-pd02a',
+    version: '1.0.0',
+    manufacturer: 'LS ELECTRIC',
+    model: 'XBF-PD02A',
+    evidence: {
+      level: 'manual-verified',
+      documents: [{
+        documentId: '08_LS_XBF-PD02A_Positioning_Manual_KR.pdf',
+        revision: 'repository-copy-sha256',
+        pages: [26, 29, 30],
+        sha256: 'AEEDDA2002AB616A5A02B25224B3AA462A128375AF1C41392502386FA44ED3F7',
+        notes: 'PDF pages 26 and 29-30: 500 mA/65 g specification, exact A01-A20/B01-B20 assignment, unused pins, differential pulse outputs, limits, DOG, INP, CLR and HOME circuits.',
+      }],
+      ...reviewedExact,
+      note: 'The 40-pin connector is manual-verified. Motion behavior and approved connector geometry are not yet prewire-eligible.',
+    },
+    boundary: false,
+    includeInBom: true,
+    terminals: pd02Terminals,
+    internalLinks: [],
+    behavior: {
+      kind: 'positioning-module-profile',
+      axes: 2,
+      pulseOutput: 'differential-line-driver',
+      connector: '40-pin',
+      internalCurrentMa: 500,
+      weightG: 65,
+      axisPins: {
+        X: { forward: ['A18', 'A17'], reverse: ['A16', 'A15'], highLimit: 'A14', lowLimit: 'A13', dog: 'A12', common: 'A09', inPosition: ['A07', 'A06'], clear: ['A05', 'A04'], home: ['A03', 'A02'] },
+        Y: { forward: ['B18', 'B17'], reverse: ['B16', 'B15'], highLimit: 'B14', lowLimit: 'B13', dog: 'B12', common: 'B09', inPosition: ['B07', 'B06'], clear: ['B05', 'B04'], home: ['B03', 'B02'] },
+      },
     },
   },
   {
@@ -1082,6 +1386,82 @@ const profiles: DeviceProfile[] = [
     },
   },
   {
+    profileId: 'educational:mccb-2p', version: '0.1.0', manufacturer: 'Generic educational model', model: 'MCCB 2P L/N',
+    evidence: { level: 'educational', documents: [], note: 'Generic 2-pole breaker model. Exact manufacturer, order code, rating and trip curve are required for prewire review.' },
+    boundary: false, includeInBom: true,
+    terminals: [
+      terminal('L', 'L line', 'ac', 'L1', 'supply-input', { phase: 'L1' }),
+      terminal('N', 'N line', 'ac', 'N', 'supply-input', { phase: 'N' }),
+      terminal("L'", 'L load', 'ac', 'L1', 'output', { phase: 'L1' }),
+      terminal("N'", 'N load', 'ac', 'N', 'output', { phase: 'N' }),
+    ],
+    internalLinks: [
+      { from: 'L', to: "L'", kind: 'dynamic-contact', stateKey: 'closed', normally: 'closed' },
+      { from: 'N', to: "N'", kind: 'dynamic-contact', stateKey: 'closed', normally: 'closed' },
+    ],
+    behavior: { kind: 'protection', protectionType: 'mccb-2p', poles: 2, exactProductRequiredForPrewire: true },
+  },
+  {
+    profileId: 'educational:mccb-3p', version: '0.1.0', manufacturer: 'Generic educational model', model: 'MCCB 3P',
+    evidence: { level: 'educational', documents: [], note: 'Generic 3-pole breaker model. Exact manufacturer, order code, rating and trip curve are required for prewire review.' },
+    boundary: false, includeInBom: true,
+    terminals: [
+      terminal('L1', 'L1 line', 'ac', 'L1', 'supply-input', { phase: 'L1' }),
+      terminal('L2', 'L2 line', 'ac', 'L2', 'supply-input', { phase: 'L2' }),
+      terminal('L3', 'L3 line', 'ac', 'L3', 'supply-input', { phase: 'L3' }),
+      terminal('T1', 'T1 load', 'ac', 'L1', 'output', { phase: 'L1' }),
+      terminal('T2', 'T2 load', 'ac', 'L2', 'output', { phase: 'L2' }),
+      terminal('T3', 'T3 load', 'ac', 'L3', 'output', { phase: 'L3' }),
+    ],
+    internalLinks: [
+      { from: 'L1', to: 'T1', kind: 'dynamic-contact', stateKey: 'closed', normally: 'closed' },
+      { from: 'L2', to: 'T2', kind: 'dynamic-contact', stateKey: 'closed', normally: 'closed' },
+      { from: 'L3', to: 'T3', kind: 'dynamic-contact', stateKey: 'closed', normally: 'closed' },
+    ],
+    behavior: { kind: 'protection', protectionType: 'mccb-3p', poles: 3, exactProductRequiredForPrewire: true },
+  },
+  {
+    profileId: 'educational:pushbutton-no', version: '0.1.0', manufacturer: 'Generic educational model', model: 'Pushbutton NO',
+    evidence: { level: 'educational', documents: [], note: 'Generic a-contact pushbutton. Exact operator and contact-block order codes are required for prewire review.' },
+    boundary: false, includeInBom: true,
+    terminals: [
+      terminal('1', '1', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+      terminal('2', '2', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+    ],
+    internalLinks: [{ from: '1', to: '2', kind: 'dynamic-contact', stateKey: 'contact', normally: 'open' }],
+    behavior: { kind: 'manual-contact', contactType: 'NO', stateKey: 'contact', exactProductRequiredForPrewire: true },
+  },
+  {
+    profileId: 'educational:pushbutton-nc', version: '0.1.0', manufacturer: 'Generic educational model', model: 'Pushbutton NC',
+    evidence: { level: 'educational', documents: [], note: 'Generic b-contact pushbutton. Exact operator and contact-block order codes are required for prewire review.' },
+    boundary: false, includeInBom: true,
+    terminals: [
+      terminal('1', '1', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+      terminal('2', '2', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'contact' }),
+    ],
+    internalLinks: [{ from: '1', to: '2', kind: 'dynamic-contact', stateKey: 'contact', normally: 'closed' }],
+    behavior: { kind: 'manual-contact', contactType: 'NC', stateKey: 'contact', exactProductRequiredForPrewire: true },
+  },
+  {
+    profileId: 'educational:emergency-stop-nc2', version: '0.1.0', manufacturer: 'Generic educational model', model: 'Emergency stop NC x2',
+    evidence: { level: 'educational', documents: [], note: 'Generic dual-NC emergency-stop model. Safety category, positive-opening contact block and exact order codes are not verified.' },
+    boundary: false, includeInBom: true,
+    terminals: [
+      terminal('11', '11', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'NC1' }),
+      terminal('12', '12', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'NC1' }),
+      terminal('21', '21', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'NC2' }),
+      terminal('22', '22', 'floating', 'floating', 'dry-contact', { polarity: 'nonpolar', commonType: 'dry-contact', comGroup: 'NC2' }),
+    ],
+    internalLinks: [
+      { from: '11', to: '12', kind: 'dynamic-contact', stateKey: 'contact-1', normally: 'closed' },
+      { from: '21', to: '22', kind: 'dynamic-contact', stateKey: 'contact-2', normally: 'closed' },
+    ],
+    behavior: { kind: 'manual-contact', contactType: 'NC2', stateKeys: ['contact-1', 'contact-2'], exactProductRequiredForPrewire: true },
+  },
+  commonDistributionProfile('educational:distribution-24v-10', '+24V distribution 10P', 'dc', '+24V'),
+  commonDistributionProfile('educational:distribution-0v-10', '0V distribution 10P', 'dc', '0V'),
+  commonDistributionProfile('educational:distribution-pe-10', 'PE distribution 10P', 'pe', 'PE'),
+  {
     profileId: 'educational:terminal-block-4', version: '0.1.0', manufacturer: 'Generic', model: '4-position terminal block',
     evidence: { level: 'educational', documents: [], note: 'Generic practice terminal block; exact product is not fixed.' },
     boundary: false, includeInBom: true,
@@ -1203,7 +1583,13 @@ const profiles: DeviceProfile[] = [
     terminal('SG', 'SG', 'communication', 'signal', 'common', {
       polarity: 'reference', commonType: 'communication-reference', protocol: 'RS485',
     }),
-  ], undefined, '1.1.0'),
+  ], {
+    kind: 'communication-boundary',
+    communicationPorts: [{
+      id: 'RS485', protocol: 'RS485', positiveTerminal: 'A', negativeTerminal: 'B',
+      terminationSetting: 'termination', defaultTermination: false,
+    }],
+  }, '1.2.0'),
 ];
 
 const dryContact = profiles.find((profile) => profile.profileId === 'boundary:dry-contact');

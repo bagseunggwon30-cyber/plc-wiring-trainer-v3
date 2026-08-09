@@ -247,6 +247,8 @@ export interface TransistorOutputElement {
   stateKey: string;
   defaultState?: boolean;
   supplyElementId?: string;
+  /** CPU/control-power condition that must be energized before the output can switch. */
+  controlPowerElementId?: string;
   parentDeviceId?: string;
   required?: 'always' | 'scenario';
 }
@@ -366,6 +368,7 @@ export interface CircuitIssueV3 {
     | 'ORDER_CODE_REQUIRED'
     | 'ORDER_CODE_MISMATCH'
     | 'PROFILE_EVIDENCE_INELIGIBLE'
+    | 'PROFILE_REVIEW_CAPABILITY_INCOMPLETE'
     | 'PROFILE_NOT_V3'
     | 'PROFILE_VERSION_MISMATCH'
     | 'ASSET_GEOMETRY_UNAPPROVED'

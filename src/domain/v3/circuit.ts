@@ -111,6 +111,7 @@ export function buildCircuitModel(
   contactStates: Readonly<Record<string, boolean>> = {},
 ): CircuitModel {
   const union = new UnionFind();
+  const peUnion = new UnionFind();
   const nodes = new Set<string>();
   const issues: CircuitIssueV3[] = [];
   const ids = new Set<string>();
@@ -118,6 +119,7 @@ export function buildCircuitModel(
     const key = terminalKey(elementId, terminalId);
     nodes.add(key);
     union.add(key);
+    peUnion.add(key);
   };
   const addId = (id: string): void => {
     if (ids.has(id)) issues.push(issue('DUPLICATE_ELEMENT_ID', `Duplicate v3 element id ${id}.`, [id]));
@@ -140,13 +142,36 @@ export function buildCircuitModel(
       issues.push(issue('UNKNOWN_TERMINAL', `Branch ${branch.id} references an unknown terminal.`, [branch.id, from, to]));
       continue;
     }
-    if (branch.conductor !== 'pe') union.union(from, to);
+    if (branch.conductor === 'pe') peUnion.union(from, to);
+    else union.union(from, to);
   }
   for (const contact of document.elements.filter((element): element is ContactElement => element.kind === 'contact')) {
     if (isContactClosed(contact, contactStates)) {
       union.union(terminalKey(contact.id, contact.terminalA), terminalKey(contact.id, contact.terminalB));
     }
   }
+  const acControlPowerComplete = (elementId: string): boolean => {
+    const control = document.elements.find((element) => element.id === elementId);
+    if (control?.kind !== 'ac-load') return false;
+    const lineRoot = union.find(terminalKey(control.id, control.lineTerminal));
+    const neutralRoot = union.find(terminalKey(control.id, control.neutralTerminal));
+    if (lineRoot === neutralRoot) return false;
+    const peRoot = control.peTerminal === undefined
+      ? null
+      : peUnion.find(terminalKey(control.id, control.peTerminal));
+    return document.sources.filter(isAcSource).some((source) => {
+      const sourceLines = source.kind === 'ac-single-phase'
+        ? [source.lineTerminal]
+        : Object.values(source.phaseTerminals);
+      const lineConnected = sourceLines.some((terminal) =>
+        union.find(terminalKey(source.id, terminal)) === lineRoot);
+      const neutralConnected = source.neutralTerminal !== undefined
+        && union.find(terminalKey(source.id, source.neutralTerminal)) === neutralRoot;
+      const peConnected = peRoot === null
+        || peUnion.find(terminalKey(source.id, source.peTerminal)) === peRoot;
+      return lineConnected && neutralConnected && peConnected;
+    });
+  };
   const activeTransistorStates: Record<string, boolean> = {};
   for (const output of document.elements
     .filter((element): element is TransistorOutputElement => element.kind === 'transistor-output')
@@ -156,8 +181,10 @@ export function buildCircuitModel(
     const powerPairComplete = document.sources.filter(isDcSource).some((source) =>
       union.find(terminalKey(source.id, source.positiveTerminal)) === union.find(positive)
       && union.find(terminalKey(source.id, source.returnTerminal)) === union.find(returned));
+    const controlPowerComplete = output.controlPowerElementId === undefined
+      || acControlPowerComplete(output.controlPowerElementId);
     const requested = contactStates[output.stateKey] ?? output.defaultState ?? false;
-    const active = requested && powerPairComplete;
+    const active = requested && powerPairComplete && controlPowerComplete;
     activeTransistorStates[output.id] = active;
     if (active) {
       union.union(
@@ -1497,16 +1524,18 @@ export function solveCircuit(model: CircuitModel): CircuitSolution {
       const supplyPowered = element.supplyElementId === undefined
         ? model.activeTransistorStates[element.id] === true
         : loads[element.supplyElementId]?.energized === true;
+      const controlPowered = element.controlPowerElementId === undefined
+        || acLoads[element.controlPowerElementId]?.energized === true;
       const state = !requested
         ? 'OUTPUT_OFF' as const
-        : supplyPowered && model.activeTransistorStates[element.id] === true
+        : supplyPowered && controlPowered && model.activeTransistorStates[element.id] === true
           ? 'OUTPUT_ON' as const
           : 'OUTPUT_UNPOWERED' as const;
       if (state === 'OUTPUT_UNPOWERED') {
         pushUniqueIssue(issues, issue(
           'TRANSISTOR_OUTPUT_UNPOWERED',
-          `Transistor output ${element.id} was commanded ON without a complete powered BN/BU supply pair.`,
-          [element.id, element.supplyElementId ?? element.parentDeviceId ?? element.id],
+          `Transistor output ${element.id} was commanded ON without complete output and CPU power.`,
+          [element.id, element.controlPowerElementId ?? element.supplyElementId ?? element.parentDeviceId ?? element.id],
         ));
       }
       const output = terminalKey(element.id, element.outputTerminal);

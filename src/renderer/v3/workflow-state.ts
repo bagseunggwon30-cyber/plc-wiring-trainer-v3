@@ -37,6 +37,8 @@ export interface Rs485WorkflowSetting {
   parity: 'NONE' | 'EVEN' | 'ODD' | null;
   stopBits: 1 | 2 | null;
   stationId: number | null;
+  mode: '2WIRE' | '4WIRE' | null;
+  termination: boolean | null;
 }
 export interface XbfChannelWorkflowSetting {
   enabled: boolean;
@@ -45,6 +47,8 @@ export interface XbfChannelWorkflowSetting {
 }
 export interface DeviceWorkflowSetting {
   orderCode: string | null;
+  rackHostId?: string | null;
+  rackSlot?: number | null;
   xbfChannels?: Record<XbfChannelIdV3, XbfChannelWorkflowSetting>;
   ig5aInputLogic?: Ig5aInputLogicV3;
   ig5aControlPowerState?: Ig5aControlPowerStateV3;
@@ -139,6 +143,8 @@ function deviceSettings(value: unknown): Record<string, DeviceWorkflowSetting> {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
     const raw = entry as Record<string, unknown>;
     const orderCode = text(raw.orderCode);
+    const rackHostId = text(raw.rackHostId);
+    const rackSlot = positiveNumber(raw.rackSlot);
     const channels = xbfChannels(raw.xbfChannels);
     const ig5aInputLogic: Ig5aInputLogicV3 | undefined = raw.ig5aInputLogic === 'NPN_INTERNAL_24V'
       || raw.ig5aInputLogic === 'PNP_EXTERNAL_24V'
@@ -167,9 +173,13 @@ function deviceSettings(value: unknown): Record<string, DeviceWorkflowSetting> {
         : null,
       stopBits: rawRs485.stopBits === 1 || rawRs485.stopBits === 2 ? rawRs485.stopBits : null,
       stationId: positiveNumber(rawRs485.stationId),
+      mode: rawRs485.mode === '2WIRE' || rawRs485.mode === '4WIRE' ? rawRs485.mode : null,
+      termination: typeof rawRs485.termination === 'boolean' ? rawRs485.termination : null,
     } : undefined;
     if (
       !orderCode
+      && !rackHostId
+      && rackSlot === null
       && !channels
       && ig5aInputLogic === undefined
       && ig5aControlPowerState === undefined
@@ -179,6 +189,8 @@ function deviceSettings(value: unknown): Record<string, DeviceWorkflowSetting> {
     ) return [];
     return [[deviceId, {
       orderCode,
+      ...(rackHostId === null ? {} : { rackHostId }),
+      ...(rackSlot === null ? {} : { rackSlot }),
       ...(channels ? { xbfChannels: channels } : {}),
       ...(ig5aInputLogic === undefined ? {} : { ig5aInputLogic }),
       ...(ig5aControlPowerState === undefined ? {} : { ig5aControlPowerState }),

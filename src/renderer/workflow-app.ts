@@ -1,6 +1,7 @@
 import { DEVICE_PROFILES } from '../catalog/profiles';
 import { DEVICE_PROFILES_V3 } from '../catalog/v3-profiles';
 import { createAcademyExp2Md02Template } from '../domain/academy-panel-template';
+import type { EquipmentOrderCatalogItem } from '../domain/equipment-order';
 import type { ValidationIssue, ValidationResult } from '../domain/engine-types';
 import { analyzeSerialDeviceStates } from '../domain/communication-runtime';
 import { evaluateMission, type MissionEvaluationResult } from '../domain/mission-evaluator';
@@ -68,6 +69,7 @@ import {
 } from './v3/workflow-state';
 import { createWiringAssistantPanel } from './v3/wiring-assistant-panel';
 import { createXgSimDiagnosticsPanel } from './plc-runtime/xgsim-diagnostics-panel';
+import { installEquipmentOrderPanel, type EquipmentOrderPanelController } from './equipment-order-panel';
 
 interface LegacyTrainerBridge {
   applyTerminalSemantics(
@@ -83,6 +85,8 @@ interface LegacyTrainerBridge {
     ) => TerminalSpec,
   ): void;
   readState(): LegacyTrainerState;
+  readEquipmentCatalog(): EquipmentOrderCatalogItem[];
+  createPanelLayoutV2(rows: number): Readonly<Record<string, unknown>>;
   readTerminalGeometryV3(): PrewireTerminalGeometryInputV3;
   readV2Shadow(): WorkshopShadowSnapshot | null;
   clearV2Shadow(): void;
@@ -117,6 +121,7 @@ interface CoreRun {
 }
 
 const LEGACY_STORAGE_KEY = 'wiring-workshop-v2';
+const EQUIPMENT_ORDER_BACKUP_KEY = 'plc-wiring-trainer:before-equipment-order';
 
 const WORKFLOW_STYLES = `
   :focus-visible{outline:3px solid #ffd54f!important;outline-offset:2px}
@@ -193,6 +198,21 @@ export const ISSUE_ACTIONS: Readonly<Record<string, string>> = Object.freeze({
     CURRENT_LOOP_COMPLIANCE_INSUFFICIENT: '송신기 최소 동작전압과 XBF 250Ω 입력부담을 합산해 충분한 루프 전압을 확보하세요.',
     CURRENT_LOOP_OVER_RANGE: '시험 전류를 XBF 허용 입력 범위(최대 25mA) 안으로 낮추세요.',
     RS485_POLARITY_MISMATCH: 'A(+)는 A(+), B(-)는 B(-)끼리 다시 연결하세요.',
+    RS485_POLARITY_REVERSED: 'RS485의 +/− 또는 A/B 심선을 같은 극성끼리 다시 연결하세요.',
+    RS485_BRIDGE_MISSING: 'XBL-C41A 2선식에서는 TX+↔RX+, TX−↔RX− 점퍼를 모두 결선하세요.',
+    RS485_PEER_MISSING: '통신 상대까지 +/− 두 심선을 모두 연결하세요.',
+    RS485_SETTINGS_MISMATCH: '양쪽 장비의 프로토콜, 속도, 데이터 비트, 패리티와 정지 비트를 일치시키세요.',
+    RS485_ADDRESS_REQUIRED: 'Modbus RTU 슬레이브 국번을 1~247 범위에서 지정하세요.',
+    RS485_ADDRESS_DUPLICATE: '같은 버스의 Modbus RTU 슬레이브 국번을 서로 다르게 지정하세요.',
+    RS485_MULTIPLE_MASTERS: '하나의 Modbus RTU 버스에는 마스터를 한 대만 두세요.',
+    RS485_TERMINATION_REQUIRED: '각 통신 장비에서 종단저항 적용 여부를 실제 배선 상태대로 기록하세요.',
+    RS485_TERMINATION_INVALID: '버스 양 끝 두 지점에만 종단저항을 적용하세요.',
+    RS485_MODE_UNSUPPORTED: '현재는 2선식 RS485만 사전 검토할 수 있습니다. 4선식은 지원 전까지 차단됩니다.',
+    RACK_HOST_NOT_FOUND: '확장 모듈이 연결된 XGB 기본 유닛과 동일 DIN 레일을 확인해 지정하세요.',
+    RACK_SLOT_REQUIRED: '검토 모드에서는 확장 모듈의 실제 XGB 기본 유닛과 슬롯 번호를 지정하세요.',
+    RACK_SLOT_DUPLICATE: '같은 XGB 기본 유닛에서 중복된 슬롯 번호를 각각 다르게 지정하세요.',
+    RACK_SLOT_OUT_OF_RANGE: '확장 슬롯 번호를 기본 유닛이 허용하는 1~10 범위로 수정하세요.',
+    RACK_FAMILY_MISMATCH: '확장 모듈을 호환되는 LS XGB 기본 유닛에 연결하세요.',
     UNKNOWN_FORCED_OUTPUT: '프로필에 정의된 릴레이 출력 단자만 강제 시험 대상으로 선택하세요.',
     NON_CONVERGENT_SIMULATION: '동적 접점의 순환 조건을 제거하고 접점 초기 상태를 확인하세요.',
     MISSION_CONNECTION_MISSING: '역할에 지정된 장비의 표시 단자 사이 결선을 완성하세요.',
@@ -232,6 +252,7 @@ export const ISSUE_ACTIONS: Readonly<Record<string, string>> = Object.freeze({
     ORDER_CODE_MISMATCH: '프로필과 실제 장비 주문코드를 일치시키세요.',
     PROFILE_NOT_V3: '정확한 v3 검증 프로필이 있는 장비로 교체하거나 연습 모드에서 사용하세요.',
     PROFILE_EVIDENCE_INELIGIBLE: '매뉴얼 검증 또는 벤치 검증 근거가 있는 프로필을 사용하세요.',
+    PROFILE_REVIEW_CAPABILITY_INCOMPLETE: '공식 단자 프로필은 등록됐지만 동작 모델과 화면 단자 좌표 승인이 끝나지 않았습니다. 연습 모드에서 사용하고 검토 통과는 보류하세요.',
     ASSET_GEOMETRY_UNAPPROVED: '기존 이미지는 유지하되 단자 geometry 검수를 완료하기 전에는 진단 리포트만 사용하세요.',
     TERMINAL_GEOMETRY_MISMATCH: '화면 단자 ID·표시 여부와 검증 프로필을 1:1로 맞춘 뒤 geometry 승인을 다시 받으세요.',
     XBF_CONFIGURATION_INCOMPLETE: 'AI0/AI1/AO0/AO1의 사용 여부, V/I 스위치와 범위를 모두 설정하세요.',
@@ -524,6 +545,7 @@ export function installWorkflowApp(): void {
   injectStyles();
   const bridge = (window as unknown as { LegacyTrainerBridge?: LegacyTrainerBridge }).LegacyTrainerBridge;
   if (!bridge) throw new Error('LegacyTrainerBridge is unavailable');
+  let equipmentOrderPanel: EquipmentOrderPanelController | null = null;
   const terminalSemanticsByLegacyType = Object.fromEntries(
     Object.entries(LEGACY_PROFILE_MAP).flatMap(([legacyType, profileId]) => {
       const profile = DEVICE_PROFILES[profileId];
@@ -1259,6 +1281,7 @@ export function installWorkflowApp(): void {
       ? '핀투핀 사전 검토 · 실제 통전 승인 아님'
       : '교육용 시뮬레이터 · 실제 장비 제어 아님';
     if (selectedMissionId && !missionForSelection()?.eligibleModes.includes(mode)) selectedMissionId = null;
+    equipmentOrderPanel?.setMode(mode);
     applyPalettePolicy();
     void renderMissions();
   };
@@ -1282,6 +1305,33 @@ export function installWorkflowApp(): void {
     setMode(workshop.mode);
     bridge.setStatus(message);
   };
+
+  const equipmentOrderCatalog = bridge.readEquipmentCatalog();
+  equipmentOrderPanel = installEquipmentOrderPanel(document, {
+    catalog: equipmentOrderCatalog,
+    profiles: DEVICE_PROFILES,
+    getMode: () => currentMode,
+    createPanelLayout: (rows) => bridge.createPanelLayoutV2(rows),
+    applyOrder: async (workshop, summary) => {
+      const current = await readDocument();
+      localStorage.setItem(EQUIPMENT_ORDER_BACKUP_KEY, JSON.stringify(current));
+      applyLoadedWorkshop(workshop, `제어반 BOM 적용 완료 · ${summary} · 이전 작업 자동 백업됨`);
+    },
+    restoreBackup: () => {
+      const raw = localStorage.getItem(EQUIPMENT_ORDER_BACKUP_KEY);
+      if (!raw) return false;
+      try {
+        const parsed = JSON.parse(raw) as WorkshopDocumentV2;
+        if (parsed.schemaVersion !== 2 || !Array.isArray(parsed.devices) || !Array.isArray(parsed.wires)) return false;
+        applyLoadedWorkshop(parsed, `BOM 구성 전 작업 복원 완료 · 장비 ${parsed.devices.length}대 · 결선 ${parsed.wires.length}가닥`);
+        return true;
+      } catch {
+        bridge.setStatus('장비 주문 전 백업 JSON이 손상되어 복원하지 못했습니다.');
+        return false;
+      }
+    },
+    setStatus: (message) => bridge.setStatus(message),
+  });
 
   const loadBestStoredWorkshop = async (): Promise<WorkshopDocumentV2 | null> => {
     // V2 is the editable renderer source of truth and preserves every legacy
