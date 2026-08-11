@@ -3,12 +3,13 @@
   if(typeof window==='undefined'||typeof document==='undefined')return;
   const Runtime=window.PLCTrainerPalletizerRuntime;
   const Three=window.THREE;
-  if(!Runtime){console.error('PLCTrainerPalletizerRuntime missing');return;}
+  const CameraNavigation=window.PLCTrainerCameraNavigation;
+  if(!Runtime||!CameraNavigation){console.error('Palletizer runtime or camera navigation missing');return;}
 
   const P={
     visible:false,initialized:false,state:null,host:null,sceneHost:null,renderer:null,scene:null,camera:null,
     raf:0,lastTime:0,lastUi:0,lastSave:0,placedStamp:'',palletStamp:'',parts:{},cameraOrbit:{yaw:.78,pitch:.5,distance:15.2},
-    cameraTarget:{x:0,y:2,z:0},drag:null,resizeObserver:null
+    cameraTarget:{x:0,y:2,z:0},cameraNavigationPreset:'3ds-max',drag:null,resizeObserver:null
   };
   const q=(selector,root=document)=>root.querySelector(selector);
   const qa=(selector,root=document)=>[...root.querySelectorAll(selector)];
@@ -64,7 +65,7 @@
   function injectUi(){
     P.host=q('#mv-palletizer');if(!P.host)return false;
     P.host.innerHTML=`<div id="p3-root">
-      <div id="p3-scene"><div id="p3-scene-badge"><b>3축 팔레타이징 셀</b><span>OFFLINE DIGITAL TWIN</span></div><div id="p3-camera-hint">드래그: 회전 · 휠: 확대/축소 · 더블클릭: 카메라 초기화</div></div>
+      <div id="p3-scene"><div id="p3-scene-badge"><b>3축 팔레타이징 셀</b><span>OFFLINE DIGITAL TWIN</span></div><div id="p3-camera-hint">Alt+가운데 드래그: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소</div></div>
       <aside id="p3-side">
         <section class="p3-section"><div id="p3-state"><b>대기</b><span>IDLE</span></div><div class="p3-actions">
           <button class="run" data-action="auto">▶ 자동 시작</button><button class="stop" data-action="stop">■ 정지</button>
@@ -183,11 +184,45 @@
     if(!P.camera)return;const o=P.cameraOrbit,t=P.cameraTarget,cp=Math.cos(o.pitch);
     P.camera.position.set(t.x+Math.sin(o.yaw)*cp*o.distance,t.y+Math.sin(o.pitch)*o.distance,t.z+Math.cos(o.yaw)*cp*o.distance);P.camera.lookAt(t.x,t.y,t.z);
   }
+  function updateCameraHint(){
+    const hint=q('#p3-camera-hint',P.host);if(!hint)return;
+    hint.textContent=CameraNavigation.hint(P.cameraNavigationPreset,'드래그: 회전 · 휠: 확대/축소 · 더블클릭: 카메라 초기화');
+  }
+  function setCameraNavigationPreset(value){
+    P.cameraNavigationPreset=CameraNavigation.normalizePreset(value);P.drag=null;updateCameraHint();return P.cameraNavigationPreset;
+  }
   function installCameraControls(){
-    const canvas=P.renderer.domElement;
-    canvas.addEventListener('pointerdown',event=>{P.drag={x:event.clientX,y:event.clientY,yaw:P.cameraOrbit.yaw,pitch:P.cameraOrbit.pitch};canvas.setPointerCapture?.(event.pointerId);});
-    canvas.addEventListener('pointermove',event=>{if(!P.drag)return;P.cameraOrbit.yaw=P.drag.yaw-(event.clientX-P.drag.x)*.006;P.cameraOrbit.pitch=clamp(P.drag.pitch+(event.clientY-P.drag.y)*.005,.12,1.18);updateCamera();});
-    canvas.addEventListener('pointerup',()=>{P.drag=null;});canvas.addEventListener('pointercancel',()=>{P.drag=null;});
+    const canvas=P.renderer.domElement,raycaster=new Three.Raycaster(),pointer=new Three.Vector2();
+    const legacyMapping={orbitButtons:[0,1,2],panButtons:[]};
+    const pointerOnPlane=(event,plane)=>{
+      const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return null;
+      pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
+      raycaster.setFromCamera(pointer,P.camera);return raycaster.ray.intersectPlane(plane,new Three.Vector3());
+    };
+    canvas.addEventListener('pointerdown',event=>{
+      const mode=CameraNavigation.resolvePointerAction(event,P.cameraNavigationPreset,legacyMapping);if(!mode)return;
+      event.preventDefault();
+      if(mode==='orbit')P.drag={mode,pointerId:event.pointerId,x:event.clientX,y:event.clientY,yaw:P.cameraOrbit.yaw,pitch:P.cameraOrbit.pitch};
+      else{
+        P.camera.updateMatrixWorld(true);const forward=new Three.Vector3();P.camera.getWorldDirection(forward);
+        const target=new Three.Vector3(P.cameraTarget.x,P.cameraTarget.y,P.cameraTarget.z),plane=new Three.Plane().setFromNormalAndCoplanarPoint(forward.clone().negate(),target),hit=pointerOnPlane(event,plane);
+        if(!hit)return;P.drag={mode,pointerId:event.pointerId,plane,hit,target};
+      }
+      canvas.setPointerCapture?.(event.pointerId);
+    });
+    canvas.addEventListener('pointermove',event=>{
+      if(!P.drag||P.drag.pointerId!==event.pointerId)return;
+      if(P.drag.mode==='orbit'){
+        const next=CameraNavigation.orbitFromDrag(P.cameraNavigationPreset,{yaw:P.drag.yaw,pitch:P.drag.pitch},{x:event.clientX-P.drag.x,y:event.clientY-P.drag.y},{yaw:.006,pitch:.005,legacyYawSign:-1,legacyPitchSign:1});
+        P.cameraOrbit.yaw=next.yaw;P.cameraOrbit.pitch=clamp(next.pitch,.12,1.18);
+      }else{
+        const hit=pointerOnPlane(event,P.drag.plane);if(!hit)return;const target=P.drag.target.clone().add(P.drag.hit).sub(hit);P.cameraTarget={x:target.x,y:target.y,z:target.z};
+      }
+      updateCamera();
+    });
+    const end=event=>{if(!P.drag||P.drag.pointerId===event.pointerId)P.drag=null;};
+    canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',end);
+    canvas.addEventListener('auxclick',event=>{if(event.button===1)event.preventDefault();});canvas.addEventListener('contextmenu',event=>event.preventDefault());
     canvas.addEventListener('wheel',event=>{event.preventDefault();P.cameraOrbit.distance=clamp(P.cameraOrbit.distance*(event.deltaY>0?1.09:.92),6.5,23);updateCamera();},{passive:false});
     canvas.addEventListener('dblclick',()=>{P.cameraOrbit={yaw:.78,pitch:.5,distance:15.2};updateCamera();});
   }
@@ -291,9 +326,9 @@
   }
 
   window.PLCTrainerPalletizer3D={
-    version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,
+    version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,setCameraNavigationPreset,
     startAuto:()=>{const ok=Runtime.startAuto(P.state);schedule();return ok;},stop:()=>Runtime.stopAll(P.state),home:()=>{const ok=Runtime.homeAll(P.state);schedule();return ok;},
-    get state(){return P.state;},get visible(){return P.visible;}
+    get state(){return P.state;},get visible(){return P.visible;},get cameraNavigationPreset(){return P.cameraNavigationPreset;}
   };
   init();
 })();

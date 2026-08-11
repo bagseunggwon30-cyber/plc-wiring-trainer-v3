@@ -8,6 +8,7 @@ const read=file=>fs.readFileSync(path.join(root,file),'utf8');
 const html=read('index.html');
 const multiview=read('src/ui/multiview-ui.js');
 const ui=read('src/ui/palletizer-3d.js');
+const camera=read('src/ui/camera-navigation.js');
 const pkg=JSON.parse(read('package.json'));
 
 test('v3 renderer keeps the palletizer stack in dependency order without a runtime npm dependency',()=>{
@@ -42,5 +43,6 @@ test('v3 persistence keeps the 3D state and the bridge stays offline',()=>{
 test('new browser scripts parse as classic JavaScript',()=>{
   assert.doesNotThrow(()=>new Function(read('src/runtime/palletizer-runtime.js')));
   assert.doesNotThrow(()=>new Function(multiview));
+  assert.doesNotThrow(()=>new Function(camera));
   assert.doesNotThrow(()=>new Function(ui));
 });

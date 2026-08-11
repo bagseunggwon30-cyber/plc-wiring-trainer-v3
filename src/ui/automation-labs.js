@@ -5,8 +5,9 @@
   const Servo = window.PLCTrainerServo2Runtime;
   const MPS = window.PLCTrainerMPSRuntime;
   const Pneumatic = window.PLCTrainerPneumaticRuntime;
-  if (!Servo || !MPS || !Pneumatic) {
-    console.error('Automation lab runtimes are missing');
+  const CameraNavigation = window.PLCTrainerCameraNavigation;
+  if (!Servo || !MPS || !Pneumatic || !CameraNavigation) {
+    console.error('Automation lab runtimes or camera navigation are missing');
     return;
   }
 
@@ -84,8 +85,9 @@
     try { if (typeof S !== 'undefined') saved = S.automationLab || null; } catch (_) { /* standalone */ }
     const activeLab = LABS.includes(saved?.activeLab) ? saved.activeLab : 'servo2';
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       activeLab,
+      cameraNavigationPreset: CameraNavigation.normalizePreset(saved?.cameraNavigationPreset),
       labs: {
         servo2: Servo.createState({ saved: saved?.labs?.servo2 }),
         mps: MPS.createState({ saved: saved?.labs?.mps }),
@@ -99,8 +101,9 @@
   function exportState() {
     if (!A.state) return null;
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       activeLab: A.activeLab,
+      cameraNavigationPreset: CameraNavigation.normalizePreset(A.state.cameraNavigationPreset),
       labs: {
         servo2: Servo.exportState(A.state.labs.servo2),
         mps: MPS.exportState(A.state.labs.mps),
@@ -128,6 +131,7 @@
       #al-tabs{position:relative;z-index:20;display:flex;align-items:center;gap:5px;padding:5px 9px;border-bottom:1px solid #2a4456;background:#101c25;box-shadow:0 3px 12px rgba(0,0,0,.24)}
       #al-tabs b{margin-right:7px;color:#b7d3e3;font-size:11px;white-space:nowrap}#al-tabs small{margin-left:auto;color:#68889b;font:9px Consolas,monospace;white-space:nowrap}
       .al-tab{height:31px;padding:0 11px;border:1px solid #3b5667;border-radius:4px;background:#1c2c37;color:#b9cbd5;cursor:pointer;font-size:10px}.al-tab:hover{background:#284457;color:#fff}.al-tab.active{border-color:#4ba8d9;background:#176b9b;color:#fff;box-shadow:0 0 0 1px rgba(75,168,217,.2) inset}
+      .al-camera-navigation{display:flex;align-items:center;gap:4px;margin-left:auto;color:#7f9aab;font-size:8px;white-space:nowrap}.al-camera-navigation select{height:27px;border:1px solid #3b5667;border-radius:4px;background:#0b1720;color:#dce9ef;padding:0 5px;font:9px Consolas,monospace}.al-camera-navigation select:focus-visible{border-color:#7dc5ed;outline:1px solid #7dc5ed}
       #al-content{position:relative;min-height:0}.al-pane{display:none;position:absolute;inset:0;min-height:0}.al-pane.active{display:block}.al-pane-grid{display:grid;grid-template-columns:minmax(0,1fr) 350px;height:100%;min-height:0;background:#091119}
       .al-scene{position:relative;min-width:0;min-height:0;overflow:hidden;background:radial-gradient(circle at 45% 35%,#243746,#071018 72%)}.al-scene canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
       .al-scene-title{position:absolute;z-index:4;left:14px;top:12px;display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #35566c;border-radius:5px;background:rgba(5,13,19,.84);pointer-events:none}.al-scene-title b{font-size:12px;color:#fff}.al-scene-title span{font:9px Consolas;color:#7fb5d2}
@@ -146,13 +150,18 @@
       .al-pressure{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.al-gauge{padding:7px 3px;border-radius:4px;background:#0a151c;text-align:center}.al-gauge b{display:block;color:#75d0f4;font:700 14px Consolas}.al-gauge span{color:#7894a4;font-size:7px}.al-stroke{height:9px;overflow:hidden;border-radius:7px;background:#071017}.al-stroke i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b7eae,#5de2ff);transition:width .08s linear}
       .al-asset-note{margin:6px 0 0;padding:6px;border-left:3px solid #587a8e;background:#0b161d;color:#809bab;font-size:8px;line-height:1.45}
       .al-equipment-select{width:100%;min-height:310px;box-sizing:border-box;border:1px solid #38586b;border-radius:5px;background:#08131a;color:#dbeaf1;padding:4px;font:9px 'Malgun Gothic',sans-serif}.al-equipment-select option{padding:5px}.al-equipment-select optgroup{color:#78b9d8;font-weight:700}.al-equipment-meta{display:grid;grid-template-columns:80px minmax(0,1fr);gap:5px;margin-top:8px;font:8px Consolas;color:#89a5b5}.al-equipment-meta dt{color:#638092}.al-equipment-meta dd{margin:0;color:#d8e8ef;overflow-wrap:anywhere}.al-equipment-loading{color:#78cff3}.al-equipment-error{color:#ff8077}
-      @media(max-width:960px){.al-pane-grid{grid-template-columns:minmax(0,1fr) 300px}#al-tabs small{display:none}.al-tab{padding:0 7px}.al-side{padding:8px}.al-camera-presets{top:48px}}
+      @media(max-width:960px){.al-pane-grid{grid-template-columns:minmax(0,1fr) 300px}#al-tabs small,.al-camera-navigation span{display:none}.al-tab{padding:0 7px}.al-side{padding:8px}.al-camera-presets{top:48px}}
     `;
     document.head.appendChild(style);
   }
 
   function cameraPresetButtons() {
     return `<div class="al-camera-presets" aria-label="카메라 프리셋"><button class="al-camera-preset" data-camera-preset="space" title="상단 보기 (Space)">SPACE 상단</button><button class="al-camera-preset" data-camera-preset="f1" title="프리셋 1 (F1)">F1</button><button class="al-camera-preset" data-camera-preset="f2" title="프리셋 2 (F2)">F2</button></div>`;
+  }
+
+  function cameraHintElement(extra = '', legacyHint = '우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소') {
+    const preset = A.state?.cameraNavigationPreset || '3ds-max';
+    return `<div class="al-scene-hint" data-camera-hint data-camera-extra="${esc(extra)}" data-camera-legacy="${esc(legacyHint)}">${esc(CameraNavigation.hint(preset, legacyHint) + extra)}</div>`;
   }
 
   function editorToolbar(lab) {
@@ -162,7 +171,7 @@
   }
 
   function servoPane() {
-    return `<div class="al-pane-grid"><div class="al-scene" data-scene="servo2"><div class="al-scene-title"><b>2축 서보 제어 실습실</b><span>XBF-PD02A / QD75D2N</span></div>${cameraPresetButtons()}${editorToolbar('servo2')}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · SPACE/F1/F2 시점</div></div><aside class="al-side">
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="servo2"><div class="al-scene-title"><b>2축 서보 제어 실습실</b><span>XBF-PD02A / QD75D2N</span></div>${cameraPresetButtons()}${editorToolbar('servo2')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-servo-status"><b>대기</b><span>IDLE</span></div><label class="al-profile">장비 프로필<select id="al-servo-profile"><option value="ls">LS XBF-PD02A + L7S</option><option value="mitsubishi">Mitsubishi QD75 + MR-J4</option></select></label><div class="al-actions three"><button class="al-btn run" data-servo-action="servo">SERVO ON</button><button class="al-btn" data-servo-action="home">전축 원점</button><button class="al-btn stop" data-servo-action="stop">전축 정지</button></div></section>
       <section class="al-section"><h3>축 수동 운전 <small>누르는 동안 JOG</small></h3>${['X', 'Y'].map(axis => `<div class="al-axis"><strong>${axis}</strong><div><div class="al-axis-value" data-servo-pos="${axis}">0.00 mm</div><div class="al-axis-flags" data-servo-flags="${axis}">SERVO OFF</div><div class="al-axis-target"><input data-servo-target="${axis}" type="number" step="1" value="${axis === 'X' ? 320 : 240}"><button data-servo-move="${axis}">ABS</button></div></div><div class="al-jog"><button data-servo-jog="${axis},-1">−</button><button data-servo-jog="${axis},1">＋</button></div></div>`).join('')}</section>
       <section class="al-section"><h3>2축 직선 보간</h3><div class="al-fields"><label class="al-field">X 목표<input id="al-linear-x" type="number" value="380"></label><label class="al-field">Y 목표<input id="al-linear-y" type="number" value="300"></label><label class="al-field">속도<input id="al-linear-speed" type="number" value="140"></label></div><button class="al-btn" data-servo-action="linear" style="width:100%;margin-top:6px">X/Y 동시 직선 보간</button></section>
@@ -171,7 +180,7 @@
   }
 
   function mpsPane() {
-    return `<div class="al-pane-grid"><div class="al-scene" data-scene="mps"><div class="al-scene-title"><b>MPS 제어 실습실</b><span>CONVEYOR · PROCESSING · TRANSFER</span></div>${cameraPresetButtons()}${editorToolbar('mps')}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · SPACE/F1/F2 시점</div></div><aside class="al-side">
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="mps"><div class="al-scene-title"><b>MPS 제어 실습실</b><span>CONVEYOR · PROCESSING · TRANSFER</span></div>${cameraPresetButtons()}${editorToolbar('mps')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-mps-status"><b>PLC 출력 대기</b><span>18 OUT · 27 IN</span></div><label class="al-profile">PLC 주소 프로필<select id="al-mps-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><div class="al-actions"><button class="al-btn run" data-mps-action="auto">▶ PLC 제어</button><button class="al-btn stop" data-mps-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-mps-action="steel">＋ 강재 워크</button><button class="al-btn" data-mps-action="plastic">＋ PP 워크</button><button class="al-btn" data-mps-action="reset">↺ 설비 리셋</button><button class="al-btn" data-mps-action="clear">워크 비우기</button></div></section>
       <section class="al-section"><h3>리프트 서보 <small>I24 RLS · I25 DOG · I26 FLS</small></h3><label class="al-servo-slide"><span>위치 명령</span><input id="al-mps-lift" type="range" min="0" max="100" value="0"><output id="al-mps-lift-value">0%</output></label></section>
       <section class="al-section"><h3>PLC 출력 O0–O17 <small>원본 MPS 물리 플랜트</small></h3><div class="al-output-grid">${MPS_OUTPUT_LABELS.map((label, index) => `<label class="al-output" title="O${index} ${label}"><input type="checkbox" data-mps-output-index="${index}"><span>O${index} ${label}</span></label>`).join('')}</div></section>
@@ -181,7 +190,7 @@
   }
 
   function pneumaticPane() {
-    return `<div class="al-pane-grid"><div class="al-scene" data-scene="pneumatic"><div class="al-scene-title"><b>공압 제어 실습실</b><span>5/2 VALVE · D/A CYLINDER · VACUUM</span></div>${cameraPresetButtons()}${editorToolbar('pneumatic')}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · SPACE/F1/F2 시점</div></div><aside class="al-side">
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="pneumatic"><div class="al-scene-title"><b>공압 제어 실습실</b><span>5/2 VALVE · D/A CYLINDER · VACUUM</span></div>${cameraPresetButtons()}${editorToolbar('pneumatic')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-pneu-status"><b>대기</b><span>IDLE</span></div><label class="al-profile">PLC 주소 프로필<select id="al-pneu-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><div class="al-actions"><button class="al-btn" data-pneu-action="supply">AIR ON</button><button class="al-btn run" data-pneu-action="auto">▶ 자동 1사이클</button><button class="al-btn stop" data-pneu-action="stop">■ 정지</button><button class="al-btn" data-pneu-action="reset">↺ 고장 리셋</button></div></section>
       <section class="al-section"><h3>압력·스트로크</h3><div class="al-pressure"><div class="al-gauge"><b data-pneu-gauge="input">0.0</b><span>IN bar</span></div><div class="al-gauge"><b data-pneu-gauge="output">0.0</b><span>REG bar</span></div><div class="al-gauge"><b data-pneu-gauge="vacuum">0.0</b><span>VAC bar</span></div></div><div class="al-stroke" style="margin-top:7px"><i id="al-pneu-stroke"></i></div></section>
       <section class="al-section"><h3>밸브·유량 설정</h3><div class="al-fields"><label class="al-field">밸브<select id="al-pneu-valve"><option value="single">5/2 단솔</option><option value="double">5/2 복솔</option></select></label><label class="al-field">설정압 bar<input id="al-pneu-reg" type="number" min="0" max="8" step=".5" value="5"></label><label class="al-field">전진 유량<input id="al-pneu-throttle" type="number" min=".05" max="1" step=".05" value="1"></label></div><div class="al-checks" style="margin-top:6px"><label class="al-check"><input type="checkbox" data-pneu-coil="A">SOL A 전진</label><label class="al-check"><input type="checkbox" data-pneu-coil="B">SOL B 후진</label><label class="al-check"><input type="checkbox" id="al-pneu-vacuum">진공 흡착</label><label class="al-check"><input type="checkbox" id="al-pneu-part" checked>제품 감지</label></div></section>
@@ -191,7 +200,7 @@
   }
 
   function equipmentPane() {
-    return `<div class="al-pane-grid"><div class="al-scene" data-scene="equipment3d"><div class="al-scene-title"><b>3D 장비 검사실</b><span>SELECTIVE ASSETS · LAZY LOAD</span></div>${cameraPresetButtons()}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · 장비는 한 번에 1개만 표시</div></div><aside class="al-side">
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="equipment3d"><div class="al-scene-title"><b>3D 장비 검사실</b><span>SELECTIVE ASSETS · LAZY LOAD</span></div>${cameraPresetButtons()}${cameraHintElement(' · 장비는 한 번에 1개만 표시')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-equipment-status"><b>장비 목록 준비</b><span>LOCAL</span></div><select class="al-equipment-select" id="al-equipment-select" size="14" aria-label="3D 장비 선택"><option>자산 매니페스트 읽는 중…</option></select><dl class="al-equipment-meta"><dt>모델</dt><dd id="al-equipment-root">—</dd><dt>메시</dt><dd id="al-equipment-mesh">—</dd><dt>파일</dt><dd id="al-equipment-file">—</dd><dt>검토 등급</dt><dd>교육용 3D 외형</dd></dl><div class="al-asset-note">이 화면은 실제 3D 외형을 관찰하는 교육용 자산 검사실입니다. 단자 ID·전기 정격·검토 통과 근거는 제조사 매뉴얼 기반 프로필과 SVG 오버레이만 사용합니다.</div></section>
     </aside></div>`;
   }
@@ -205,7 +214,7 @@
     A.hub.id = 'al-hub';
     A.hub.innerHTML = `<nav id="al-tabs"><b>🏭 자동화 실습실</b>${[
       ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['equipment3d', '3D 장비 27종']
-    ].map(([key, label]) => `<button class="al-tab" data-lab="${key}">${label}</button>`).join('')}<small>OFFLINE · LOCAL SIMULATION</small></nav><div id="al-content"></div>`;
+    ].map(([key, label]) => `<button class="al-tab" data-lab="${key}">${label}</button>`).join('')}<label class="al-camera-navigation"><span>카메라</span><select id="al-camera-navigation" aria-label="3D 카메라 조작 방식"><option value="3ds-max">3ds Max</option><option value="legacy">기존 조작</option></select></label><small>OFFLINE</small></nav><div id="al-content"></div>`;
     A.host.appendChild(A.hub);
     A.content = q('#al-content', A.hub);
     const p3Pane = document.createElement('section'); p3Pane.className = 'al-pane'; p3Pane.dataset.labPane = 'palletizer3d'; p3Pane.appendChild(oldRoot); A.content.appendChild(p3Pane);
@@ -617,9 +626,10 @@
     };
     canvas.addEventListener('pointerdown', event => {
       const scene = cameraScene();
-      if (!scene || (event.button !== 2 && event.button !== 1)) return;
+      const mode = scene ? CameraNavigation.resolvePointerAction(event, A.state.cameraNavigationPreset, { orbitButtons: [2], panButtons: [1] }) : null;
+      if (!scene || !mode) return;
       event.preventDefault();
-      if (event.button === 2) {
+      if (mode === 'orbit') {
         A.drag = { mode: 'orbit', pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: scene.orbit.yaw, pitch: scene.orbit.pitch };
       } else {
         scene.camera.updateMatrixWorld(true);
@@ -636,8 +646,9 @@
       const scene = cameraScene();
       if (!A.drag || !scene || A.drag.pointerId !== event.pointerId) return;
       if (A.drag.mode === 'orbit') {
-        scene.orbit.yaw = wrapDegrees(A.drag.yaw + (event.clientX - A.drag.x) * .1);
-        scene.orbit.pitch = clamp(A.drag.pitch - (event.clientY - A.drag.y) * .1, -20, 89.999);
+        const next = CameraNavigation.orbitFromDrag(A.state.cameraNavigationPreset, { yaw: A.drag.yaw, pitch: A.drag.pitch }, { x: event.clientX - A.drag.x, y: event.clientY - A.drag.y }, { yaw: .1, pitch: .1, legacyYawSign: 1, legacyPitchSign: -1 });
+        scene.orbit.yaw = wrapDegrees(next.yaw);
+        scene.orbit.pitch = clamp(next.pitch, -20, 89.999);
       } else {
         const hit = pointerOnPlane(event, scene, A.drag.plane);
         if (!hit) return;
@@ -647,6 +658,7 @@
     });
     const end = event => { if (!A.drag || event.pointerId === A.drag.pointerId) A.drag = null; };
     canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('lostpointercapture', end);
+    canvas.addEventListener('auxclick', event => { if (event.button === 1) event.preventDefault(); });
     canvas.addEventListener('contextmenu', event => event.preventDefault());
     canvas.addEventListener('wheel', event => {
       const scene = cameraScene();
@@ -667,6 +679,22 @@
 
   function isEditableTarget(target) { return !!target?.closest?.('input,textarea,select,button,[contenteditable]:not([contenteditable="false"])'); }
   function isCameraUiTarget(target) { return isEditableTarget(target) || !!target?.closest?.('.al-side,.al-camera-presets'); }
+  function updateCameraNavigationUi() {
+    const preset = CameraNavigation.normalizePreset(A.state?.cameraNavigationPreset);
+    const select = q('#al-camera-navigation', A.hub); if (select) select.value = preset;
+    qa('[data-camera-hint]', A.hub).forEach(element => {
+      element.textContent = CameraNavigation.hint(preset, element.dataset.cameraLegacy) + (element.dataset.cameraExtra || '');
+    });
+  }
+  function setCameraNavigationPreset(value, options = {}) {
+    if (!A.state) return '3ds-max';
+    const preset = CameraNavigation.normalizePreset(value);
+    A.state.cameraNavigationPreset = preset; A.drag = null;
+    window.PLCTrainerPalletizer3D?.setCameraNavigationPreset?.(preset);
+    updateCameraNavigationUi(); if (A.initialized) schedule();
+    if (options.persist !== false) persist(true);
+    return preset;
+  }
   function applyCameraPreset(scene, name) {
     const preset = CAMERA_PRESETS[name];
     if (!scene || !preset) return;
@@ -687,6 +715,7 @@
 
   function bindUi() {
     qa('[data-camera-preset]', A.hub).forEach(button => button.onclick = () => { applyCameraPreset(A.scenes[A.activeLab], button.dataset.cameraPreset); schedule(); });
+    q('#al-camera-navigation', A.hub).onchange = event => setCameraNavigationPreset(event.target.value);
     qa('[data-editor-mode]', A.hub).forEach(button => button.onclick = () => {
       const lab = button.closest('[data-editor-tools]')?.dataset.editorTools, editor = A.editors[lab];
       if (editor?.setMode(button.dataset.editorMode)) { updateEditorUi(); schedule(); persist(true); }
@@ -856,6 +885,7 @@
     const plant = A.scenes.mps?.parts?.importedPlant;
     return {
       activeLab: A.activeLab,
+      cameraNavigationPreset: A.state?.cameraNavigationPreset || '3ds-max',
       editors: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, { mode: editor.mode, modules: editor.modules.size, connections: editor.connections.size }])),
       mps: plant ? {
         supplyZ: plant.supply?.node?.position.z,
@@ -875,15 +905,15 @@
 
   function importState(saved) {
     if (!saved || typeof saved !== 'object') return;
-    A.state = { schemaVersion: 1, activeLab: LABS.includes(saved.activeLab) ? saved.activeLab : 'servo2', labs: { servo2: Servo.createState({ saved: saved.labs?.servo2 }), mps: MPS.createState({ saved: saved.labs?.mps }), pneumatic: Pneumatic.createState({ saved: saved.labs?.pneumatic }) }, editor: saved.editor || null, equipment: { selected: typeof saved.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' } };
+    A.state = { schemaVersion: 2, activeLab: LABS.includes(saved.activeLab) ? saved.activeLab : 'servo2', cameraNavigationPreset: CameraNavigation.normalizePreset(saved.cameraNavigationPreset), labs: { servo2: Servo.createState({ saved: saved.labs?.servo2 }), mps: MPS.createState({ saved: saved.labs?.mps }), pneumatic: Pneumatic.createState({ saved: saved.labs?.pneumatic }) }, editor: saved.editor || null, equipment: { selected: typeof saved.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' } };
     for (const [lab, editor] of Object.entries(A.editors)) if (saved.editor?.[lab]) { try { editor.importState(saved.editor[lab], { strict: false }); } catch (error) { console.warn(`Editor state for ${lab} could not be restored`, error); } }
-    A.activeLab = A.state.activeLab; setLab(A.activeLab); updateScenes(); updateUi(true); if (A.equipmentCatalog.length) void showEquipmentModel(A.state.equipment.selected); persist(true);
+    A.activeLab = A.state.activeLab; setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); setLab(A.activeLab); updateScenes(); updateUi(true); if (A.equipmentCatalog.length) void showEquipmentModel(A.state.equipment.selected); persist(true);
   }
 
   function init() {
-    injectCss(); A.state = loadSaved(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
+    injectCss(); A.state = loadSaved(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
   }
 
-  window.PLCTrainerAutomationLabs = { version: '2.8.0', setVisible, setLab, renderActive, resize, exportState, importState, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
+  window.PLCTrainerAutomationLabs = { version: '2.9.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
   init();
 })();

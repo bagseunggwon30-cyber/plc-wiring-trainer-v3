@@ -19,6 +19,7 @@ test('v3 loads automation runtimes, hub UI, and the local model bridge in order'
     'src/runtime/mps-runtime.js',
     'src/runtime/pneumatic-runtime.js',
     'src/ui/multiview-ui.js',
+    'src/ui/camera-navigation.js',
     'src/ui/palletizer-3d.js',
     'src/ui/sov-editor-engine.js',
     'src/ui/automation-labs.js',
@@ -49,16 +50,19 @@ test('automation hub exposes five labs and delegates the shared 3D view', () => 
   assert.doesNotThrow(() => new Function(multiview));
 });
 
-test('automation lab camera matches the audited SoV orthographic controls and presets', () => {
+test('automation lab camera keeps the audited orthographic presets behind shared navigation controls', () => {
   assert.match(ui, /new Three\.OrthographicCamera\(-3\.5, 3\.5, 3\.5, -3\.5, \.01, 100\)/);
   assert.match(ui, /const CAMERA_DISTANCE = 16\.17/);
   assert.match(ui, /focus: \[-2\.8e-8, \.882998, \.0190001\], pitch: 10\.67, yaw: 360, scale: \.9/);
   assert.match(ui, /focus: \[0, \.82, 0\], pitch: 90, yaw: 0, scale: 1/);
   assert.match(ui, /focus: \[5\.72e-6, \.819996, 0\], pitch: 24\.9, yaw: 20\.2, scale: \.9/);
   assert.match(ui, /focus: \[0, \.87, 0\], pitch: 27\.33, yaw: 332\.5, scale: \.76/);
-  assert.match(ui, /event\.button !== 2 && event\.button !== 1/);
-  assert.match(ui, /A\.drag\.yaw \+ \(event\.clientX - A\.drag\.x\) \* \.1/);
-  assert.match(ui, /A\.drag\.pitch - \(event\.clientY - A\.drag\.y\) \* \.1, -20, 89\.999/);
+  assert.match(ui, /CameraNavigation\.resolvePointerAction/);
+  assert.match(ui, /CameraNavigation\.orbitFromDrag/);
+  assert.match(ui, /legacyYawSign: 1, legacyPitchSign: -1/);
+  assert.match(ui, /cameraNavigationPreset/);
+  assert.match(ui, /value="3ds-max">3ds Max/);
+  assert.match(ui, /value="legacy">기존 조작/);
   assert.match(ui, /addScaledVector\(forward, 20\)/);
   assert.match(ui, /setFromNormalAndCoplanarPoint\(forward\.clone\(\)\.negate\(\), planePoint\)/);
   assert.match(ui, /\.0339661 \+ \(scene\.orbit\.scale - \.450001\) \* \.104327/);
