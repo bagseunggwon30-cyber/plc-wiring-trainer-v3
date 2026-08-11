@@ -9553,8 +9553,22 @@
         "mps-complete-station.glb",
         "servo2-workshop.glb"
       ],
-      "status": "pending-runtime-overlay",
-      "detail": "Skinned seven-segment display meshes are not baked into the static GLB and no runtime digit overlay is implemented yet."
+      "status": "partial-runtime-overlay",
+      "detail": "Skinned seven-segment meshes remain absent from static GLBs. The 24V discrete I/O bench supplies deterministic CanvasTexture overlays for timer-box.glb and counter-box.glb; servo and MPS displays remain pending."
+    }
+  ],
+  "runtimeOverlays": [
+    {
+      "code": "TIMER_COUNTER_FND_OVERLAY_V1",
+      "models": [
+        "timer-box.glb",
+        "counter-box.glb",
+        "counter-unit.glb"
+      ],
+      "scope": "discrete-lab",
+      "owner": "src/ui/automation-labs.js",
+      "status": "implemented",
+      "detail": "Displays deterministic simulated timer PV, counter PV and counter preset values. It is a runtime teaching overlay, not extracted manufacturer geometry."
     }
   ]
 }

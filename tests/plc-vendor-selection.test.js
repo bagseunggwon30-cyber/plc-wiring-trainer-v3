@@ -5,6 +5,7 @@ const Palletizer = require('../src/runtime/palletizer-runtime.js');
 const Servo = require('../src/runtime/servo2-runtime.js');
 const MPS = require('../src/runtime/mps-runtime.js');
 const Pneumatic = require('../src/runtime/pneumatic-runtime.js');
+const Discrete = require('../src/runtime/discrete-io-runtime.js');
 
 test('palletizer exposes an explicit LS or Mitsubishi profile and never mixes address maps', () => {
   const state = Palletizer.createState({ profile: 'ls' });
@@ -30,6 +31,8 @@ test('MPS vendor selection de-energizes all outputs and rejects the inactive ven
   const state = MPS.createState({ profile: 'ls' });
   const ls = MPS.getProfile(state);
   assert.equal(MPS.writeDevice(state, ls.outputs.conveyor, 1).ok, true);
+  assert.equal(MPS.writeDevice(state, ls.data.liftTarget, .65).ok, true);
+  assert.equal(state.liftServo.target, .65);
   MPS.writeDevice(state, ls.outputs.supplyForward, 1);
   MPS.tick(state, .1);
   const stoppedAt = state.actuators.supply.position;
@@ -42,7 +45,10 @@ test('MPS vendor selection de-energizes all outputs and rejects the inactive ven
   assert.equal(state.actuators.supply.position, stoppedAt);
   assert.equal(Object.entries(state.actuators).filter(([name]) => MPS.AXIS_DEFINITIONS[name].mode === 'double').every(([, axis]) => axis.lastDirection === 0), true);
   assert.equal(MPS.writeDevice(state, ls.outputs.conveyor, 1).ok, false);
+  assert.equal(MPS.writeDevice(state, ls.data.liftTarget, .2).ok, false);
   assert.equal(MPS.writeDevice(state, mitsubishi.outputs.conveyor, 1).ok, true);
+  assert.equal(MPS.writeDevice(state, mitsubishi.data.liftTarget, .35).ok, true);
+  assert.equal(state.liftServo.target, .35);
 });
 
 test('pneumatic vendor selection closes commands before the other map is enabled', () => {
@@ -76,6 +82,22 @@ test('servo vendor selection stops motion and servo power before accepting the s
   assert.equal(Object.values(state.axes).every(axis => axis.servoOn === false), true);
   assert.equal(Servo.writeDevice(state, ls.commands.servoOn.X, 1).ok, false);
   assert.equal(Servo.writeDevice(state, mitsubishi.commands.servoOn.X, 1).ok, true);
+});
+
+test('discrete bench uses one selected vendor map and switching safely drops every load', () => {
+  const state = Discrete.createState({ profile: 'ls' });
+  Discrete.setConnections(state, Discrete.referenceConnections('sink'));
+  Discrete.setPower(state, true);
+  const ls = Discrete.getProfile(state);
+  assert.equal(Discrete.writeDevice(state, ls.outputs.relay1, true).ok, true);
+  assert.equal(state.effectiveOutputs.relay1, true);
+
+  assert.equal(Discrete.setProfile(state, 'mitsubishi'), true);
+  const mitsubishi = Discrete.getProfile(state);
+  assert.equal(Object.values(state.commandOutputs).every(value => value === false), true);
+  assert.equal(Object.values(state.effectiveOutputs).every(value => value === false), true);
+  assert.equal(Discrete.writeDevice(state, ls.outputs.relay1, true).ok, false);
+  assert.equal(Discrete.writeDevice(state, mitsubishi.outputs.relay1, true).ok, true);
 });
 
 test('saved plant states restore with every output and motion command safely off', () => {

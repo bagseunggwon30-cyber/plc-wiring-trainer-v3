@@ -8,7 +8,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.7.1';
+  const VERSION = '2.7.2';
   const EPS = 1e-9;
   const MAX_TICK_STEP = 0.02;
   const MATERIALS = Object.freeze(['steel', 'plastic']);
@@ -230,13 +230,17 @@
       plastic: isLs ? 'D0302' : 'D302',
       exited: isLs ? 'D0303' : 'D303'
     };
+    const data = {
+      liftTarget: isLs ? 'D0320' : 'D320',
+      liftPosition: isLs ? 'D0321' : 'D321'
+    };
     return {
       id, vendor, family, addressStyle: style,
       aliases: isLs ? ['ls', 'xgb', 'xg5000'] : ['mitsubishi', 'qnu', 'q-series', 'qseries'],
       simulationOnly: true,
       transport: null,
-      addresses: { commands, outputs, inputs, status, counters },
-      commands, outputs, inputs, status, counters
+      addresses: { commands, outputs, inputs, status, counters, data },
+      commands, outputs, inputs, status, counters, data
     };
   }
 
@@ -891,6 +895,8 @@
     memorySet(state, profile.status.jam, state.jammed);
     memorySet(state, profile.status.step, AUTO_STEPS[state.auto.state] ?? -1);
     for (const [name, address] of Object.entries(profile.counters)) memorySet(state, address, state.counters[name] || 0);
+    memorySet(state, profile.data.liftTarget, state.liftServo.target);
+    memorySet(state, profile.data.liftPosition, state.liftServo.position);
     return state.memory;
   }
 
@@ -899,6 +905,10 @@
       if (normalizeAddress(mapped) === address) return key;
     }
     return null;
+  }
+
+  function dataAt(profile, address) {
+    return Object.entries(profile.data).find(([, mapped]) => normalizeAddress(mapped) === address)?.[0] || null;
   }
 
   function readDevice(state, rawAddress) {
@@ -913,6 +923,15 @@
   function writeDevice(state, rawAddress, value) {
     const address = normalizeAddress(rawAddress);
     const profile = getProfile(state);
+    const data = dataAt(profile, address);
+    if (data) {
+      if (data !== 'liftTarget') return { ok: false, error: `${address}는 읽기 전용 상태 주소입니다` };
+      const target = finite(value, NaN);
+      if (!Number.isFinite(target)) return { ok: false, error: '숫자 위치 설정값이 필요합니다' };
+      setLiftServoTarget(state, target);
+      refreshMemory(state);
+      return { ok: true, address, value: state.liftServo.target, accepted: true };
+    }
     const command = commandAt(profile, address);
     if (!command) {
       if (new Set(flattenAddresses(profile.addresses)).has(address)) return { ok: false, error: `${address}는 읽기 전용 상태 주소입니다` };

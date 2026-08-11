@@ -14,11 +14,12 @@
     DELETE_WIRE: 'DELETE_WIRE',
     DELETE_MODULE: 'DELETE_MODULE'
   });
-  const LABS = Object.freeze(['servo2', 'mps', 'pneumatic']);
+  const LABS = Object.freeze(['servo2', 'mps', 'pneumatic', 'discrete']);
   const MODE_ALLOWANCES = Object.freeze({
     servo2: Object.freeze([MODES.CONTROL, MODES.WIRE, MODES.DELETE_WIRE]),
     mps: Object.freeze([MODES.CONTROL, MODES.WIRE, MODES.DELETE_WIRE]),
-    pneumatic: Object.freeze(Object.values(MODES))
+    pneumatic: Object.freeze(Object.values(MODES)),
+    discrete: Object.freeze([MODES.CONTROL, MODES.MOVE, MODES.WIRE, MODES.DELETE_WIRE, MODES.DELETE_MODULE])
   });
   const HOTKEYS = Object.freeze({
     Digit1: MODES.CONTROL, Numpad1: MODES.CONTROL,
@@ -223,7 +224,7 @@
     _createVisual(kind, preview = false, options = {}) {
       const color = options.color ?? (preview ? this.colors.preview : this.colors[kind]);
       if (kind === 'electric') {
-        const geometry = new this.THREE.BufferGeometry().setFromPoints([new this.THREE.Vector3(), new this.THREE.Vector3()]);
+        const geometry = new this.THREE.BufferGeometry().setFromPoints(Array.from({ length: 6 }, () => new this.THREE.Vector3()));
         const material = new this.THREE.LineBasicMaterial({ color, transparent: preview, opacity: preview ? .72 : 1 });
         const line = new this.THREE.Line(geometry, material); line.userData.sovEditorVisual = 'line'; return line;
       }
@@ -235,7 +236,10 @@
     _updateVisual(visual, worldA, worldB) {
       const a = this._connectionLocal(worldA), b = this._connectionLocal(worldB);
       if (visual.userData.sovEditorVisual === 'line') {
-        const position = visual.geometry.getAttribute('position'); position.setXYZ(0, a.x, a.y, a.z); position.setXYZ(1, b.x, b.y, b.z); position.needsUpdate = true; visual.geometry.computeBoundingSphere(); visual.visible = true; return;
+        const id = String(visual.userData.connectionId || 'preview'); let hash = 0; for (let index = 0; index < id.length; index += 1) hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+        const lane = hash % 9, routeY = Math.max(a.y, b.y) + .12 + lane * .018, routeZ = Math.max(a.z, b.z) + .10 + lane * .024;
+        const points = [a, new this.THREE.Vector3(a.x, routeY, a.z), new this.THREE.Vector3(a.x, routeY, routeZ), new this.THREE.Vector3(b.x, routeY, routeZ), new this.THREE.Vector3(b.x, routeY, b.z), b];
+        const position = visual.geometry.getAttribute('position'); points.forEach((point, index) => position.setXYZ(index, point.x, point.y, point.z)); position.needsUpdate = true; visual.geometry.computeBoundingSphere(); visual.visible = true; return;
       }
       const delta = b.clone().sub(a), length = delta.length(); visual.visible = length > 1e-6;
       if (!visual.visible) return;
@@ -322,7 +326,7 @@
 
     beginMove(moduleId, rayValue, options = {}) {
       const module = this.modules.get(String(moduleId));
-      if (!module || this.lab !== 'pneumatic' || module.lab !== 'pneumatic' || this.mode !== MODES.MOVE || !module.movable) { this._emit('actionrejected', { action: 'move-start', moduleId: String(moduleId) }); return false; }
+      if (!module || module.lab !== this.lab || !MODE_ALLOWANCES[this.lab].includes(MODES.MOVE) || this.mode !== MODES.MOVE || !module.movable) { this._emit('actionrejected', { action: 'move-start', moduleId: String(moduleId) }); return false; }
       const ray = this._ray(rayValue), world = new this.THREE.Vector3(); module.object.updateWorldMatrix(true, false); module.object.getWorldPosition(world);
       const planeY = finiteNumber(options.planeY ?? world.y, 'planeY'), plane = new this.THREE.Plane(new this.THREE.Vector3(0, 1, 0), -planeY), hit = ray.intersectPlane(plane, new this.THREE.Vector3());
       if (!hit) return false;
@@ -353,7 +357,7 @@
 
     moveModule(moduleId, worldPosition, options = {}) {
       const module = this.modules.get(String(moduleId)); if (!module) throw new Error(`Unknown module: ${moduleId}`);
-      if (options.enforceMode !== false && (this.lab !== 'pneumatic' || module.lab !== 'pneumatic' || this.mode !== MODES.MOVE || !module.movable)) throw new Error('Module movement requires MOVE mode in pneumatic lab');
+      if (options.enforceMode !== false && (module.lab !== this.lab || !MODE_ALLOWANCES[this.lab].includes(MODES.MOVE) || this.mode !== MODES.MOVE || !module.movable)) throw new Error(`Module movement requires MOVE mode in ${this.lab} lab`);
       const current = new this.THREE.Vector3(); module.object.getWorldPosition(current);
       return this._setModuleWorldPosition(module, worldPosition, options.grid == null ? this.gridSize : Math.max(0, finiteNumber(options.grid, 'grid')), options.planeY ?? current.y, options.emit !== false);
     }
@@ -386,8 +390,8 @@
     }
 
     deleteModule(moduleId) {
-      if (this.lab !== 'pneumatic' || this.mode !== MODES.DELETE_MODULE) { this._emit('actionrejected', { action: 'delete-module', mode: this.mode }); return false; }
-      const module = this.modules.get(String(moduleId)); if (!module || module.lab !== 'pneumatic') return false;
+      if (!MODE_ALLOWANCES[this.lab].includes(MODES.DELETE_MODULE) || this.mode !== MODES.DELETE_MODULE) { this._emit('actionrejected', { action: 'delete-module', mode: this.mode }); return false; }
+      const module = this.modules.get(String(moduleId)); if (!module || module.lab !== this.lab) return false;
       return this.unregisterModule(moduleId, { removeObject: true, emit: true });
     }
 

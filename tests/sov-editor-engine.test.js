@@ -24,6 +24,7 @@ test('mode allowances and Digit/Numpad hotkeys match the six SoV editor modes', 
   assert.deepEqual(Editor.MODE_ALLOWANCES.servo2, ['CONTROL', 'WIRE', 'DELETE_WIRE']);
   assert.deepEqual(Editor.MODE_ALLOWANCES.mps, ['CONTROL', 'WIRE', 'DELETE_WIRE']);
   assert.deepEqual(Editor.MODE_ALLOWANCES.pneumatic, Object.values(Editor.MODES));
+  assert.deepEqual(Editor.MODE_ALLOWANCES.discrete, ['CONTROL', 'MOVE', 'WIRE', 'DELETE_WIRE', 'DELETE_MODULE']);
 
   const expected = ['CONTROL', 'MOVE', 'DELETE_MODULE', 'WIRE', 'AIR', 'DELETE_WIRE'];
   expected.forEach((mode, index) => {
@@ -45,6 +46,26 @@ test('mode allowances and Digit/Numpad hotkeys match the six SoV editor modes', 
   engine.dispose();
 });
 
+test('discrete bench supports movable electric modules but never pneumatic tubing', () => {
+  const scene = new THREE.Scene();
+  const engine = Editor.create({ three: THREE, scene, lab: 'discrete', gridSize: .1 });
+  const source = makeModule(engine, scene, 'source', 'discrete');
+  makeModule(engine, scene, 'load', 'discrete', [2, 0, 0]);
+
+  assert.equal(engine.setMode(Editor.MODES.AIR), false);
+  assert.equal(engine.setMode(Editor.MODES.MOVE), true);
+  engine.moveModule('source', [.26, 3, .74]);
+  assert.deepEqual(source.position.toArray(), [.30000000000000004, 0, .7000000000000001]);
+
+  engine.setMode(Editor.MODES.WIRE);
+  engine.connect({ moduleId: 'source', anchorId: 'E' }, { moduleId: 'load', anchorId: 'E' });
+  engine.setMode(Editor.MODES.DELETE_MODULE);
+  assert.equal(engine.deleteModule('source'), true);
+  assert.equal(engine.connections.size, 0);
+  assert.equal(source.parent, null);
+  engine.dispose();
+});
+
 test('registered electric lines and air tubes use live object-local anchors and one direct link per socket', () => {
   const scene = new THREE.Scene(), events = [];
   const engine = Editor.create({ three: THREE, scene, lab: 'pneumatic', onEvent: event => events.push(event) });
@@ -59,7 +80,10 @@ test('registered electric lines and air tubes use live object-local anchors and 
   engine.setMode(Editor.MODES.WIRE);
   const wire = engine.connect({ moduleId: 'left', anchorId: 'E' }, { moduleId: 'right', anchorId: 'E' });
   assert.equal(wire.visual.isLine, true);
-  assert.equal(wire.visual.geometry.getAttribute('position').count, 2);
+  assert.equal(wire.visual.geometry.getAttribute('position').count, 6);
+  const route = wire.visual.geometry.getAttribute('position');
+  assert.ok(route.getY(1) > route.getY(0));
+  assert.ok(route.getY(4) > route.getY(5));
   assert.throws(() => engine.connect({ moduleId: 'left', anchorId: 'E' }, { moduleId: 'third', anchorId: 'E' }), /only one direct connection/);
 
   engine.setMode(Editor.MODES.AIR);

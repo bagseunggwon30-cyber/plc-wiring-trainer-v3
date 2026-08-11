@@ -18,6 +18,7 @@ test('v3 loads automation runtimes, hub UI, and the local model bridge in order'
     'src/runtime/servo2-runtime.js',
     'src/runtime/mps-runtime.js',
     'src/runtime/pneumatic-runtime.js',
+    'src/runtime/discrete-io-runtime.js',
     'src/ui/multiview-ui.js',
     'src/ui/camera-navigation.js',
     'src/ui/palletizer-3d.js',
@@ -38,12 +39,26 @@ test('v3 loads automation runtimes, hub UI, and the local model bridge in order'
   assert.doesNotMatch(gltfLoader, /from '\.\/three\.module\.js'/);
 });
 
-test('automation hub exposes five labs and delegates the shared 3D view', () => {
-  for (const lab of ['palletizer3d', 'servo2', 'mps', 'pneumatic', 'equipment3d']) assert.match(ui, new RegExp(`['"]${lab}['"]`));
+test('automation hub exposes six labs and delegates the shared 3D view', () => {
+  for (const lab of ['palletizer3d', 'servo2', 'mps', 'pneumatic', 'discrete', 'equipment3d']) assert.match(ui, new RegExp(`['"]${lab}['"]`));
   assert.match(ui, /PLCTrainerPalletizer3D\?\.setVisible/);
   assert.match(ui, /PLCTrainerImportedModels/);
   assert.match(ui, /servo2-workshop\.glb/);
   assert.match(ui, /mps-complete-station\.glb/);
+  assert.match(ui, /PLCTrainerDiscreteIoRuntime/);
+  assert.match(ui, /Discrete\.setConnections/);
+  assert.match(ui, /Discrete\.referenceConnections/);
+  for (const asset of [
+    'mitsubishi-q-plc-module.glb', 'smps.glb', 'switch-box.glb', 'relay-module.glb',
+    'timer-box.glb', 'counter-unit.glb', 'counter-box.glb', 'buzzer-lamp.glb',
+    'tower-lamp.glb', 'photo-sensor-npn.glb', 'photo-sensor-pnp.glb',
+    'inductive-sensor-npn.glb', 'inductive-sensor-pnp.glb',
+    'capacitive-sensor-npn.glb', 'capacitive-sensor-pnp.glb',
+    'limit-switch-left.glb', 'limit-switch-right.glb'
+  ]) assert.match(ui, new RegExp(asset.replace('.', '\\.')));
+  assert.match(ui, /CanvasTexture/);
+  assert.match(ui, /model\?\.traverse\?\./);
+  assert.match(ui, /data-discrete-profile/);
   assert.match(multiview, /🏭 자동화 실습실/);
   assert.match(multiview, /PLCTrainerAutomationLabs/);
   assert.doesNotThrow(() => new Function(ui));
@@ -54,7 +69,9 @@ test('manual lab controls are routed through the currently selected vendor addre
   assert.match(ui, /Servo\.writeDevice/);
   assert.match(ui, /MPS\.writeDevice/);
   assert.match(ui, /Pneumatic\.writeDevice/);
+  assert.match(ui, /Discrete\.writeDevice/);
   assert.doesNotMatch(ui, /MPS\.setOutput\(/);
+  assert.doesNotMatch(ui, /MPS\.setLiftServoTarget\(/);
   assert.doesNotMatch(ui, /Pneumatic\.setSupply\(/);
   assert.doesNotMatch(ui, /Pneumatic\.setCoil\(/);
 });
@@ -121,7 +138,8 @@ test('selected imported assets match their manifest and contain no executable pa
   }
   assert.ok(manifest.geometryExclusions.some(item => item.root === 'STWorker_Flat' && item.reason === 'duplicate-scale-variant'));
   assert.ok(manifest.geometryExclusions.some(item => item.root === 'FND_Mesh' && item.reason === 'internal-display-part'));
-  assert.ok(manifest.knownLimitations.some(item => item.code === 'SKINNED_FND_NOT_EXPORTED' && item.status === 'pending-runtime-overlay'));
+  assert.ok(manifest.knownLimitations.some(item => item.code === 'SKINNED_FND_NOT_EXPORTED' && item.status === 'partial-runtime-overlay'));
+  assert.ok(manifest.runtimeOverlays.some(item => item.code === 'TIMER_COUNTER_FND_OVERLAY_V1' && item.status === 'implemented'));
   const labUi = read('src/ui/automation-labs.js');
   assert.match(labUi, /'sscnetiii-amp-head\.glb': 'SSCNET III 앰프 헤드'/);
   assert.match(labUi, /servo-amplifier\|sscnet\|relay/);

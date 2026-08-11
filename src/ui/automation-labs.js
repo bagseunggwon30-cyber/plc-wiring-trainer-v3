@@ -5,13 +5,14 @@
   const Servo = window.PLCTrainerServo2Runtime;
   const MPS = window.PLCTrainerMPSRuntime;
   const Pneumatic = window.PLCTrainerPneumaticRuntime;
+  const Discrete = window.PLCTrainerDiscreteIoRuntime;
   const CameraNavigation = window.PLCTrainerCameraNavigation;
-  if (!Servo || !MPS || !Pneumatic || !CameraNavigation) {
+  if (!Servo || !MPS || !Pneumatic || !Discrete || !CameraNavigation) {
     console.error('Automation lab runtimes or camera navigation are missing');
     return;
   }
 
-  const LABS = ['palletizer3d', 'servo2', 'mps', 'pneumatic', 'equipment3d'];
+  const LABS = ['palletizer3d', 'servo2', 'mps', 'pneumatic', 'discrete', 'equipment3d'];
   const EQUIPMENT_LABELS = Object.freeze({
     'mitsubishi-q-plc-module.glb': 'Mitsubishi Q PLC 모듈',
     'servo-amplifier.glb': '서보 앰프',
@@ -75,6 +76,17 @@
     '금속 감지', '정전용량', '종단 감지', '진공 확인', '미사용', '미사용',
     '미사용', '미사용', '서보 RLS(NC)', '서보 DOG', '서보 FLS(NC)'
   ]);
+  const DISCRETE_INPUTS = Object.freeze([
+    ['switchGreen', 'START 녹색 PB'], ['switchBlue', 'RESET 청색 PB'], ['switchRed', 'STOP 적색 PB'],
+    ['photoNpn', '광전 NPN'], ['photoPnp', '광전 PNP'], ['inductiveNpn', '유도 NPN'],
+    ['inductivePnp', '유도 PNP'], ['capacitiveNpn', '정전용량 NPN'], ['capacitivePnp', '정전용량 PNP'],
+    ['limitLeft', '좌 리미트'], ['limitRight', '우 리미트']
+  ]);
+  const DISCRETE_OUTPUTS = Object.freeze([
+    ['relay1', 'RY1'], ['relay2', 'RY2'], ['relay3', 'RY3'], ['timer', 'TIMER IN'], ['counter', 'COUNTER PULSE'],
+    ['lampGreen', '녹색 램프'], ['lampYellow', '황색 램프'], ['lampRed', '적색 램프'], ['lampWhite', '백색 램프'],
+    ['buzzer', '버저'], ['towerGreen', '타워 녹색'], ['towerYellow', '타워 황색'], ['towerRed', '타워 적색']
+  ]);
   const A = {
     host: null, hub: null, content: null, activeLab: 'servo2', visible: false, initialized: false,
     state: null, renderer: null, canvasHost: null, raf: 0, lastTime: 0, lastUi: 0, lastSave: 0,
@@ -93,13 +105,14 @@
     try { if (typeof S !== 'undefined') saved = S.automationLab || null; } catch (_) { /* standalone */ }
     const activeLab = LABS.includes(saved?.activeLab) ? saved.activeLab : 'servo2';
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       activeLab,
       cameraNavigationPreset: CameraNavigation.normalizePreset(saved?.cameraNavigationPreset),
       labs: {
         servo2: Servo.createState({ saved: saved?.labs?.servo2 }),
         mps: MPS.createState({ saved: saved?.labs?.mps }),
-        pneumatic: Pneumatic.createState({ saved: saved?.labs?.pneumatic })
+        pneumatic: Pneumatic.createState({ saved: saved?.labs?.pneumatic }),
+        discrete: Discrete.createState({ saved: saved?.labs?.discrete })
       },
       editor: saved?.editor || null,
       equipment: { selected: typeof saved?.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' },
@@ -110,13 +123,14 @@
   function exportState() {
     if (!A.state) return null;
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       activeLab: A.activeLab,
       cameraNavigationPreset: CameraNavigation.normalizePreset(A.state.cameraNavigationPreset),
       labs: {
         servo2: Servo.exportState(A.state.labs.servo2),
         mps: MPS.exportState(A.state.labs.mps),
-        pneumatic: Pneumatic.exportState(A.state.labs.pneumatic)
+        pneumatic: Pneumatic.exportState(A.state.labs.pneumatic),
+        discrete: Discrete.exportState(A.state.labs.discrete)
       },
       editor: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, editor.serialize()])),
       equipment: { selected: A.state.equipment?.selected || 'relay-module.glb' },
@@ -176,7 +190,11 @@
 
   function editorToolbar(lab) {
     const modes = [['CONTROL', '제어', '1'], ['MOVE', '이동', '2'], ['DELETE_MODULE', '장비삭제', '3'], ['WIRE', '결선', '4'], ['AIR', '튜브', '5'], ['DELETE_WIRE', '선삭제', '6']];
-    const allowed = lab === 'pneumatic' ? new Set(modes.map(item => item[0])) : new Set(['CONTROL', 'WIRE', 'DELETE_WIRE']);
+    const allowed = lab === 'pneumatic'
+      ? new Set(modes.map(item => item[0]))
+      : lab === 'discrete'
+        ? new Set(['CONTROL', 'MOVE', 'DELETE_MODULE', 'WIRE', 'DELETE_WIRE'])
+        : new Set(['CONTROL', 'WIRE', 'DELETE_WIRE']);
     return `<div class="al-editor-tools" data-editor-tools="${lab}" aria-label="SoV 편집 모드">${modes.map(([mode, label, key]) => `<button class="al-editor-mode" data-editor-mode="${mode}"${allowed.has(mode) ? '' : ' disabled'} title="${label} (${key})">${label} <kbd>${key}</kbd></button>`).join('')}</div>`;
   }
 
@@ -192,7 +210,7 @@
   function mpsPane() {
     return `<div class="al-pane-grid"><div class="al-scene" data-scene="mps"><div class="al-scene-title"><b>MPS 제어 실습실</b><span>CONVEYOR · PROCESSING · TRANSFER</span></div>${cameraPresetButtons()}${editorToolbar('mps')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-mps-status"><b>PLC 출력 대기</b><span>18 OUT · 27 IN</span></div><label class="al-profile">PLC 주소 프로필<select id="al-mps-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><label class="al-profile">워크 3D 형상<select id="al-mps-workpiece-style"><option value="compact">기존 소형 워크 · 28 mm</option><option value="block">SoV 재질 블록 · 60×80×40 mm</option></select></label><div class="al-actions"><button class="al-btn run" data-mps-action="auto">▶ PLC 제어</button><button class="al-btn stop" data-mps-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-mps-action="steel">＋ 강재 워크</button><button class="al-btn" data-mps-action="plastic">＋ PP 워크</button><button class="al-btn" data-mps-action="reset">↺ 설비 리셋</button><button class="al-btn" data-mps-action="clear">워크 비우기</button></div></section>
-      <section class="al-section"><h3>리프트 서보 <small id="al-mps-lift-addresses">선택 PLC RLS · DOG · FLS</small></h3><label class="al-servo-slide"><span>위치 명령</span><input id="al-mps-lift" type="range" min="0" max="100" value="0"><output id="al-mps-lift-value">0%</output></label></section>
+      <section class="al-section"><h3>리프트 서보 <small id="al-mps-lift-addresses">선택 PLC RLS · DOG · FLS</small></h3><label class="al-servo-slide"><span id="al-mps-lift-target-label">위치 명령</span><input id="al-mps-lift" type="range" min="0" max="100" value="0"><output id="al-mps-lift-value">0%</output></label></section>
       <section class="al-section"><h3>선택 PLC 출력 18점 <small>한 제조사 주소만 활성</small></h3><div class="al-output-grid">${MPS_OUTPUT_LABELS.map((label, index) => `<label class="al-output" title="O${index} ${label}"><input type="checkbox" data-mps-output-index="${index}"><span data-mps-output-label="${index}">O${index} ${label}</span></label>`).join('')}</div></section>
       <section class="al-section"><h3>선택 PLC 입력 27점</h3><div class="al-io-grid">${MPS_INPUT_LABELS.map((label, index) => `<div class="al-io${index >= 20 && index <= 23 ? ' reserved' : ''}" data-mps-input-index="${index}" title="I${index} ${label}"><span data-mps-input-label="${index}">I${index} ${label}</span></div>`).join('')}</div></section>
       <section class="al-section"><h3>이벤트</h3><div class="al-log" id="al-mps-log"></div><div class="al-asset-note">강재/PP 분류 순서는 내장하지 않습니다. XG5000 또는 수동 O0–O17 출력으로 원본 설비를 직접 구동합니다.</div></section>
@@ -210,6 +228,16 @@
     </aside></div>`;
   }
 
+  function discretePane() {
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="discrete"><div class="al-scene-title"><b>24V 이산 I/O 결선 실습대</b><span>실제 결선 토폴로지 · 선택 PLC만 활성</span></div>${cameraPresetButtons()}${editorToolbar('discrete')}${cameraHintElement(' · 4=결선 · 2=장비 이동 · 연결선이 전기 판정에 반영됨')}</div><aside class="al-side">
+      <section class="al-section"><div class="al-status" id="al-discrete-status"><b>기준 결선 필요</b><span>POWER OFF</span></div><label class="al-profile">PLC 제조사 선택<select id="al-discrete-profile" data-discrete-profile><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU / MELSOFT</option></select></label><label class="al-profile">입력 공통 방식<select id="al-discrete-input-mode"><option value="sink">싱크 COM · PNP 입력</option><option value="source">소스 COM · NPN 입력</option></select></label><div class="al-actions"><button class="al-btn run" data-discrete-action="power">DC 24V ON</button><button class="al-btn" data-discrete-action="reference">기준 결선</button><button class="al-btn stop" data-discrete-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-discrete-action="clear">결선 지우기</button></div></section>
+      <section class="al-section"><h3>현장 입력 11점 <small>버튼·센서·리미트</small></h3><div class="al-checks">${DISCRETE_INPUTS.map(([key, label]) => `<label class="al-check"><input type="checkbox" data-discrete-input="${key}"><span data-discrete-input-label="${key}">${esc(label)}</span></label>`).join('')}</div></section>
+      <section class="al-section"><h3>선택 PLC 출력 13점 <small>다른 제조사 주소 거부</small></h3><div class="al-output-grid">${DISCRETE_OUTPUTS.map(([key, label]) => `<label class="al-output"><input type="checkbox" data-discrete-output="${key}"><span data-discrete-output-label="${key}">${esc(label)}</span></label>`).join('')}</div></section>
+      <section class="al-section"><h3>타이머·카운터 <small>3D FND 런타임 오버레이</small></h3><div class="al-fields"><label class="al-field">타이머 설정 s<input id="al-discrete-timer-preset" type="number" min=".1" max="99.9" step=".1" value="3"></label><label class="al-field">카운터 설정<input id="al-discrete-counter-preset" type="number" min="1" max="999" step="1" value="5"></label><button class="al-btn" data-discrete-action="counter-reset">카운터 RESET</button></div><div class="al-counters" style="margin-top:6px"><div class="al-counter"><b id="al-discrete-timer-value">0.0</b><span>TIMER s</span></div><div class="al-counter"><b id="al-discrete-counter-value">0</b><span>COUNT</span></div><div class="al-counter"><b id="al-discrete-wire-count">0</b><span>WIRES</span></div></div></section>
+      <section class="al-section"><h3>전기 토폴로지 진단</h3><div class="al-log" id="al-discrete-issues"></div><table class="al-memory" id="al-discrete-memory"></table><div class="al-asset-note">SoV 3D 외형은 교육용입니다. 화면의 Mitsubishi 모듈 외형을 LS 장비로 오인하지 않도록, 선택 제조사 주소표와 세션만 바뀝니다. 정확한 검토 통과는 별도 매뉴얼 기반 장비 프로필이 필요합니다.</div></section>
+    </aside></div>`;
+  }
+
   function equipmentPane() {
     return `<div class="al-pane-grid"><div class="al-scene" data-scene="equipment3d"><div class="al-scene-title"><b>3D 장비 검사실</b><span>SELECTIVE ASSETS · LAZY LOAD</span></div>${cameraPresetButtons()}${cameraHintElement(' · 장비는 한 번에 1개만 표시')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-equipment-status"><b>장비 목록 준비</b><span>LOCAL</span></div><select class="al-equipment-select" id="al-equipment-select" size="14" aria-label="3D 장비 선택"><option>자산 매니페스트 읽는 중…</option></select><dl class="al-equipment-meta"><dt>모델</dt><dd id="al-equipment-root">—</dd><dt>메시</dt><dd id="al-equipment-mesh">—</dd><dt>파일</dt><dd id="al-equipment-file">—</dd><dt>검토 등급</dt><dd>교육용 3D 외형</dd></dl><div class="al-asset-note">이 화면은 실제 3D 외형을 관찰하는 교육용 자산 검사실입니다. 단자 ID·전기 정격·검토 통과 근거는 제조사 매뉴얼 기반 프로필과 SVG 오버레이만 사용합니다.</div></section>
@@ -224,12 +252,12 @@
     A.hub = document.createElement('div');
     A.hub.id = 'al-hub';
     A.hub.innerHTML = `<nav id="al-tabs"><b>🏭 자동화 실습실</b>${[
-      ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['equipment3d', '3D 장비']
+      ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['discrete', '24V I/O 결선'], ['equipment3d', '3D 장비']
     ].map(([key, label]) => `<button class="al-tab" data-lab="${key}">${label}</button>`).join('')}<label class="al-camera-navigation"><span>카메라</span><select id="al-camera-navigation" aria-label="3D 카메라 조작 방식"><option value="3ds-max">3ds Max</option><option value="legacy">기존 조작</option></select></label><small>OFFLINE</small></nav><div id="al-content"></div>`;
     A.host.appendChild(A.hub);
     A.content = q('#al-content', A.hub);
     const p3Pane = document.createElement('section'); p3Pane.className = 'al-pane'; p3Pane.dataset.labPane = 'palletizer3d'; p3Pane.appendChild(oldRoot); A.content.appendChild(p3Pane);
-    for (const [key, html] of [['servo2', servoPane()], ['mps', mpsPane()], ['pneumatic', pneumaticPane()], ['equipment3d', equipmentPane()]]) {
+    for (const [key, html] of [['servo2', servoPane()], ['mps', mpsPane()], ['pneumatic', pneumaticPane()], ['discrete', discretePane()], ['equipment3d', equipmentPane()]]) {
       const pane = document.createElement('section'); pane.className = 'al-pane'; pane.dataset.labPane = key; pane.innerHTML = html; A.content.appendChild(pane);
     }
     qa('.al-tab', A.hub).forEach(button => button.onclick = () => setLab(button.dataset.lab));
@@ -317,6 +345,36 @@
     return data;
   }
 
+  function createFndOverlay(label, color = '#ff4d35') {
+    const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 96;
+    const texture = new Three.CanvasTexture(canvas); texture.minFilter = Three.LinearFilter;
+    const sprite = new Three.Sprite(new Three.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+    sprite.scale.set(.46, .17, 1); sprite.renderOrder = 15;
+    sprite.userData.fnd = { canvas, texture, label, color, value: null };
+    return sprite;
+  }
+
+  function updateFndOverlay(sprite, value) {
+    const fnd = sprite?.userData?.fnd; if (!fnd || fnd.value === String(value)) return;
+    fnd.value = String(value); const context = fnd.canvas.getContext('2d');
+    context.clearRect(0, 0, fnd.canvas.width, fnd.canvas.height); context.fillStyle = 'rgba(10,15,18,.92)'; context.fillRect(0, 0, 256, 96);
+    context.strokeStyle = '#40505a'; context.lineWidth = 4; context.strokeRect(2, 2, 252, 92);
+    context.fillStyle = '#91a5b1'; context.font = '16px Consolas'; context.fillText(fnd.label, 12, 22);
+    context.fillStyle = fnd.color; context.font = 'bold 52px Consolas'; context.textAlign = 'right'; context.fillText(fnd.value, 244, 75);
+    fnd.texture.needsUpdate = true;
+  }
+
+  function createDiscreteScene() {
+    const data = baseScene('discrete'), root = data.proxyRoot;
+    data.orbit = { yaw: 18, pitch: 32, scale: .88 }; data.target.set(0, .86, 0);
+    box(root, [10.8, .22, 6.3], [0, .18, 0], material(0x202a31, .55, .62));
+    box(root, [10.2, .10, 5.7], [0, .34, 0], material(0x8f9aa0, .55, .55));
+    for (const z of [-1.85, 0, 1.85]) box(root, [9.7, .08, .10], [0, .42, z], material(0xbec9ce, .82, .22));
+    data.parts.fnd = {};
+    data.parts.imported = {};
+    return data;
+  }
+
   function createEquipmentScene() {
     const data = baseScene('equipment3d');
     data.proxyRoot.visible = false;
@@ -333,11 +391,11 @@
   function createEditors() {
     const engine = window.PLCTrainerSovEditorEngine;
     if (!engine?.create) return;
-    A.editorMarkers = { servo2: [], mps: [], pneumatic: [] };
-    A.editorModules = { servo2: new Map(), mps: new Map(), pneumatic: new Map() };
-    for (const lab of ['servo2', 'mps', 'pneumatic']) {
+    A.editorMarkers = { servo2: [], mps: [], pneumatic: [], discrete: [] };
+    A.editorModules = { servo2: new Map(), mps: new Map(), pneumatic: new Map(), discrete: new Map() };
+    for (const lab of ['servo2', 'mps', 'pneumatic', 'discrete']) {
       const editor = engine.create({ three: Three, lab, scene: A.scenes[lab].scene, gridSize: .025, tubeRadius: .003 });
-      editor.on('change', () => { schedule(); persist(); });
+      editor.on('change', () => { if (lab === 'discrete') syncDiscreteTopology(); schedule(); persist(); });
       editor.on('modechange', () => { updateEditorUi(); schedule(); persist(); });
       A.editors[lab] = editor;
     }
@@ -363,6 +421,25 @@
 
   function rowAnchors(prefix, count, y, z, startX, endX, kind = 'electric') {
     return Array.from({ length: count }, (_, index) => ({ id: `${prefix}${index}`, tag: `${prefix}${index}`, kind, position: [startX + (endX - startX) * (count === 1 ? 0 : index / (count - 1)), y, z] }));
+  }
+
+  function syncDiscreteTopology() {
+    const editor = A.editors.discrete, state = A.state?.labs?.discrete;
+    if (!editor || !state) return null;
+    Discrete.setConnections(state, editor.serialize().connections);
+    return Discrete.evaluateTopology(state);
+  }
+
+  function applyDiscreteConnections(connections) {
+    const editor = A.editors.discrete; if (!editor) return false;
+    editor.cancel('replace-topology'); editor.clearConnections({ emit: false });
+    try {
+      for (const item of connections || []) editor.connect(item.from, item.to, { id: item.id, enforceMode: false, emit: false });
+      editor.updateConnections(); syncDiscreteTopology(); updateEditorUi(); schedule(); persist(true); return true;
+    } catch (error) {
+      editor.clearConnections({ emit: false }); syncDiscreteTopology();
+      console.warn('Discrete reference wiring could not be applied', error); return false;
+    }
   }
 
   function installEditorControls() {
@@ -404,7 +481,7 @@
   }
 
   function updateEditorUi() {
-    for (const lab of ['servo2', 'mps', 'pneumatic']) {
+    for (const lab of ['servo2', 'mps', 'pneumatic', 'discrete']) {
       const editor = A.editors[lab]; if (!editor) continue;
       qa(`[data-editor-tools="${lab}"] [data-editor-mode]`, A.hub).forEach(button => button.classList.toggle('active', button.dataset.editorMode === editor.mode));
       for (const marker of A.editorMarkers[lab] || []) marker.visible = (editor.mode === 'WIRE' && marker.userData.sovAnchor.kind === 'electric') || (editor.mode === 'AIR' && marker.userData.sovAnchor.kind === 'air');
@@ -417,7 +494,7 @@
     A.renderer = new Three.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     A.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6)); A.renderer.shadowMap.enabled = true; A.renderer.shadowMap.type = Three.PCFSoftShadowMap; A.renderer.outputEncoding = Three.sRGBEncoding;
     A.renderer.domElement.tabIndex = 0; installCameraControls();
-    A.scenes.servo2 = createServoScene(); A.scenes.mps = createMpsScene(); A.scenes.pneumatic = createPneumaticScene(); A.scenes.equipment3d = createEquipmentScene();
+    A.scenes.servo2 = createServoScene(); A.scenes.mps = createMpsScene(); A.scenes.pneumatic = createPneumaticScene(); A.scenes.discrete = createDiscreteScene(); A.scenes.equipment3d = createEquipmentScene();
     createEditors(); installEditorControls();
     loadImportedAssets();
     return true;
@@ -425,7 +502,7 @@
 
   function findImportedNode(model, pattern) {
     let found = null;
-    model.traverse?.(object => { if (!found && pattern.test(object.name || '')) found = object; });
+    model?.traverse?.(object => { if (!found && pattern.test(object.name || '')) found = object; });
     return found;
   }
 
@@ -579,11 +656,73 @@
     }
   }
 
+  async function loadDiscreteAssets() {
+    const electric = (id, position, tag = id) => ({ id, tag, kind: 'electric', position });
+    const sensorAnchors = [electric('P24', [-.16, .16, .08]), electric('N24', [0, .16, .08]), electric('OUT', [.16, .16, .08])];
+    const sensorSpecs = [
+      ['photo-npn', 'photo-sensor-npn.glb', [-3.7, .88, -.15]], ['photo-pnp', 'photo-sensor-pnp.glb', [-2.7, .88, -.15]],
+      ['inductive-npn', 'inductive-sensor-npn.glb', [-1.7, .88, -.15]], ['inductive-pnp', 'inductive-sensor-pnp.glb', [-.7, .88, -.15]],
+      ['capacitive-npn', 'capacitive-sensor-npn.glb', [.3, .88, -.15]], ['capacitive-pnp', 'capacitive-sensor-pnp.glb', [1.3, .88, -.15]]
+    ];
+    const parts = A.scenes.discrete.parts, tasks = [];
+    const add = (id, filename, size, position, anchors, onLoaded = null) => {
+      tasks.push(addImported('discrete', filename, size, position, [0, 0, 0], 1, payload => {
+        parts.imported[id] = payload; registerEditorModule('discrete', id, payload.wrapper, anchors, true); onLoaded?.(payload);
+      }));
+    };
+
+    add('source', 'smps.glb', 1.35, [-4.15, .92, 1.65], [electric('P24', [-.18, .22, .15]), electric('N24', [.18, .22, .15])]);
+    const power = new Three.Group(); power.name = '24V-distribution-terminal'; power.position.set(0, .55, .72); A.scenes.discrete.root.add(power);
+    box(power, [8.15, .08, .38], [0, 0, 0], material(0x303b42, .5, .45));
+    for (let index = 0; index < 20; index += 1) {
+      const x = -3.8 + 7.6 * index / 19;
+      cylinder(power, .045, .025, [x, .07, -.09], material(0xc78c2b, .7, .28), 'y');
+      cylinder(power, .045, .025, [x, .07, .09], material(0x365f9b, .7, .28), 'y');
+    }
+    registerEditorModule('discrete', 'power', power, [
+      ...rowAnchors('P24-', 20, .10, -.09, -3.8, 3.8), ...rowAnchors('N24-', 20, .10, .09, -3.8, 3.8)
+    ], true);
+    add('plc', 'mitsubishi-q-plc-module.glb', 1.65, [-2.25, 1.03, 1.65], [
+      electric('P24', [-.68, .38, .16]), electric('N24', [-.52, .38, .16]), electric('COM', [-.36, .38, .16]),
+      ...rowAnchors('I', 11, .20, .16, -.68, .68), ...rowAnchors('O', 13, .02, .16, -.68, .68)
+    ]);
+    add('switch', 'switch-box.glb', 1.25, [.05, .93, 1.65], [
+      electric('S1-IN', [-.48, .18, .14]), electric('S1-OUT', [-.32, .18, .14]),
+      electric('S2-IN', [-.08, .18, .14]), electric('S2-OUT', [.08, .18, .14]),
+      electric('S3-IN', [.32, .18, .14]), electric('S3-OUT', [.48, .18, .14])
+    ]);
+    add('relay', 'relay-module.glb', 1.25, [1.65, .93, 1.65], [
+      electric('RY1+', [-.42, .19, .14]), electric('RY1-', [-.28, .19, .14]), electric('RY2+', [-.07, .19, .14]),
+      electric('RY2-', [.07, .19, .14]), electric('RY3+', [.28, .19, .14]), electric('RY3-', [.42, .19, .14])
+    ]);
+    add('timer', 'timer-box.glb', 1.2, [3.05, .92, 1.65], [
+      electric('P24', [-.38, .17, .14]), electric('N24', [-.13, .17, .14]), electric('IN', [.13, .17, .14]), electric('DONE', [.38, .17, .14])
+    ], ({ wrapper }) => { const overlay = createFndOverlay('TIMER'); overlay.position.set(0, .53, .03); wrapper.add(overlay); parts.fnd.timer = overlay; });
+    add('counter', 'counter-box.glb', 1.2, [4.25, .92, 1.65], [
+      electric('P24', [-.45, .17, .14]), electric('N24', [-.23, .17, .14]), electric('PULSE', [0, .17, .14]), electric('RESET', [.23, .17, .14]), electric('DONE', [.45, .17, .14])
+    ], ({ wrapper }) => { const overlay = createFndOverlay('COUNT', '#ff9e43'); overlay.position.set(0, .53, .03); wrapper.add(overlay); parts.fnd.counter = overlay; });
+    add('counter-unit', 'counter-unit.glb', .82, [4.25, .91, .55], [electric('P24', [-.18, .15, .12]), electric('N24', [.18, .15, .12])], ({ wrapper }) => { const overlay = createFndOverlay('PV', '#ff9e43'); overlay.position.set(0, .4, .02); overlay.scale.multiplyScalar(.72); wrapper.add(overlay); parts.fnd.counterUnit = overlay; });
+
+    for (const [id, filename, position] of sensorSpecs) add(id, filename, .82, position, sensorAnchors.map(item => ({ ...item, position: [...item.position] })));
+    add('limit-left', 'limit-switch-left.glb', .8, [2.3, .88, -.15], [electric('COM', [-.28, .16, .1]), electric('NO', [0, .16, .1]), electric('NC', [.28, .16, .1])]);
+    add('limit-right', 'limit-switch-right.glb', .8, [3.3, .88, -.15], [electric('COM', [-.28, .16, .1]), electric('NO', [0, .16, .1]), electric('NC', [.28, .16, .1])]);
+    add('buzzer-lamp', 'buzzer-lamp.glb', 1.15, [-1.35, .9, -1.7], [
+      electric('G+', [-.5, .18, .14]), electric('Y+', [-.3, .18, .14]), electric('R+', [-.1, .18, .14]), electric('W+', [.1, .18, .14]), electric('BZ+', [.3, .18, .14]), electric('COM', [.5, .18, .14])
+    ]);
+    add('tower', 'tower-lamp.glb', 1.45, [.55, 1.02, -1.7], [electric('G+', [-.32, .12, .12]), electric('Y+', [-.1, .12, .12]), electric('R+', [.12, .12, .12]), electric('COM', [.34, .12, .12])]);
+
+    await Promise.all(tasks);
+    const saved = A.state?.editor?.discrete;
+    if (saved) { try { A.editors.discrete.importState(saved, { strict: false }); } catch (error) { console.warn('Discrete editor state could not be restored', error); } }
+    syncDiscreteTopology(); updateDiscreteScene(); updateUi(true); schedule();
+  }
+
   function loadImportedAssets() {
     if (A.importedLoaded) return;
     if (!window.PLCTrainerImportedModels) { window.addEventListener('plc-trainer-imported-models-ready', loadImportedAssets, { once: true }); return; }
     A.importedLoaded = true;
     void loadEquipmentCatalog();
+    void loadDiscreteAssets();
     // The imported GLBs contain equipment only.  Their Unity root transform is
     // restored here so the original orthographic camera presets remain valid,
     // without packaging the classroom, desks, chairs or other scenery.
@@ -781,7 +920,7 @@
       schedule(); updateUi(true); persist(true);
     });
     qa('[data-mps-output-index]', A.hub).forEach(input => input.onchange = () => { const state = A.state.labs.mps, definition = MPS.OUTPUT_DEFINITIONS[Number(input.dataset.mpsOutputIndex)], mapped = MPS.getProfile(state).outputs[definition.key]; MPS.writeDevice(state, mapped, input.checked); schedule(); updateUi(true); persist(); });
-    q('#al-mps-lift', A.hub).oninput = event => { MPS.setLiftServoTarget(A.state.labs.mps, Number(event.target.value) / 100); schedule(); updateUi(true); };
+    q('#al-mps-lift', A.hub).oninput = event => { const state = A.state.labs.mps, profile = MPS.getProfile(state); MPS.writeDevice(state, profile.data.liftTarget, Number(event.target.value) / 100); schedule(); updateUi(true); };
 
     q('#al-pneu-profile', A.hub).onchange = event => { Pneumatic.setProfile(A.state.labs.pneumatic, event.target.value); schedule(); updateUi(true); persist(true); };
     qa('[data-pneu-action]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.pneumatic, profile = Pneumatic.getProfile(state), action = button.dataset.pneuAction; if (action === 'supply') Pneumatic.writeDevice(state, profile.commands.supply, !state.source.on); if (action === 'auto') Pneumatic.writeDevice(state, profile.commands.auto, true); if (action === 'stop') Pneumatic.writeDevice(state, profile.commands.stop, true); if (action === 'reset') Pneumatic.writeDevice(state, profile.commands.reset, true); Pneumatic.tick(state, 0); schedule(); updateUi(true); persist(true); });
@@ -792,6 +931,22 @@
     q('#al-pneu-vacuum', A.hub).onchange = event => { const state = A.state.labs.pneumatic; Pneumatic.writeDevice(state, Pneumatic.getProfile(state).commands.vacuum, event.target.checked); Pneumatic.tick(state, 0); updateUi(true); };
     q('#al-pneu-part', A.hub).onchange = event => { A.state.labs.pneumatic.vacuum.partPresent = event.target.checked; Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
     q('#al-pneu-leak', A.hub).oninput = event => { Pneumatic.setTubeLeak(A.state.labs.pneumatic, 'T03', event.target.value); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); schedule(); };
+
+    q('#al-discrete-profile', A.hub).onchange = event => { const state = A.state.labs.discrete; Discrete.setProfile(state, event.target.value); Discrete.tick(state, 0); updateUi(true); schedule(); persist(true); };
+    q('#al-discrete-input-mode', A.hub).onchange = event => { const state = A.state.labs.discrete; Discrete.setInputMode(state, event.target.value); Discrete.tick(state, 0); updateUi(true); schedule(); persist(true); };
+    qa('[data-discrete-action]', A.hub).forEach(button => button.onclick = () => {
+      const state = A.state.labs.discrete, profile = Discrete.getProfile(state), action = button.dataset.discreteAction;
+      if (action === 'power') Discrete.setPower(state, !state.power.on);
+      if (action === 'reference') applyDiscreteConnections(Discrete.referenceConnections(state.inputMode));
+      if (action === 'outputs-off') for (const address of Object.values(profile.outputs)) Discrete.writeDevice(state, address, false);
+      if (action === 'clear') applyDiscreteConnections([]);
+      if (action === 'counter-reset') Discrete.writeDevice(state, profile.commands.counterReset, true);
+      Discrete.tick(state, 0); updateUi(true); schedule(); persist(true);
+    });
+    qa('[data-discrete-input]', A.hub).forEach(input => input.onchange = () => { const state = A.state.labs.discrete; Discrete.setPhysicalInput(state, input.dataset.discreteInput, input.checked); Discrete.tick(state, 0); updateUi(true); schedule(); persist(); });
+    qa('[data-discrete-output]', A.hub).forEach(input => input.onchange = () => { const state = A.state.labs.discrete, profile = Discrete.getProfile(state); Discrete.writeDevice(state, profile.outputs[input.dataset.discreteOutput], input.checked); Discrete.tick(state, 0); updateUi(true); schedule(); persist(); });
+    q('#al-discrete-timer-preset', A.hub).onchange = event => { const state = A.state.labs.discrete, profile = Discrete.getProfile(state); Discrete.writeDevice(state, profile.data.timerPreset, event.target.value); updateUi(true); persist(true); };
+    q('#al-discrete-counter-preset', A.hub).onchange = event => { const state = A.state.labs.discrete, profile = Discrete.getProfile(state); Discrete.writeDevice(state, profile.data.counterPreset, event.target.value); updateUi(true); persist(true); };
     q('#al-equipment-select', A.hub).onchange = event => { void showEquipmentModel(event.target.value); };
   }
 
@@ -875,7 +1030,43 @@
     const leak = state.tubes.find(tube => tube.id === 'T03')?.leak || 0; parts.tubes.forEach((tube, index) => { tube.material.opacity = index === 0 ? .82 : .82 * (1 - leak * .7); });
   }
 
-  function updateScenes() { updateServoScene(); updateMpsScene(); updatePneumaticScene(); }
+  function setNamedMaterialLamp(model, pattern, on, color) {
+    model?.traverse?.(object => {
+      if (!object.isMesh || !object.material) return;
+      for (const mat of Array.isArray(object.material) ? object.material : [object.material]) {
+        if (!pattern.test(`${object.name || ''} ${mat.name || ''}`)) continue;
+        if (mat.emissive?.setHex) mat.emissive.setHex(on ? color : 0x000000);
+        if ('emissiveIntensity' in mat) mat.emissiveIntensity = on ? 2.1 : 0;
+        mat.needsUpdate = true;
+      }
+    });
+  }
+
+  function updateDiscreteScene() {
+    const state = A.state?.labs?.discrete, parts = A.scenes.discrete?.parts; if (!state || !parts) return;
+    const output = key => !!(state.outputs?.[key] ?? state.effectiveOutputs?.[key]);
+    const input = key => !!(state.inputs?.[key] ?? state.effectiveInputs?.[key] ?? state.physicalInputs?.[key]);
+    const imported = parts.imported || {}, node = (id, pattern) => findImportedNode(imported[id]?.model, pattern);
+    for (const [index, key] of ['relay1', 'relay2', 'relay3'].entries()) setImportedLamp(node('relay', new RegExp(`RY${index + 1}`, 'i')), output(key));
+    setImportedLamp(node('timer', /(?:OUT|RUN).*LED|LED.*(?:OUT|RUN)/i), output('timer'));
+    setImportedLamp(node('counter', /(?:Signal Input|Include).*LED/i), output('counter'), 0xff9e43);
+    const sensorMap = [['photo-npn', 'photoNpn'], ['photo-pnp', 'photoPnp'], ['inductive-npn', 'inductiveNpn'], ['inductive-pnp', 'inductivePnp'], ['capacitive-npn', 'capacitiveNpn'], ['capacitive-pnp', 'capacitivePnp']];
+    for (const [id, key] of sensorMap) { setImportedLamp(node(id, /Power.*Led/i), !!state.power?.on, 0x35f287); setImportedLamp(node(id, /Out.*Led/i), input(key), 0xffa72e); }
+    setNamedMaterialLamp(imported['buzzer-lamp']?.model, /GREEN/i, output('lampGreen'), 0x34e878);
+    setNamedMaterialLamp(imported['buzzer-lamp']?.model, /YELLOW/i, output('lampYellow'), 0xffca37);
+    setNamedMaterialLamp(imported['buzzer-lamp']?.model, /RED/i, output('lampRed'), 0xff3c35);
+    setNamedMaterialLamp(imported['buzzer-lamp']?.model, /WHITE/i, output('lampWhite'), 0xf4f4e9);
+    setImportedLamp(node('tower', /Green/i), output('towerGreen'), 0x35ed78);
+    setImportedLamp(node('tower', /Yellow/i), output('towerYellow'), 0xffc831);
+    setImportedLamp(node('tower', /Red/i), output('towerRed'), 0xff3c35);
+    const plc = imported.plc?.model;
+    DISCRETE_OUTPUTS.slice(0, 8).forEach(([key], index) => setImportedLamp(findImportedNode(plc, new RegExp(`LED_${index + 1}(?:__|$)`, 'i')), output(key), 0xffa93b));
+    updateFndOverlay(parts.fnd.timer, Number(state.timer?.value || 0).toFixed(1));
+    updateFndOverlay(parts.fnd.counter, Math.trunc(state.counter?.value || 0));
+    updateFndOverlay(parts.fnd.counterUnit, Math.trunc(state.counter?.preset || 0));
+  }
+
+  function updateScenes() { updateServoScene(); updateMpsScene(); updatePneumaticScene(); updateDiscreteScene(); }
 
   function updateUi(force = false) {
     if (!A.hub) return; const now = performance.now(); if (!force && now - A.lastUi < 90) return; A.lastUi = now;
@@ -888,6 +1079,7 @@
     qa('[data-mps-output-index]', A.hub).forEach(input => { const index = Number(input.dataset.mpsOutputIndex), definition = MPS.OUTPUT_DEFINITIONS[index], mapped = mp.outputs[definition.key], label = q(`[data-mps-output-label="${index}"]`, A.hub); input.checked = !!mps.outputBits[index]; if (label) label.textContent = `${mapped} ${MPS_OUTPUT_LABELS[index]}`; input.parentElement.title = `${mp.vendor} ${mapped} · 물리 O${index} ${MPS_OUTPUT_LABELS[index]}`; });
     qa('[data-mps-input-index]', A.hub).forEach(item => { const index = Number(item.dataset.mpsInputIndex), definition = MPS.INPUT_DEFINITIONS[index], mapped = mp.inputs[definition.key], label = q(`[data-mps-input-label="${index}"]`, item); item.classList.toggle('on', !!mps.inputBits[index]); if (label) label.textContent = `${mapped} ${MPS_INPUT_LABELS[index]}`; item.title = `${mp.vendor} ${mapped} · 물리 I${index} ${MPS_INPUT_LABELS[index]}`; });
     q('#al-mps-lift-addresses', A.hub).textContent = `${mp.inputs[MPS.INPUT_DEFINITIONS[24].key]} RLS · ${mp.inputs[MPS.INPUT_DEFINITIONS[25].key]} DOG · ${mp.inputs[MPS.INPUT_DEFINITIONS[26].key]} FLS`;
+    q('#al-mps-lift-target-label', A.hub).textContent = `${mp.data.liftTarget} 위치 명령`;
     const liftValue = Math.round(mps.liftServo.target * 100); q('#al-mps-lift', A.hub).value = liftValue; q('#al-mps-lift-value', A.hub).textContent = `${Math.round(mps.liftServo.position * 100)}%`;
     q('#al-mps-log', A.hub).innerHTML = mps.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
 
@@ -896,16 +1088,27 @@
     const airButton = q('[data-pneu-action="supply"]', A.hub); airButton.textContent = pneu.source.on ? 'AIR OFF' : 'AIR ON'; airButton.classList.toggle('on', pneu.source.on); qa('[data-pneu-coil]', A.hub).forEach(input => { input.checked = !!pneu.valve[`coil${input.dataset.pneuCoil}`]; }); q('#al-pneu-vacuum', A.hub).checked = pneu.vacuum.command; q('#al-pneu-part', A.hub).checked = pneu.vacuum.partPresent;
     q('[data-pneu-gauge="input"]', A.hub).textContent = pneu.service.inputBar.toFixed(1); q('[data-pneu-gauge="output"]', A.hub).textContent = pneu.service.outputBar.toFixed(1); q('[data-pneu-gauge="vacuum"]', A.hub).textContent = pneu.vacuum.pressureBar.toFixed(1); q('#al-pneu-stroke', A.hub).style.width = `${pneu.cylinder.position * 100}%`;
     const leak = pneu.tubes.find(tube => tube.id === 'T03')?.leak || 0; q('#al-pneu-leak', A.hub).value = leak; q('#al-pneu-leak-label', A.hub).textContent = `${Math.round(leak * 100)}%`; const pneuSensors = { retracted: pneu.cylinder.retracted, extended: pneu.cylinder.extended, vacuum: pneu.vacuum.holding, fault: !!pneu.faults.length }; qa('[data-pneu-sensor]', A.hub).forEach(item => item.classList.toggle('on', !!pneuSensors[item.dataset.pneuSensor])); q('#al-pneu-log', A.hub).innerHTML = pneu.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
+
+    const discrete = A.state.labs.discrete, dp = Discrete.getProfile(discrete), solution = Discrete.evaluateTopology(discrete), discreteStatus = q('#al-discrete-status', A.hub);
+    q('b', discreteStatus).textContent = solution.ready ? '폐회로 결선 정상' : solution.issues[0]?.message || '기준 결선 필요';
+    q('span', discreteStatus).textContent = `${dp.id === 'ls' ? 'LS' : 'MELSEC'} · ${discrete.power.on ? '24V ON' : 'POWER OFF'} · ${solution.issues.length} ISSUE`;
+    discreteStatus.classList.toggle('fault', solution.issues.length > 0); q('#al-discrete-profile', A.hub).value = discrete.profileId; q('#al-discrete-input-mode', A.hub).value = discrete.inputMode;
+    const powerButton = q('[data-discrete-action="power"]', A.hub); powerButton.textContent = discrete.power.on ? 'DC 24V OFF' : 'DC 24V ON'; powerButton.classList.toggle('on', discrete.power.on);
+    qa('[data-discrete-input]', A.hub).forEach(inputBox => { const key = inputBox.dataset.discreteInput, address = dp.inputs[key]; inputBox.checked = !!discrete.physicalInputs[key]; const label = q(`[data-discrete-input-label="${key}"]`, A.hub), name = DISCRETE_INPUTS.find(item => item[0] === key)?.[1] || key; if (label) label.textContent = `${address} ${name}`; inputBox.parentElement.classList.toggle('on', !!discrete.inputs[key]); inputBox.parentElement.title = `${dp.vendor} ${address} · 물리 입력 ${key}`; });
+    qa('[data-discrete-output]', A.hub).forEach(outputBox => { const key = outputBox.dataset.discreteOutput, address = dp.outputs[key]; outputBox.checked = !!discrete.commandOutputs[key]; const label = q(`[data-discrete-output-label="${key}"]`, A.hub), name = DISCRETE_OUTPUTS.find(item => item[0] === key)?.[1] || key; if (label) label.textContent = `${address} ${name}`; outputBox.parentElement.classList.toggle('on', !!discrete.effectiveOutputs[key]); outputBox.parentElement.title = `${dp.vendor} ${address} · 명령 ${discrete.commandOutputs[key] ? 'ON' : 'OFF'} · 실제 부하 ${discrete.effectiveOutputs[key] ? 'ON' : 'OFF'}`; });
+    q('#al-discrete-timer-preset', A.hub).value = discrete.timer.preset; q('#al-discrete-counter-preset', A.hub).value = discrete.counter.preset; q('#al-discrete-timer-value', A.hub).textContent = discrete.timer.value.toFixed(1); q('#al-discrete-counter-value', A.hub).textContent = String(discrete.counter.value); q('#al-discrete-wire-count', A.hub).textContent = String(discrete.connections.length);
+    q('#al-discrete-issues', A.hub).innerHTML = solution.issues.length ? solution.issues.slice(0, 10).map(issue => `<div class="fault"><b>${esc(issue.code)}</b> · ${esc(issue.message)}</div>`).join('') : '<div>전원·입력 COM·출력 귀로가 모두 완성되었습니다.</div>';
+    q('#al-discrete-memory', A.hub).innerHTML = [['PLC', dp.vendor, dp.family], ['전원 준비', dp.status.powerReady, solution.powerReady], ['입력 COM', dp.status.inputCommonReady, solution.inputCommonReady], ['타이머 완료', dp.status.timerDone, discrete.timer.done], ['카운터 완료', dp.status.counterDone, discrete.counter.done]].map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${typeof row[2] === 'boolean' ? row[2] ? 'ON' : 'OFF' : esc(row[2])}</td></tr>`).join('');
   }
 
   function mpsPlantMoving(mps) {
     if (mps.outputBits[13] || mps.outputBits[14] || mps.liftServo.moving) return true;
     return Object.values(mps.actuators).some(axis => (axis.lastDirection > 0 && axis.position < 1) || (axis.lastDirection < 0 && axis.position > 0));
   }
-  function hasMotion() { const servo = A.state.labs.servo2, mps = A.state.labs.mps, pneu = A.state.labs.pneumatic; return Object.values(servo.axes).some(axis => axis.busy) || servo.linear.active || mpsPlantMoving(mps) || pneu.auto.running || (pneu.source.on && (pneu.valve.coilA || pneu.valve.coilB || !pneu.cylinder.retracted)); }
+  function hasMotion() { const servo = A.state.labs.servo2, mps = A.state.labs.mps, pneu = A.state.labs.pneumatic, discrete = A.state.labs.discrete; return Object.values(servo.axes).some(axis => axis.busy) || servo.linear.active || mpsPlantMoving(mps) || pneu.auto.running || (pneu.source.on && (pneu.valve.coilA || pneu.valve.coilB || !pneu.cylinder.retracted)) || discrete.timer.active; }
   function animate(timestamp) {
     A.raf = 0; if (!A.initialized) return; if (!A.lastTime) A.lastTime = timestamp; const dt = Math.min(.05, Math.max(0, (timestamp - A.lastTime) / 1000)); A.lastTime = timestamp;
-    const servo = A.state.labs.servo2, mps = A.state.labs.mps, pneu = A.state.labs.pneumatic; if (Object.values(servo.axes).some(axis => axis.busy) || servo.linear.active) Servo.tick(servo, dt); if (mpsPlantMoving(mps) || mps.auto.running) MPS.tick(mps, dt); if (pneu.auto.running || pneu.source.on) Pneumatic.tick(pneu, dt);
+    const servo = A.state.labs.servo2, mps = A.state.labs.mps, pneu = A.state.labs.pneumatic, discrete = A.state.labs.discrete; if (Object.values(servo.axes).some(axis => axis.busy) || servo.linear.active) Servo.tick(servo, dt); if (mpsPlantMoving(mps) || mps.auto.running) MPS.tick(mps, dt); if (pneu.auto.running || pneu.source.on) Pneumatic.tick(pneu, dt); if (discrete.timer.active || discrete.effectiveOutputs.timer) Discrete.tick(discrete, dt);
     updateScenes(); updateUi(); persist(); if (A.visible && A.activeLab !== 'palletizer3d' && A.renderer) { const scene = A.scenes[A.activeLab]; A.renderer.render(scene.scene, scene.camera); }
     if (hasMotion()) schedule();
   }
@@ -932,6 +1135,15 @@
         liftY: plant.liftServo?.node?.position.y,
         unloadingX: plant.unloading?.node?.position.x
       } : null,
+      discrete: A.state?.labs?.discrete ? {
+        profileId: A.state.labs.discrete.profileId,
+        inputMode: A.state.labs.discrete.inputMode,
+        powerOn: A.state.labs.discrete.power.on,
+        ready: A.state.labs.discrete.solution.ready,
+        issueCodes: A.state.labs.discrete.solution.issues.map(issue => issue.code),
+        importedAssets: Object.keys(A.scenes.discrete?.parts?.imported || {}).sort(),
+        runtimeDisplays: Object.keys(A.scenes.discrete?.parts?.fnd || {}).sort()
+      } : null,
       equipment3d: {
         catalogCount: A.equipmentCatalog.length,
         selected: A.scenes.equipment3d?.parts?.selectedEntry?.file || A.state?.equipment?.selected || null,
@@ -942,7 +1154,7 @@
 
   function importState(saved) {
     if (!saved || typeof saved !== 'object') return;
-    A.state = { schemaVersion: 3, activeLab: LABS.includes(saved.activeLab) ? saved.activeLab : 'servo2', cameraNavigationPreset: CameraNavigation.normalizePreset(saved.cameraNavigationPreset), labs: { servo2: Servo.createState({ saved: saved.labs?.servo2 }), mps: MPS.createState({ saved: saved.labs?.mps }), pneumatic: Pneumatic.createState({ saved: saved.labs?.pneumatic }) }, editor: saved.editor || null, equipment: { selected: typeof saved.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' }, appearance: { mpsWorkpieceStyle: normalizeMpsWorkpieceStyle(saved.appearance?.mpsWorkpieceStyle) } };
+    A.state = { schemaVersion: 4, activeLab: LABS.includes(saved.activeLab) ? saved.activeLab : 'servo2', cameraNavigationPreset: CameraNavigation.normalizePreset(saved.cameraNavigationPreset), labs: { servo2: Servo.createState({ saved: saved.labs?.servo2 }), mps: MPS.createState({ saved: saved.labs?.mps }), pneumatic: Pneumatic.createState({ saved: saved.labs?.pneumatic }), discrete: Discrete.createState({ saved: saved.labs?.discrete }) }, editor: saved.editor || null, equipment: { selected: typeof saved.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' }, appearance: { mpsWorkpieceStyle: normalizeMpsWorkpieceStyle(saved.appearance?.mpsWorkpieceStyle) } };
     syncMpsWorkpiecePhysicalSize();
     for (const [lab, editor] of Object.entries(A.editors)) if (saved.editor?.[lab]) { try { editor.importState(saved.editor[lab], { strict: false }); } catch (error) { console.warn(`Editor state for ${lab} could not be restored`, error); } }
     A.activeLab = A.state.activeLab; setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); setLab(A.activeLab); updateScenes(); updateUi(true); if (A.equipmentCatalog.length) void showEquipmentModel(A.state.equipment.selected); persist(true);
@@ -952,6 +1164,6 @@
     injectCss(); A.state = loadSaved(); syncMpsWorkpiecePhysicalSize(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
   }
 
-  window.PLCTrainerAutomationLabs = { version: '2.10.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
+  window.PLCTrainerAutomationLabs = { version: '2.11.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
   init();
 })();
