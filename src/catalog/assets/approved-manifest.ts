@@ -7,6 +7,19 @@ import { approvedAssetAllowlist } from '../v3-asset-manifest';
  */
 export const APPROVED_ASSET_MANIFEST = approvedAssetAllowlist([
   {
+    assetId: 'codex:xbc-dn60su-imagen-v1',
+    model: 'LS ELECTRIC XBC-DN60SU',
+    view: 'front',
+    path: 'assets/devices/codex/exact/xbc-dn60su-imagen-v1.png',
+    sha256: '628C9AC9B3ABCA45A49AFD52C6FC7132D6FB94955472B0207640C4B6EF0BC5FB',
+    pixelDimensions: { width: 1915, height: 821 },
+    physicalDimensionsMm: { width: 210, height: 90, depth: 64 },
+    prompt: 'Reference-guided orthographic unwired XBC-DN60SU appearance skin with a fixed 210:90 front proportion, transparent background and visibly two-row terminal housings. Generated screw counts and text remain non-authoritative and are fully masked; the official two staggered rows of 21 terminals, TB1-TB42 map and pointer geometry are drawn by the manual-backed SVG overlay.',
+    generatedAt: '2026-08-09T00:00:00.000Z',
+    approval: { status: 'pending' },
+    geometryHash: '3E85A33DF3DA91743C34E01EF9FE0AA769DE7817ECC8B5338C3BF479ED3F3AB5',
+  },
+  {
     assetId: 'codex:xbc-dn-dp32up-imagen-v1',
     model: 'LS ELECTRIC XBC-DN32UP / XBC-DP32UP',
     view: 'front',

@@ -25,7 +25,7 @@ describe('practice and prewire mode policy', () => {
     for (const type of [
       'IG5A', 'MY-MD02', 'PROX-NPN', 'PROX-PNP', 'PSU24', 'MOTOR-3P',
       'LAMP-G', 'LAMP-Y', 'LAMP-W', 'LAMP', 'BUZZER', 'SOL-Y', 'TB4', 'TB10',
-      'MCCB', 'PB-1C', 'XBC-DN32UP', 'XBC-DP32UP', 'XBL-C41A', 'XBF-PD02A',
+      'MCCB', 'PB-1C', 'XBC-DN32UP', 'XBC-DN60SU', 'XBC-DP32UP', 'XBL-C41A', 'XBF-PD02A',
     ]) {
       expect(isLegacyTypeAllowed('prewire', type)).toBe(false);
       expect(isLegacyTypeAllowed('practice', type)).toBe(true);

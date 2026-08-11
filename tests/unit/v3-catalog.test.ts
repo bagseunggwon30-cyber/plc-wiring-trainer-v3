@@ -18,6 +18,7 @@ describe('v3 device profile catalog', () => {
   it('carries the locally and officially evidenced exact order codes into v3', () => {
     expect(Object.values(DEVICE_PROFILES_V3).map((profile) => profile.orderCode)).toEqual([
       'XBC-DN32UP',
+      'XBC-DN60SU',
       'XBC-DP32UP',
       'XBC-DR32H',
       'eXP2-0700D',
@@ -47,6 +48,9 @@ describe('v3 device profile catalog', () => {
     expect(getDeviceProfileV3('ls-electric:xbc-dp32up').behavior).toMatchObject({
       dimensionsMm: { width: 185, height: 90, depth: 64 },
     });
+    expect(getDeviceProfileV3('ls-electric:xbc-dn60su').behavior).toMatchObject({
+      dimensionsMm: { width: 210, height: 90, depth: 64 },
+    });
     expect(getDeviceProfileV3('ls-electric:xbc-dr32h').behavior).toMatchObject({
       dimensionsMm: { width: 114, height: 100, depth: 64 },
     });
@@ -67,6 +71,7 @@ describe('v3 device profile catalog', () => {
   it('keeps new transistor PLC profiles fail-closed until their pointer geometry is approved', () => {
     for (const [profileId, orderCode] of [
       ['ls-electric:xbc-dn32up', 'XBC-DN32UP'],
+      ['ls-electric:xbc-dn60su', 'XBC-DN60SU'],
       ['ls-electric:xbc-dp32up', 'XBC-DP32UP'],
     ] as const) {
       const profile = getDeviceProfileV3(profileId);
@@ -76,6 +81,32 @@ describe('v3 device profile catalog', () => {
         reason: 'review-capability-incomplete',
       });
     }
+  });
+
+  it('preserves the DN60SU manual output common groups through P57', () => {
+    const profile = getDeviceProfileV3('ls-electric:xbc-dn60su');
+    const terminalById = new Map(profile.terminals.map((terminal) => [terminal.id, terminal]));
+    const commonByOutput = new Map(profile.terminals
+      .filter((terminal) => terminal.role === 'output')
+      .map((terminal) => [terminal.id, terminal.comGroup]));
+
+    expect(commonByOutput.get('P40')).toBe('COM0');
+    expect(commonByOutput.get('P43')).toBe('COM3');
+    expect(commonByOutput.get('P47')).toBe('COM3');
+    expect(commonByOutput.get('P48')).toBe('COM4');
+    expect(commonByOutput.get('P57')).toBe('COM7');
+    expect([...commonByOutput.values()]).not.toContain('COM8');
+    expect(terminalById.get('P')).toMatchObject({
+      domain: 'dc', potential: '+24V', role: 'supply-input',
+      polarity: 'positive',
+    });
+    expect(terminalById.has('NC-TB11')).toBe(false);
+    expect([...terminalById.keys()].filter((id) => id.startsWith('NC-TB'))).toEqual([
+      'NC-TB17', 'NC-TB23', 'NC-TB29', 'NC-TB35',
+    ]);
+    expect(profile.evidence.documents).toContainEqual(expect.objectContaining({
+      pages: [18, 126, 146, 314],
+    }));
   });
 
   it('keeps official a/b contact numbers and power-terminal semantics on the exact protection devices', () => {

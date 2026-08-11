@@ -29,6 +29,12 @@ function ambiguousRoleExpectation(terminal: TerminalSpec): Partial<TerminalSpec>
     return { role: 'common', polarity: 'configurable', commonType: 'configurable-dc' };
   }
   if (/^COM\d+$/.test(id)) {
+    if (terminal.outputMode === 'sinking-transistor') {
+      return {
+        domain: 'dc', potential: '0V', role: 'common', polarity: 'return',
+        commonType: 'dc-output-common',
+      };
+    }
     return { role: 'common', polarity: 'nonpolar', commonType: 'dry-contact' };
   }
   if (/^CM\d*$/.test(id)) {

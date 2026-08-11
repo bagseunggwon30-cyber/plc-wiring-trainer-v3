@@ -9,6 +9,7 @@ const ASSET_PREFIXES = {
   ORTHO: 'assets/devices/orthographic/',
   GPT: 'assets/devices/gpt/',
   CODEX: 'assets/devices/codex/',
+  CODEX_BOM: 'assets/devices/codex/bom/',
   CODEX_EXACT: 'assets/devices/codex/exact/',
 } as const;
 

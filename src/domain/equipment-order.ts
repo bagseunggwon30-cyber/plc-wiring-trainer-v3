@@ -10,6 +10,7 @@ import type {
   WorkshopDocumentV2,
   WorkshopMode,
 } from './types';
+import { defaultFerruleTerminalNumbers, fieldWireColorForConnectionText } from './field-wiring-policy';
 
 const MAX_ORDER_SETS = 6;
 
@@ -212,13 +213,11 @@ function idPart(value: string): string {
 }
 
 function wireColor(connection: MissionConnection): string {
-  const marker = `${connection.from.terminalId} ${connection.to.terminalId} ${connection.label}`.toUpperCase();
-  if (marker.includes('PE') || marker.includes('FG')) return '#16a34a';
-  if (marker.includes('RS485') || marker.includes('485') || marker.includes(' A →') || marker.includes(' B →')) return '#8b5cf6';
-  if (marker.includes('0V') || marker.includes('DC-') || marker.includes(' N ') || marker.includes('→ N')) return '#2563eb';
-  if (marker.includes('+24V') || marker.includes('V+') || marker.includes('DC+')) return '#ef4444';
-  if (marker.includes('L1') || marker.includes('AC L')) return '#8b4513';
-  return '#f59e0b';
+  return fieldWireColorForConnectionText(
+    connection.from.terminalId,
+    connection.to.terminalId,
+    connection.label,
+  );
 }
 
 function assertTerminal(
@@ -315,7 +314,9 @@ export function buildEquipmentOrderDocument(input: EquipmentOrderBuildInput): Eq
         });
         conductorSettings[id] = {
           cableId: null, core: null, wireNumber: tag, gauge: null, color, lengthMm: null,
-          ferruleFrom: null, ferruleTo: null, lugFrom: null, lugTo: null,
+          ferruleFrom: defaultFerruleTerminalNumbers(connection.from.terminalId, connection.to.terminalId).from,
+          ferruleTo: defaultFerruleTerminalNumbers(connection.from.terminalId, connection.to.terminalId).to,
+          lugFrom: null, lugTo: null,
           shielded: connection.label.toUpperCase().includes('RS485'), drain: false,
         };
         wireIndex += 1;
@@ -398,6 +399,7 @@ export const CONTROL_PANEL_BOM_ITEMS: readonly ControlPanelBomItem[] = Object.fr
   { key: 'mccb3p', category: '전원·보호', label: 'MCCB 3P', detail: 'MC·인버터 3상 분기용', profileId: 'educational:mccb-3p', legacyType: 'MCCB', placementZone: 'power', designationPrefix: 'QF', defaultQuantity: 0, maximumQuantity: 8 },
   { key: 'powerSupply', category: '전원·보호', label: 'MDR-100-24 파워', detail: 'DC24V/0V 제어전원', profileId: 'mean-well:mdr-100-24', legacyType: 'MDR-100', placementZone: 'power', designationPrefix: 'PS', defaultQuantity: 1, maximumQuantity: 4 },
   { key: 'plc', category: '제어', label: 'XBC-DN32UP PLC', detail: 'DI16·NPN 싱크 TR DO16·4축 위치결정', profileId: 'ls-electric:xbc-dn32up', legacyType: 'XBC-DN32UP', placementZone: 'control', designationPrefix: 'PLC', defaultQuantity: 1, maximumQuantity: 4 },
+  { key: 'plcDn60su', category: '제어', label: 'XBC-DN60SU PLC', detail: 'DI36·NPN 싱크 TR DO24·SU 표준형', profileId: 'ls-electric:xbc-dn60su', legacyType: 'XBC-DN60SU', placementZone: 'control', designationPrefix: 'PLC', defaultQuantity: 0, maximumQuantity: 4 },
   { key: 'relay', category: '제어', label: 'MY2N-D2 릴레이', detail: 'DC24V 코일·2c', profileId: 'omron:my2n-d2-dc24', legacyType: 'MY2N', placementZone: 'control', designationPrefix: 'KA', defaultQuantity: 2, maximumQuantity: 16 },
   { key: 'contactor', category: '구동', label: 'MC-22b 전자접촉기', detail: 'DC24V 코일·3극', profileId: 'ls-electric:mc-22b-dc24-1a1b', legacyType: 'MC-22B-DC24', placementZone: 'drive', designationPrefix: 'KM', defaultQuantity: 0, maximumQuantity: 8 },
   { key: 'inverter', category: '구동', label: 'SV-iG5A 인버터', detail: '교육용 계열 프로필', profileId: 'ls-electric:sv-ig5a', legacyType: 'IG5A', placementZone: 'drive', designationPrefix: 'INV', defaultQuantity: 0, maximumQuantity: 4 },
@@ -456,7 +458,10 @@ export function validateControlPanelBomQuantities(
   const totalOrderedDevices = CONTROL_PANEL_BOM_ITEMS.reduce((sum, item) => sum + quantity(item.key), 0);
   if (totalOrderedDevices === 0) return { ok: false, code: 'BOM_EMPTY', message: '제어반에 넣을 장비 수량을 입력하세요.' };
 
-  const requiredMccb2p = quantity('powerSupply') + quantity('plc');
+  const plcCount = quantity('plc') + quantity('plcDn60su');
+  const plcInputCapacity = quantity('plc') * 16 + quantity('plcDn60su') * 36;
+  const plcOutputCapacity = quantity('plc') * 16 + quantity('plcDn60su') * 24;
+  const requiredMccb2p = quantity('powerSupply') + plcCount;
   if (quantity('mccb2p') !== requiredMccb2p) {
     return { ok: false, code: 'BOM_MCCB_2P_COUNT', message: `단상 분기마다 MCCB 2P가 1대 필요합니다. 현재 필요한 수량은 ${requiredMccb2p}대입니다.` };
   }
@@ -474,17 +479,17 @@ export function validateControlPanelBomQuantities(
   const inverterOutputGroupCount = quantity('inverter');
   const outputPointCount = inverterOutputGroupCount * 2 + generalOutputCount;
   const requiredOutputGroups = Math.ceil(outputPointCount / 4);
-  if ((inputPointCount > 0 || outputPointCount > 0) && quantity('plc') === 0) {
+  if ((inputPointCount > 0 || outputPointCount > 0) && plcCount === 0) {
     return { ok: false, code: 'BOM_PLC_REQUIRED', message: '입력·출력 장비를 자동 결선하려면 PLC가 1대 이상 필요합니다.' };
   }
   if ((inputPointCount > 0 || outputPointCount > 0) && quantity('powerSupply') === 0) {
     return { ok: false, code: 'BOM_POWER_REQUIRED', message: '버튼·센서·DC 부하를 자동 결선하려면 DC24V 파워가 1대 이상 필요합니다.' };
   }
-  if (inputPointCount > quantity('plc') * 16) {
-    return { ok: false, code: 'BOM_PLC_INPUT_CAPACITY', message: `입력 ${inputPointCount}점에 PLC 입력이 부족합니다. PLC ${Math.ceil(inputPointCount / 16)}대 이상이 필요합니다.` };
+  if (inputPointCount > plcInputCapacity) {
+    return { ok: false, code: 'BOM_PLC_INPUT_CAPACITY', message: `입력 ${inputPointCount}점에 선택한 NPN PLC 입력(${plcInputCapacity}점)이 부족합니다.` };
   }
-  if (outputPointCount > quantity('plc') * 16) {
-    return { ok: false, code: 'BOM_PLC_OUTPUT_CAPACITY', message: `출력 ${outputPointCount}점에 XBC-DN32UP 출력이 부족합니다. PLC ${Math.ceil(outputPointCount / 16)}대 이상이 필요합니다.` };
+  if (outputPointCount > plcOutputCapacity) {
+    return { ok: false, code: 'BOM_PLC_OUTPUT_CAPACITY', message: `출력 ${outputPointCount}점에 선택한 NPN PLC 출력(${plcOutputCapacity}점)이 부족합니다.` };
   }
   return { ok: true, totalOrderedDevices, inputPointCount, generalOutputCount, inverterOutputGroupCount, outputPointCount, requiredOutputGroups };
 }
@@ -501,6 +506,7 @@ export interface ControlPanelIoOutputAssignment {
   readonly plcId: string;
   readonly kind: 'relay' | 'contactor' | 'load' | 'inverter';
   readonly plcCommon: string;
+  readonly plcCommons?: readonly string[];
   readonly plcTerminals: readonly string[];
 }
 
@@ -521,8 +527,37 @@ export interface ControlPanelBomBuildResult {
   };
 }
 
-const PLC_INPUT_TERMINALS = Array.from({ length: 16 }, (_, index) => `P0${index.toString(16).toUpperCase()}`);
-const PLC_OUTPUT_TERMINALS = Array.from({ length: 16 }, (_, index) => `P2${index.toString(16).toUpperCase()}`);
+interface ControlPanelPlcSpec {
+  readonly inputTerminals: readonly string[];
+  readonly outputTerminals: readonly string[];
+  readonly inputCommon: string;
+  readonly outputSupplyPositive: string;
+  readonly outputSupplyReturn: string;
+  outputCommonFor(terminalId: string): string;
+}
+
+const DN32UP_PLC_SPEC: ControlPanelPlcSpec = {
+  inputTerminals: Array.from({ length: 16 }, (_, index) => `P0${index.toString(16).toUpperCase()}`),
+  outputTerminals: Array.from({ length: 16 }, (_, index) => `P2${index.toString(16).toUpperCase()}`),
+  inputCommon: 'COMI-A', outputSupplyPositive: 'VOUT', outputSupplyReturn: 'COMO',
+  outputCommonFor: () => 'COMO',
+};
+
+const DN60SU_PLC_SPEC: ControlPanelPlcSpec = {
+  inputTerminals: Array.from({ length: 36 }, (_, index) => `P${index.toString(16).padStart(2, '0').toUpperCase()}`),
+  outputTerminals: Array.from({ length: 24 }, (_, index) => `P${(0x40 + index).toString(16).toUpperCase()}`),
+  inputCommon: 'COM', outputSupplyPositive: '24V', outputSupplyReturn: '24G',
+  outputCommonFor(terminalId) {
+    const index = Number.parseInt(terminalId.slice(1), 16) - 0x40;
+    if (index < 3) return `COM${index}`;
+    if (index <= 7) return 'COM3';
+    return `COM${4 + Math.floor((index - 8) / 4)}`;
+  },
+};
+
+function controlPanelPlcSpec(device: DeviceInstanceV2): ControlPanelPlcSpec {
+  return device.legacyType === 'XBC-DN60SU' ? DN60SU_PLC_SPEC : DN32UP_PLC_SPEC;
+}
 
 /** Builds a deterministic practice panel from independently entered BOM quantities. */
 export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): ControlPanelBomBuildResult {
@@ -637,13 +672,14 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     fromTerminal: string,
     to: DeviceInstanceV2,
     toTerminal: string,
-    color: string,
+    requestedColor: string,
     label: string,
   ): void => {
     assertTerminal(input.profiles, from.profileId, fromTerminal);
     assertTerminal(input.profiles, to.profileId, toTerminal);
     const id = `bom-w${String(wireIndex).padStart(4, '0')}`;
     const tag = `AUTO-${String(wireIndex).padStart(4, '0')}`;
+    const color = fieldWireColorForConnectionText(fromTerminal, toTerminal, label) || requestedColor;
     const fromZone = from.configuration.placementZone;
     const toZone = to.configuration.placementZone;
     let waypoints: Array<{ x: number; y: number }> | undefined;
@@ -671,7 +707,9 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     });
     conductorSettings[id] = {
       cableId: null, core: null, wireNumber: tag, gauge: null, color, lengthMm: null,
-      ferruleFrom: null, ferruleTo: null, lugFrom: null, lugTo: null, shielded: false, drain: false, label,
+      ferruleFrom: defaultFerruleTerminalNumbers(fromTerminal, toTerminal).from,
+      ferruleTo: defaultFerruleTerminalNumbers(fromTerminal, toTerminal).to,
+      lugFrom: null, lugTo: null, shielded: false, drain: false, label,
     };
     wireIndex += 1;
   };
@@ -684,7 +722,7 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
   }
 
   const powerSupplies = deviceByKey.get('powerSupply') ?? [];
-  const plcs = deviceByKey.get('plc') ?? [];
+  const plcs = [...(deviceByKey.get('plc') ?? []), ...(deviceByKey.get('plcDn60su') ?? [])];
   const mccb2p = deviceByKey.get('mccb2p') ?? [];
   const mccb3p = deviceByKey.get('mccb3p') ?? [];
   const contactors = deviceByKey.get('contactor') ?? [];
@@ -762,15 +800,19 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     ...(deviceByKey.get('emergencyStop') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '11', signalTerminal: '12' })),
     ...(deviceByKey.get('npnSensor') ?? []).map((device) => ({ device, kind: 'npn-sensor' as const, sourceTerminal: 'BU', signalTerminal: 'BK' })),
   ];
-  plcs.slice(0, Math.ceil(inputDevices.length / 16)).forEach((plc, plcIndex) => {
-    const supplyIndex = plcIndex % powerSupplies.length;
-    connectDcBus(supplyIndex, 'positive', plc, 'COMI-A');
-  });
+  const inputSlots = plcs.flatMap((plc, plcIndex) => controlPanelPlcSpec(plc).inputTerminals.map((terminal) => ({
+    plc, plcIndex, terminal, spec: controlPanelPlcSpec(plc),
+  })));
+  const preparedInputPlcs = new Set<string>();
   inputDevices.forEach((entry, inputIndex) => {
-    const plcIndex = Math.floor(inputIndex / 16);
-    const plc = plcs[plcIndex];
-    const plcTerminal = PLC_INPUT_TERMINALS[inputIndex % 16];
+    const slot = inputSlots[inputIndex];
+    if (!slot) throw new Error('BOM_PLC_INPUT_CAPACITY');
+    const { plc, plcIndex, terminal: plcTerminal, spec } = slot;
     const supplyIndex = plcIndex % powerSupplies.length;
+    if (!preparedInputPlcs.has(plc.id)) {
+      connectDcBus(supplyIndex, 'positive', plc, spec.inputCommon);
+      preparedInputPlcs.add(plc.id);
+    }
     if (entry.kind === 'npn-sensor') {
       connectDcBus(supplyIndex, 'positive', entry.device, 'BN');
       connectDcBus(supplyIndex, 'return', entry.device, 'BU');
@@ -781,26 +823,42 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     inputs.push({ deviceId: entry.device.id, plcId: plc.id, plcTerminal, kind: entry.kind });
   });
 
-  const outputAt = (absolutePoint: number): { plc: DeviceInstanceV2; plcIndex: number; terminal: string } => {
-    const plcIndex = Math.floor(absolutePoint / 16);
-    return { plc: plcs[plcIndex], plcIndex, terminal: PLC_OUTPUT_TERMINALS[absolutePoint % 16] };
+  const outputSlots = plcs.flatMap((plc, plcIndex) => controlPanelPlcSpec(plc).outputTerminals.map((terminal) => {
+    const spec = controlPanelPlcSpec(plc);
+    return { plc, plcIndex, terminal, common: spec.outputCommonFor(terminal), spec };
+  }));
+  const outputAt = (absolutePoint: number) => {
+    const slot = outputSlots[absolutePoint];
+    if (!slot) throw new Error('BOM_PLC_OUTPUT_CAPACITY');
+    return slot;
   };
-  const usedOutputPlcs = Math.ceil(validation.outputPointCount / 16);
-  plcs.slice(0, usedOutputPlcs).forEach((plc, plcIndex) => {
-    const supplyIndex = plcIndex % powerSupplies.length;
-    connectDcBus(supplyIndex, 'positive', plc, 'VOUT');
-    connectDcBus(supplyIndex, 'return', plc, 'COMO');
-  });
+  const preparedOutputPlcs = new Set<string>();
+  const preparedOutputCommons = new Set<string>();
+  const prepareOutput = (slot: ReturnType<typeof outputAt>): void => {
+    const supplyIndex = slot.plcIndex % powerSupplies.length;
+    if (!preparedOutputPlcs.has(slot.plc.id)) {
+      connectDcBus(supplyIndex, 'positive', slot.plc, slot.spec.outputSupplyPositive);
+      connectDcBus(supplyIndex, 'return', slot.plc, slot.spec.outputSupplyReturn);
+      preparedOutputPlcs.add(slot.plc.id);
+    }
+    const commonKey = `${slot.plc.id}:${slot.common}`;
+    if (!preparedOutputCommons.has(commonKey) && slot.common !== slot.spec.outputSupplyReturn) {
+      connectDcBus(supplyIndex, 'return', slot.plc, slot.common);
+      preparedOutputCommons.add(commonKey);
+    }
+  };
   let absoluteOutputPoint = 0;
   inverters.forEach((inverter) => {
     const forward = outputAt(absoluteOutputPoint);
     const reverse = outputAt(absoluteOutputPoint + 1);
     if (forward.plc.id !== reverse.plc.id) throw new Error('BOM_INVERTER_OUTPUT_PAIR_SPLIT');
+    prepareOutput(forward); prepareOutput(reverse);
     const supplyIndex = forward.plcIndex % powerSupplies.length;
     connectDcBus(supplyIndex, 'return', inverter, 'CM');
     addWire(forward.plc, forward.terminal, inverter, 'P1', '#f59e0b', 'NPN transistor forward command');
     addWire(reverse.plc, reverse.terminal, inverter, 'P2', '#f59e0b', 'NPN transistor reverse command');
-    outputs.push({ deviceId: inverter.id, plcId: forward.plc.id, kind: 'inverter', plcCommon: 'COMO', plcTerminals: [forward.terminal, reverse.terminal] });
+    const inverterCommons = [...new Set([forward.common, reverse.common])];
+    outputs.push({ deviceId: inverter.id, plcId: forward.plc.id, kind: 'inverter', plcCommon: inverterCommons.join('+'), plcCommons: inverterCommons, plcTerminals: [forward.terminal, reverse.terminal] });
     absoluteOutputPoint += 2;
   });
   const generalOutputs = [
@@ -813,10 +871,11 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
   ];
   for (const entry of generalOutputs) {
     const output = outputAt(absoluteOutputPoint);
+    prepareOutput(output);
     const supplyIndex = output.plcIndex % powerSupplies.length;
     connectDcBus(supplyIndex, 'positive', entry.device, entry.positive);
     addWire(entry.device, entry.return, output.plc, output.terminal, '#f59e0b', `NPN sink output ${output.terminal}`);
-    outputs.push({ deviceId: entry.device.id, plcId: output.plc.id, kind: entry.kind, plcCommon: 'COMO', plcTerminals: [output.terminal] });
+    outputs.push({ deviceId: entry.device.id, plcId: output.plc.id, kind: entry.kind, plcCommon: output.common, plcCommons: [output.common], plcTerminals: [output.terminal] });
     absoluteOutputPoint += 1;
   }
 

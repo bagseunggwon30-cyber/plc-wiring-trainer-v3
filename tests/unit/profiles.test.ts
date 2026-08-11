@@ -7,6 +7,7 @@ describe('device profile catalog', () => {
     expect(verifiedProfiles().map((profile) => profile.profileId)).toEqual([
       'ls-electric:xbc-dn32up',
       'ls-electric:xbc-dp32up',
+      'ls-electric:xbc-dn60su',
       'ls-electric:xbc-dr32h',
       'ls-electric:xbl-c41a',
       'ls-electric:xbf-pd02a',

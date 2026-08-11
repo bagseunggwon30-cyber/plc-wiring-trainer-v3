@@ -7,6 +7,7 @@ import { DEVICE_PROFILES, verifiedProfiles } from '../../src/catalog/profiles';
 const EVIDENCE_PATHS: Readonly<Record<string, string>> = {
   '10_LS_XBC_U_Installation_Guide_KR_EN.pdf': 'pdf/10_LS_XBC_U_Installation_Guide_KR_EN.pdf',
   '10_LS_XBC_U_User_Manual_EN.pdf': 'pdf/10_LS_XBC_U_User_Manual_EN.pdf',
+  'Manual_XBC-DN(R)xxE(SU)_10310001091_Eng_V1.7_150720.pdf': 'pdf/official/Manual_XBC-DN(R)xxE(SU)_10310001091_Eng_V1.7_150720.pdf',
   '02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf': 'pdf/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf',
   'LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf': 'pdf/official/LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf',
   'LS_XP_Communication_Manual_EN_V2.2.pdf': 'pdf/official/LS_XP_Communication_Manual_EN_V2.2.pdf',

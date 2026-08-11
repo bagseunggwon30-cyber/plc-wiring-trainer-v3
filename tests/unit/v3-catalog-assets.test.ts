@@ -49,6 +49,7 @@ describe('v3 approved asset allowlist', () => {
 
   it('registers new Imagen exact-model skins as pending rather than silently approving them', () => {
     const expected = [
+      'codex:xbc-dn60su-imagen-v1',
       'codex:xbc-dn-dp32up-imagen-v1',
       'codex:xbl-c41a-imagen-v1',
       'codex:xbf-pd02a-imagen-v1',

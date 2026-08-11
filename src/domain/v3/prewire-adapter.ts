@@ -839,9 +839,10 @@ export async function buildPrewireCircuitV3(
 
     const isXbcUTransistor = device.profileId === 'ls-electric:xbc-dn32up'
       || device.profileId === 'ls-electric:xbc-dp32up';
-    const isXbcPlc = device.profileId === 'ls-electric:xbc-dr32h' || isXbcUTransistor;
-    const isConverter = device.profileId === 'mean-well:mdr-100-24' || isXbcPlc;
-    if (isConverter) {
+    const isXbcDn60Su = device.profileId === 'ls-electric:xbc-dn60su';
+    const isXbcPlc = device.profileId === 'ls-electric:xbc-dr32h' || isXbcUTransistor || isXbcDn60Su;
+    const hasAcInput = device.profileId === 'mean-well:mdr-100-24' || isXbcPlc;
+    if (hasAcInput) {
       const acInputId = `${device.id}#ac-input`;
       elements.push({
         kind: 'ac-load', id: acInputId, lineTerminal: 'L', neutralTerminal: 'N', peTerminal: 'PE',
@@ -852,37 +853,48 @@ export async function buildPrewireCircuitV3(
       addAlias(branches, `ac-input:${device.id}:N`, device.id, 'N', acInputId, 'N', 'ac');
       addAlias(branches, `ac-input:${device.id}:PE`, device.id, 'PE', acInputId, 'PE', 'pe');
 
-      const sourceId = `${device.id}#internal24`;
-      sources.push({
-        kind: 'dc', id: sourceId, positiveTerminal: '+24V', returnTerminal: '0V', voltage: 24,
-        ...(isXbcPlc && positiveNumber(profile.behavior?.internal24VCurrentA) !== undefined
-          ? { maximumCurrentA: positiveNumber(profile.behavior?.internal24VCurrentA) }
-          : {}),
-        enabledByElementId: acInputId,
-      });
-      const positiveTerminal = device.profileId === 'mean-well:mdr-100-24' ? 'V+1' : '24V';
-      const returnTerminal = device.profileId === 'mean-well:mdr-100-24' ? 'V-1' : '24G';
-      addAlias(branches, `internal-source:${device.id}:+`, sourceId, '+24V', device.id, positiveTerminal);
-      addAlias(branches, `internal-source:${device.id}:0`, sourceId, '0V', device.id, returnTerminal);
+      // DN60SU 24V/24G is the externally supplied transistor-output control
+      // power pair. It is not the AC-powered sensor-service source exposed by
+      // the DR/U CPUs, so never synthesize a DC source behind those terminals.
+      if (!isXbcDn60Su) {
+        const sourceId = `${device.id}#internal24`;
+        sources.push({
+          kind: 'dc', id: sourceId, positiveTerminal: '+24V', returnTerminal: '0V', voltage: 24,
+          ...(isXbcPlc && positiveNumber(profile.behavior?.internal24VCurrentA) !== undefined
+            ? { maximumCurrentA: positiveNumber(profile.behavior?.internal24VCurrentA) }
+            : {}),
+          enabledByElementId: acInputId,
+        });
+        const positiveTerminal = device.profileId === 'mean-well:mdr-100-24' ? 'V+1' : '24V';
+        const returnTerminal = device.profileId === 'mean-well:mdr-100-24' ? 'V-1' : '24G';
+        addAlias(branches, `internal-source:${device.id}:+`, sourceId, '+24V', device.id, positiveTerminal);
+        addAlias(branches, `internal-source:${device.id}:0`, sourceId, '0V', device.id, returnTerminal);
+      }
     }
 
     if (isXbcPlc) {
-      const inputCommon = isXbcUTransistor ? 'COMI-A' : 'COMI';
-      for (const terminal of profile.terminals.filter((entry) => /^P0[0-9A-F]$/.test(entry.id))) {
+      const inputCommon = isXbcDn60Su ? 'COM' : isXbcUTransistor ? 'COMI-A' : 'COMI';
+      const inputTerminals = profile.terminals.filter((entry) =>
+        entry.role === 'input' && /^P(?:0[0-9A-F]|1[0-9A-F]|2[0-3])$/.test(entry.id));
+      for (const terminal of inputTerminals) {
+        const inputIndex = Number.parseInt(terminal.id.slice(1), 16);
+        const resistanceOhms = isXbcDn60Su
+          ? inputIndex <= 1 ? 1500 : inputIndex <= 7 ? 2700 : 5600
+          : terminal.id <= 'P03' ? 3300 : 5600;
         const elementId = `${device.id}#${terminal.id}`;
         elements.push({
           kind: 'load', id: elementId, positiveTerminal: 'signal', returnTerminal: 'common', role: 'digital-input',
-          parentDeviceId: device.id, polarity: 'either', required: 'scenario', resistanceOhms: terminal.id <= 'P03' ? 3300 : 5600,
+          parentDeviceId: device.id, polarity: 'either', required: 'scenario', resistanceOhms,
           onThresholdVoltage: 19, onThresholdCurrentA: 0.003,
         });
         parentByElement.set(elementId, device.id);
         addAlias(branches, `input:${device.id}:${terminal.id}:signal`, device.id, terminal.id, elementId, 'signal');
         addAlias(branches, `input:${device.id}:${terminal.id}:common`, device.id, inputCommon, elementId, 'common');
       }
-      if (isXbcUTransistor) {
-        const sinking = device.profileId === 'ls-electric:xbc-dn32up';
-        const supplyPositiveTerminal = sinking ? 'VOUT' : 'COMO';
-        const supplyReturnTerminal = sinking ? 'COMO' : '0VOUT';
+      if (isXbcUTransistor || isXbcDn60Su) {
+        const sinking = device.profileId !== 'ls-electric:xbc-dp32up';
+        const supplyPositiveTerminal = isXbcDn60Su ? '24V' : sinking ? 'VOUT' : 'COMO';
+        const supplyReturnTerminal = isXbcDn60Su ? '24G' : sinking ? 'COMO' : '0VOUT';
         const supplyElementId = `${device.id}#output-supply`;
         elements.push({
           kind: 'load', id: supplyElementId, positiveTerminal: 'positive', returnTerminal: 'return',
@@ -891,7 +903,12 @@ export async function buildPrewireCircuitV3(
         parentByElement.set(supplyElementId, device.id);
         addAlias(branches, `output-supply:${device.id}:+`, device.id, supplyPositiveTerminal, supplyElementId, 'positive');
         addAlias(branches, `output-supply:${device.id}:0`, device.id, supplyReturnTerminal, supplyElementId, 'return');
-        for (const terminal of profile.terminals.filter((entry) => /^P2[0-9A-F]$/.test(entry.id))) {
+        const outputTerminals = profile.terminals.filter((entry) => isXbcDn60Su
+          ? entry.role === 'output' && /^P(?:4[0-9A-F]|5[0-7])$/.test(entry.id)
+          : /^P2[0-9A-F]$/.test(entry.id));
+        for (const terminal of outputTerminals) {
+          const transistorReturnTerminal = isXbcDn60Su ? terminal.comGroup ?? '' : supplyReturnTerminal;
+          if (!transistorReturnTerminal) continue;
           const elementId = `${device.id}#${terminal.id}:transistor`;
           elements.push({
             kind: 'transistor-output', id: elementId,
@@ -903,7 +920,7 @@ export async function buildPrewireCircuitV3(
           parentByElement.set(elementId, device.id);
           addAlias(branches, `transistor:${device.id}:${terminal.id}:out`, device.id, terminal.id, elementId, 'output');
           addAlias(branches, `transistor:${device.id}:${terminal.id}:+`, device.id, supplyPositiveTerminal, elementId, 'positive');
-          addAlias(branches, `transistor:${device.id}:${terminal.id}:0`, device.id, supplyReturnTerminal, elementId, 'return');
+          addAlias(branches, `transistor:${device.id}:${terminal.id}:0`, device.id, transistorReturnTerminal, elementId, 'return');
         }
       } else {
         for (const terminal of profile.terminals.filter((entry) => /^P2[0-9A-F]$/.test(entry.id))) {

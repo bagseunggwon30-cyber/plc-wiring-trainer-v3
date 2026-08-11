@@ -14,6 +14,7 @@ import {
   terminalConductorVisual,
   wireConductorVisual,
 } from '../domain/terminal-semantics';
+import { fieldWireConductorVisual } from '../domain/field-wiring-policy';
 import { effectiveTerminalSpecFromSettings } from '../domain/terminal-configuration';
 import {
   createVirtualMultimeter,
@@ -574,7 +575,7 @@ export function installWorkflowApp(): void {
     terminalSemanticsByLegacyType,
     assessTerminalCompatibility,
     terminalConductorVisual,
-    wireConductorVisual,
+    fieldWireConductorVisual,
     (legacyType, terminal, instanceConfiguration, workflowDeviceSettings) => {
       const profileId = LEGACY_PROFILE_MAP[legacyType];
       return profileId
@@ -1203,6 +1204,8 @@ export function installWorkflowApp(): void {
       conductors: workshop.wires.map((wire) => ({
         id: wire.id,
         label: `${wire.from.deviceId}:${wire.from.terminalId} → ${wire.to.deviceId}:${wire.to.terminalId}`,
+        fromTerminalId: wire.from.terminalId,
+        toTerminalId: wire.to.terminalId,
         wireNumber: wire.tag,
         gauge: wire.gauge,
         color: wire.color,

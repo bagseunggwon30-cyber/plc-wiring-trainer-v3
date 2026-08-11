@@ -240,6 +240,16 @@ const V3_PROFILE_LIST: readonly DeviceProfileV3[] = [
       outputTerminalIds: Array.from({ length: 16 }, (_, index) => `P2${index.toString(16).toUpperCase()}`),
     },
   }),
+  adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbc-dn60su'], {
+    orderCode: 'XBC-DN60SU',
+    evidenceGrade: 'manual-verified',
+    reviewCapability: 'profile-only',
+    rack: {
+      family: 'LS-XGB', role: 'host', occupiedPoints: 64, maxExpansionSlots: 7,
+      inputTerminalIds: Array.from({ length: 36 }, (_, index) => `P${index.toString(16).padStart(2, '0').toUpperCase()}`),
+      outputTerminalIds: Array.from({ length: 24 }, (_, index) => `P${(0x40 + index).toString(16).toUpperCase()}`),
+    },
+  }),
   adaptDeviceProfileToV3(DEVICE_PROFILES['ls-electric:xbc-dp32up'], {
     orderCode: 'XBC-DP32UP',
     evidenceGrade: 'manual-verified',

@@ -71,6 +71,7 @@ export function installEquipmentOrderPanel(
   const headingWrap = targetDocument.createElement('div');
   const heading = targetDocument.createElement('h2');
   heading.id = 'equipment-order-title';
+  heading.tabIndex = -1;
   heading.textContent = '제어반 장비 수량표 · 자동 배치/결선';
   const headingHelp = targetDocument.createElement('p');
   headingHelp.textContent = 'MCCB·파워·PLC·릴레이·MC·인버터·버튼·센서·램프·버저 수량을 각각 입력합니다.';
@@ -149,7 +150,15 @@ export function installEquipmentOrderPanel(
 
   const closeDialog = (): void => { backdrop.hidden = true; launcher.focus(); };
   const openDialog = (): void => { backdrop.hidden = false; renderTable(); heading.focus(); };
-  launcher.addEventListener('click', openDialog);
+  const handleLauncherClick = (event: Event): void => {
+    const target = event.target as Element | null;
+    if (!target || typeof target.closest !== 'function' || !target.closest('.equipment-order-launcher')) return;
+    event.preventDefault();
+    openDialog();
+  };
+  // The legacy palette rebuilds its children with innerHTML. Event delegation
+  // keeps the launcher working even during the brief cloned-node window.
+  targetDocument.addEventListener('click', handleLauncherClick, true);
   close.addEventListener('click', closeDialog); cancel.addEventListener('click', closeDialog);
   backdrop.addEventListener('click', (event) => { if (event.target === backdrop) closeDialog(); });
   targetDocument.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !backdrop.hidden) closeDialog(); });
@@ -198,7 +207,11 @@ export function installEquipmentOrderPanel(
 
   const ensureLauncher = (): void => {
     const palette = targetDocument.getElementById('palette');
-    if (palette && launcher.parentElement !== palette) palette.prepend(launcher);
+    if (!palette) return;
+    palette.querySelectorAll('.equipment-order-launcher').forEach((candidate) => {
+      if (candidate !== launcher) candidate.remove();
+    });
+    if (launcher.parentElement !== palette) palette.prepend(launcher);
   };
   ensureLauncher();
   const palette = targetDocument.getElementById('palette');
@@ -210,6 +223,10 @@ export function installEquipmentOrderPanel(
   return {
     setMode(mode) { currentMode = mode; updateSummary(); },
     ensureLauncher,
-    destroy() { observer?.disconnect(); launcher.remove(); backdrop.remove(); },
+    destroy() {
+      observer?.disconnect();
+      targetDocument.removeEventListener('click', handleLauncherClick, true);
+      launcher.remove(); backdrop.remove();
+    },
   };
 }

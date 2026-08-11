@@ -100,25 +100,35 @@ describe('V2 editor to v3 prewire circuit adapter', () => {
   });
 
   it.each([
-    { profileId: 'ls-electric:xbc-dn32up', orderCode: 'XBC-DN32UP', mode: 'sinking' },
-    { profileId: 'ls-electric:xbc-dp32up', orderCode: 'XBC-DP32UP', mode: 'sourcing' },
+    { profileId: 'ls-electric:xbc-dn32up', orderCode: 'XBC-DN32UP', mode: 'sinking', count: 16, firstOutput: 'P20' },
+    { profileId: 'ls-electric:xbc-dn60su', orderCode: 'XBC-DN60SU', mode: 'sinking', count: 24, firstOutput: 'P40' },
+    { profileId: 'ls-electric:xbc-dp32up', orderCode: 'XBC-DP32UP', mode: 'sourcing', count: 16, firstOutput: 'P20' },
   ])('maps $orderCode outputs as powered transistors rather than dry relay contacts', async ({
     profileId,
     orderCode,
     mode,
+    count,
+    firstOutput,
   }) => {
     const plc = device('plc', profileId, { orderCode });
     const built = await buildPrewireCircuitV3(workshop([plc], []), DEVICE_PROFILES, DEVICE_PROFILES_V3);
     const outputs = built.document.elements.filter((element) => element.kind === 'transistor-output');
 
-    expect(outputs).toHaveLength(16);
+    expect(outputs).toHaveLength(count);
     expect(outputs[0]).toMatchObject({
       mode,
-      stateKey: 'plc:P20',
+      stateKey: `plc:${firstOutput}`,
       supplyElementId: 'plc#output-supply',
       controlPowerElementId: 'plc#ac-input',
     });
-    expect(built.document.elements.some((element) => element.id === 'plc#P20:relay')).toBe(false);
+    expect(built.document.elements.some((element) => element.id === `plc#${firstOutput}:relay`)).toBe(false);
+    if (orderCode === 'XBC-DN60SU') {
+      expect(built.document.sources.some((source) => source.id === 'plc#internal24')).toBe(false);
+      expect(built.document.branches).toContainEqual(expect.objectContaining({
+        from: { elementId: 'plc', terminalId: 'COM0' },
+        to: { elementId: 'plc#P40:transistor', terminalId: 'return' },
+      }));
+    }
     expect(built.issues.map((entry) => entry.code)).toContain('PROFILE_REVIEW_CAPABILITY_INCOMPLETE');
   });
 

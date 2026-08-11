@@ -11,6 +11,7 @@ import {
   type XbfChannelWorkflowSetting,
 } from './workflow-state';
 import { xgbSlotRange } from '../../domain/plc-rack';
+import { defaultFerruleTerminalNumbers } from '../../domain/field-wiring-policy';
 
 export interface V3WorkflowDevice {
   id: string;
@@ -21,6 +22,8 @@ export interface V3WorkflowDevice {
 export interface V3WorkflowConductor {
   id: string;
   label: string;
+  fromTerminalId?: string;
+  toTerminalId?: string;
   wireNumber?: string;
   gauge?: string;
   color?: string;
@@ -265,7 +268,7 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       host.setAttribute('aria-label', `${device.label} XGB 기본 유닛`);
       host.add(new Option('기본 유닛 선택', ''));
       for (const candidate of options.devices.filter((entry) => [
-        'ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dp32up',
+        'ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dn60su', 'ls-electric:xbc-dp32up',
       ].includes(entry.profileId))) {
         host.add(new Option(`${candidate.label} · ${candidate.id}`, candidate.id));
       }
@@ -408,6 +411,7 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       device.profileId === 'ls-electric:exp2-0700d'
       || device.profileId === 'ls-electric:xbc-dr32h'
       || device.profileId === 'ls-electric:xbc-dn32up'
+      || device.profileId === 'ls-electric:xbc-dn60su'
       || device.profileId === 'ls-electric:xbc-dp32up'
       || device.profileId === 'ls-electric:xbl-c41a'
       || device.profileId === 'generic:xy-md02'
@@ -423,7 +427,7 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
           ? 'COM1'
           : device.profileId === 'ls-electric:xbl-c41a'
             ? 'CNET'
-          : ['ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dp32up'].includes(device.profileId)
+          : ['ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dn60su', 'ls-electric:xbc-dp32up'].includes(device.profileId)
             ? 'BUILT_IN_CNET' : 'RS485',
         protocol: null,
         baudRate: null,
@@ -440,7 +444,7 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       port.setAttribute('aria-label', `${device.label} RS485 포트`);
       const ports = device.profileId === 'ls-electric:exp2-0700d'
         ? [['COM1', 'COM1 DB9 · pin 6(+), pin 1(-)'], ['COM3', 'COM3 RS422/485 단자']] as const
-        : ['ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dp32up'].includes(device.profileId)
+        : ['ls-electric:xbc-dr32h', 'ls-electric:xbc-dn32up', 'ls-electric:xbc-dn60su', 'ls-electric:xbc-dp32up'].includes(device.profileId)
           ? [['BUILT_IN_CNET', '내장 485+/485-']] as const
           : device.profileId === 'ls-electric:xbl-c41a'
             ? [['CNET', '5핀 Cnet · TX/RX 브리지 필요']] as const
@@ -598,6 +602,7 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
   conductorLegend.textContent = '전선 / 케이블 심선 정보';
   conductors.appendChild(conductorLegend);
   for (const conductor of options.conductors) {
+    const defaultFerrules = defaultFerruleTerminalNumbers(conductor.fromTerminalId, conductor.toTerminalId);
     const setting = state.conductorSettings[conductor.id] ?? {
       cableId: null,
       core: null,
@@ -605,8 +610,8 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       gauge: conductor.gauge?.trim() || null,
       color: conductor.color?.trim() || null,
       lengthMm: null,
-      ferruleFrom: null,
-      ferruleTo: null,
+      ferruleFrom: defaultFerrules.from,
+      ferruleTo: defaultFerrules.to,
       lugFrom: null,
       lugTo: null,
       shielded: false,
@@ -637,8 +642,8 @@ export function createV3WorkflowPanel(options: V3WorkflowPanelOptions): HTMLElem
       const value = Number(length.value); setting.lengthMm = Number.isFinite(value) && value > 0 ? value : null; notify();
     });
     row.appendChild(length);
-    addTextInput('ferruleFrom', '시작 페룰');
-    addTextInput('ferruleTo', '종단 페룰');
+    addTextInput('ferruleFrom', '시작 압착단자 번호');
+    addTextInput('ferruleTo', '종단 압착단자 번호');
     addTextInput('lugFrom', '시작 러그');
     addTextInput('lugTo', '종단 러그');
     const addCheck = (key: 'shielded' | 'drain', labelText: string): void => {

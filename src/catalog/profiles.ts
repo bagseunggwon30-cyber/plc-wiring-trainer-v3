@@ -316,9 +316,95 @@ function xbcUTransistorProfile(
   };
 }
 
+const xbcDn60SuOutputCommon = (index: number): string => {
+  if (index < 3) return `COM${index}`;
+  if (index <= 7) return 'COM3';
+  return `COM${4 + Math.floor((index - 8) / 4)}`;
+};
+
+function xbcDn60SuProfile(): DeviceProfile {
+  const inputs = Array.from({ length: 36 }, (_, index) => {
+    const id = `P${index.toString(16).padStart(2, '0').toUpperCase()}`;
+    return terminal(id, id, 'signal', 'signal', 'input', {
+      polarity: 'signal-positive', comGroup: 'COM', channel: id,
+      ratedVoltage: { min: 20.4, max: 28.8, unit: 'VDC' },
+    });
+  });
+  const outputs = Array.from({ length: 24 }, (_, index) => {
+    const id = `P${(0x40 + index).toString(16).toUpperCase()}`;
+    const comGroup = xbcDn60SuOutputCommon(index);
+    return terminal(id, id, 'signal', 'signal', 'output', {
+      polarity: 'signal-return', outputMode: 'sinking-transistor', comGroup, channel: id,
+      ratedVoltage: { min: 10.2, max: 26.4, unit: 'VDC' },
+    });
+  });
+  const outputCommons = Array.from({ length: 8 }, (_, index) => terminal(
+    `COM${index}`, `COM${index}`, 'dc', '0V', 'common',
+    {
+      polarity: 'return', commonType: 'dc-output-common',
+      outputMode: 'sinking-transistor', comGroup: `COM${index}`,
+    },
+  ));
+  const ncTerminals = [17, 23, 29, 35].map((tb) => terminal(
+    `NC-TB${tb}`, `TB${tb} NC`, 'floating', 'floating', 'not-connected', { polarity: 'none' },
+  ));
+  return {
+    profileId: 'ls-electric:xbc-dn60su',
+    version: '1.0.1',
+    manufacturer: 'LS ELECTRIC',
+    model: 'XBC-DN60SU',
+    evidence: {
+      level: 'manual-verified',
+      documents: [{
+        documentId: 'Manual_XBC-DN(R)xxE(SU)_10310001091_Eng_V1.7_150720.pdf',
+        revision: 'C/N 10310001091 V1.7 (2015.07)',
+        pages: [18, 126, 146, 314],
+        sha256: '6F9EFB1193CD6EAE4F5B6C9F6A085838A3DC7D294D1D7BEEF89A5AA281C35251',
+        notes: 'PDF pages 18, 126, 146 and 314: 210x90x64 mm chassis, two staggered 42-point terminal blocks, 36-point source/sink input block, 24-point sinking-transistor output block and output common groups.',
+      }],
+      ...reviewedExact,
+      note: 'Exact terminal IDs and ratings come from the official SU manual. The generated raster is appearance-only and remains pending pointer calibration.',
+    },
+    boundary: false,
+    includeInBom: true,
+    terminals: [
+      terminal('L', 'AC L', 'ac', 'L1', 'supply-input', { phase: 'L1', ratedVoltage: { min: 85, max: 264, unit: 'VAC' } }),
+      terminal('N', 'AC N', 'ac', 'N', 'supply-input', { phase: 'N', ratedVoltage: { min: 85, max: 264, unit: 'VAC' } }),
+      terminal('PE', 'PE', 'pe', 'PE', 'protective-earth'),
+      terminal('24V', '24V', 'dc', '+24V', 'supply-input', { ratedVoltage: { min: 10.8, max: 26.4, unit: 'VDC' } }),
+      terminal('24G', '24G', 'dc', '0V', 'supply-input'),
+      terminal('P', 'P (DC12/24V)', 'dc', '+24V', 'supply-input', {
+        polarity: 'positive',
+        ratedVoltage: { min: 10.2, max: 26.4, unit: 'VDC' },
+      }),
+      terminal('RX', 'RX', 'communication', 'signal', 'communication', { protocol: 'RS232', channel: 'RX' }),
+      terminal('TX', 'TX', 'communication', 'signal', 'communication', { protocol: 'RS232', channel: 'TX' }),
+      terminal('SG', 'SG', 'communication', 'signal', 'common', { polarity: 'reference', commonType: 'communication-reference', protocol: 'RS485', channel: 'SG' }),
+      terminal('485+', '485+', 'communication', 'signal', 'communication', { polarity: 'data-positive', protocol: 'RS485', channel: 'A' }),
+      terminal('485-', '485-', 'communication', 'signal', 'communication', { polarity: 'data-negative', protocol: 'RS485', channel: 'B' }),
+      ...inputs,
+      terminal('COM', 'INPUT COM', 'floating', 'floating', 'common', { polarity: 'configurable', commonType: 'configurable-dc', comGroup: 'COM' }),
+      ...outputs,
+      ...outputCommons,
+      ...ncTerminals,
+    ],
+    internalLinks: [],
+    behavior: {
+      kind: 'plc-transistor', outputMode: 'sinking-transistor', inputComTerminals: ['COM'],
+      outputSupplyTerminals: { positive: '24V', return: '24G' },
+      outputCommonGroups: Object.fromEntries(outputs.map((entry) => [entry.id, entry.comGroup])),
+      inputRatings: { onVoltageV: 19, onCurrentA: 0.003, offVoltageV: 6, offCurrentA: 0.001 },
+      outputRatings: { pointCurrentA: 0.5, lowCurrentPointIds: ['P40', 'P41'], lowCurrentPointA: 0.1, commonCurrentA: 2, offLeakageCurrentA: 0.0001, onVoltageDropV: 0.4 },
+      dimensionsMm: { width: 210, height: 90, depth: 64 },
+      communicationPorts: [{ id: 'CNET', protocol: 'RS485', positiveTerminal: '485+', negativeTerminal: '485-', terminationSetting: 'termination', defaultTermination: false }],
+    },
+  };
+}
+
 const profiles: DeviceProfile[] = [
   xbcUTransistorProfile('ls-electric:xbc-dn32up', 'XBC-DN32UP', 'sinking-transistor'),
   xbcUTransistorProfile('ls-electric:xbc-dp32up', 'XBC-DP32UP', 'sourcing-transistor'),
+  xbcDn60SuProfile(),
   {
     profileId: 'ls-electric:xbc-dr32h',
     version: '1.0.0',

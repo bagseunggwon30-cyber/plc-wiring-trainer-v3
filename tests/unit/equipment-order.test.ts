@@ -19,6 +19,7 @@ const legacyByProfile: Readonly<Record<string, string>> = {
   'boundary:load': 'BOUNDARY-LOAD',
   'mean-well:mdr-100-24': 'MDR-100',
   'ls-electric:xbc-dn32up': 'XBC-DN32UP',
+  'ls-electric:xbc-dn60su': 'XBC-DN60SU',
   'ls-electric:xbc-dr32h': 'XBC-DR32H',
   'ls-electric:exp2-0700d': 'EXP2-700',
   'educational:terminal-block-10': 'TB10',
@@ -70,8 +71,8 @@ const controlPanelCatalog: EquipmentOrderCatalogItem[] = [
     profileId: item.profileId,
     legacyType: item.legacyType,
     label: item.label,
-    width: item.legacyType === 'XBC-DN32UP' ? 760 : item.placementZone === 'door' ? 120 : 180,
-    height: item.legacyType === 'XBC-DN32UP' ? 240 : item.placementZone === 'door' ? 120 : 180,
+    width: item.legacyType === 'XBC-DN32UP' ? 760 : item.legacyType === 'XBC-DN60SU' ? 840 : item.placementZone === 'door' ? 120 : 180,
+    height: item.legacyType === 'XBC-DN32UP' || item.legacyType === 'XBC-DN60SU' ? 360 : item.placementZone === 'door' ? 120 : 180,
     mountTags: item.placementZone === 'door' ? ['door'] : item.placementZone === 'field' ? ['free'] : ['din'],
   })),
   ...Object.entries(controlPanelLegacyByProfile)
@@ -161,6 +162,12 @@ describe('equipment order recipes', () => {
 });
 
 describe('control-panel BOM order', () => {
+  it('offers both NPN PLC sizes and does not offer the PNP DP32UP', () => {
+    const plcItems = CONTROL_PANEL_BOM_ITEMS.filter((item) => item.category === '제어' && item.designationPrefix === 'PLC');
+    expect(plcItems.map((item) => item.legacyType)).toEqual(['XBC-DN32UP', 'XBC-DN60SU']);
+    expect(plcItems.some((item) => item.legacyType === 'XBC-DP32UP')).toBe(false);
+  });
+
   it('validates independent equipment quantities instead of mission-set ratios', () => {
     const quantities = defaultControlPanelBomQuantities();
     expect(validateControlPanelBomQuantities(quantities)).toMatchObject({
@@ -183,6 +190,52 @@ describe('control-panel BOM order', () => {
       ok: false,
       code: 'BOM_PLC_OUTPUT_CAPACITY',
     });
+  });
+
+  it('uses the manual-backed 36-input/24-output capacity of one DN60SU', () => {
+    const quantities = defaultControlPanelBomQuantities();
+    quantities.plc = 0;
+    quantities.plcDn60su = 1;
+    quantities.relay = 16;
+
+    expect(validateControlPanelBomQuantities(quantities)).toMatchObject({
+      ok: true,
+      inputPointCount: 5,
+      generalOutputCount: 19,
+    });
+  });
+
+  it('auto-wires DN60SU through P00/P40, input COM and the correct output common group', () => {
+    const quantities = defaultControlPanelBomQuantities();
+    quantities.plc = 0;
+    quantities.plcDn60su = 1;
+    const built = buildControlPanelBomDocument({
+      quantities,
+      catalog: controlPanelCatalog,
+      profiles: DEVICE_PROFILES,
+      layout: controlPanelLayout,
+    });
+
+    const plc = built.document.devices.find((device) => device.legacyType === 'XBC-DN60SU');
+    expect(plc).toBeDefined();
+    expect(built.ioAssignments.inputs[0]).toMatchObject({ plcId: plc!.id, plcTerminal: 'P00' });
+    expect(built.ioAssignments.outputs[0]).toMatchObject({
+      plcId: plc!.id,
+      plcCommon: 'COM0',
+      plcTerminals: ['P40'],
+    });
+    expect(built.document.wires).toContainEqual(expect.objectContaining({
+      to: { deviceId: plc!.id, terminalId: 'COM' },
+    }));
+    expect(built.document.wires).toContainEqual(expect.objectContaining({
+      to: { deviceId: plc!.id, terminalId: '24V' },
+    }));
+    expect(built.document.wires).toContainEqual(expect.objectContaining({
+      to: { deviceId: plc!.id, terminalId: '24G' },
+    }));
+    expect(built.document.wires).toContainEqual(expect.objectContaining({
+      to: { deviceId: plc!.id, terminalId: 'COM0' },
+    }));
   });
 
   it('places the ordered BOM in fixed panel zones and completes source and return wiring', () => {
@@ -249,5 +302,26 @@ describe('control-panel BOM order', () => {
       to: { deviceId: inverterAssignment!.plcId, terminalId: 'COMO' },
     }));
     expect(built.document.wires.some((wire) => wire.from.deviceId === inverter.id && wire.from.terminalId === '24')).toBe(false);
+  });
+
+  it('applies the requested R/S/T, FE and other-conductor colour policy to automatic wiring', () => {
+    const quantities = defaultControlPanelBomQuantities();
+    Object.assign(quantities, { mccb3p: 1, inverter: 1, motor: 1 });
+    const built = buildControlPanelBomDocument({
+      quantities,
+      catalog: controlPanelCatalog,
+      profiles: DEVICE_PROFILES,
+      layout: controlPanelLayout,
+    });
+    const source = built.document.devices.find((device) => device.legacyType === 'BOUNDARY-AC')!;
+    const phaseColor = (terminalId: string) => built.document.wires.find((wire) =>
+      wire.from.deviceId === source.id && wire.from.terminalId === terminalId)?.color;
+
+    expect(phaseColor('L1')).toBe('#8b4513');
+    expect(phaseColor('L2')).toBe('#111111');
+    expect(phaseColor('L3')).toBe('#6b7280');
+    expect(phaseColor('PE')).toBe('#15803d');
+    expect(phaseColor('N')).toBe('#facc15');
+    expect(built.document.wires.find((wire) => wire.from.terminalId === 'V+1')?.color).toBe('#facc15');
   });
 });
