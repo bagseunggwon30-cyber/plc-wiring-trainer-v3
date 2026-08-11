@@ -55,9 +55,9 @@
         ], 250, 54, 28)
       ],
       powerDomains: ['3-phase AC200-230V main', 'single-phase AC200-230V control', 'DC24V I/O'],
-      servoAmplifier: { vendor: 'LS ELECTRIC', family: 'L7S', model: 'XDL-L7SA004A', ratedPowerKw: 0.4, axes: 1, command: 'differential-pulse' },
+      servoAmplifier: { vendor: 'LS ELECTRIC', family: 'L7S', model: 'XDL-L7SA004A', ratedPowerKw: 0.4, axes: 1, command: 'differential-pulse', maximumLineDriverInputPps: 1000000, maximumCommandCableM: 10, shieldedTwistedPairRequired: true },
       manualSource: LS_SOURCES.l7s, manualVerified: true,
-      notes: '교육용 공개 단자 의미 모델. XBF-PD02A의 FP±/RP±와 CN1 PF±/PR±를 축별로 연결한다.'
+      notes: '교육용 공개 단자 의미 모델. XBF-PD02A의 FP±/RP±와 CN1 PF±/PR±를 축별로 연결한다. XBF 출력 한계와 별개로 L7S 라인드라이버 수신 한계는 1 Mpps다.'
     },
     'LS-XML-SB04A': {
       cat: 'motion', label: 'LS XML-SB04A', sub: '400W · 3000rpm · 1.27N·m 서보 모터',
@@ -76,10 +76,10 @@
       terminals: [
         terminal('L', 14, 55, 'L', 'Q61P L', 'AC-L'), terminal('N', 14, 88, 'L', 'Q61P N', 'AC-N'), terminal('FG', 14, 121, 'L', 'Q61P FG', 'PE'),
         ...['AX1','AX2'].flatMap((axis, axisIndex) => {
-          const side = axisIndex ? 'R' : 'L', x = axisIndex ? 316 : 14, y0 = 160;
+          const side = axisIndex ? 'R' : 'L', x = axisIndex ? 316 : 14, y0 = 160, contact = axisIndex ? '1B' : '1A';
           const entries = [
             ['FLS','FLS','DI'],['RLS','RLS','DI'],['DOG','DOG','DI'],['STOP','STOP','DI'],['READY','READY','DI'],
-            ['PF+','PULSE F+','DO'],['PF-','PULSE F−','DO'],['PR+','PULSE R+','DO'],['PR-','PULSE R−','DO'],['CLEAR','CLEAR','DO'],['PG0','PG0','DI'],['COM','COM','IO-COM']
+            ['PF+',`${contact}15 PULSE F+`,'DO'],['PF-',`${contact}16 PULSE F−`,'DO'],['PR+',`${contact}17 PULSE R+`,'DO'],['PR-',`${contact}18 PULSE R−`,'DO'],['CLEAR','CLEAR','DO'],['PG0','PG0','DI'],['COM','COM','IO-COM']
           ];
           return entries.map((entry, index) => terminal(`${axis}-${entry[0]}`, x, y0 + index * 23, side, `${axis} ${entry[1]}`, entry[2], { axis: axisIndex + 1 }));
         })
@@ -102,10 +102,10 @@
         ], 250, 50, 27),
         ...sideRows([
           { id: 'U', label: 'U MOTOR', pol: 'AC-G', side: 'R' }, { id: 'V', label: 'V MOTOR', pol: 'AC-G', side: 'R' }, { id: 'W', label: 'W MOTOR', pol: 'AC-G', side: 'R' },
-          { id: 'PP', label: 'CN1-10 PP', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver+' } },
-          { id: 'PG', label: 'CN1-11 PG', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver-' } },
-          { id: 'NP', label: 'CN1-35 NP', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver+' } },
-          { id: 'NG', label: 'CN1-36 NG', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver-' } },
+          { id: 'PP', label: 'CN1-10 PP · QD75 F+', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver+' } },
+          { id: 'PG', label: 'CN1-11 PG · QD75 R+', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver+' } },
+          { id: 'NP', label: 'CN1-35 NP · QD75 F−', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver-' } },
+          { id: 'NG', label: 'CN1-36 NG · QD75 R−', pol: 'DI', side: 'R', extra: { signalClass: 'line-driver-' } },
           { id: 'INP', label: 'CN1 INP', pol: 'DO', side: 'R', extra: { assignable: true } },
           { id: 'OP', label: 'CN1-33 OP(Z)', pol: 'DO', side: 'R' }, { id: 'ALM', label: 'CN1-48 ALM', pol: 'DO', side: 'R' },
           { id: 'RD', label: 'CN1-49 RD', pol: 'DO', side: 'R' }, { id: 'DOCOM', label: 'CN1-46/47 DOCOM', pol: 'IO-COM', side: 'R' }
@@ -113,7 +113,7 @@
       ],
       servoAmplifier: { vendor: 'Mitsubishi Electric', family: 'MR-J4-A', model: 'MR-J4-40A', ratedPowerKw: 0.4, axes: 1, command: 'differential-pulse', maxPulsePps: 4000000 },
       manualSource: MELSEC_SOURCES.mrj4, manualVerified: true,
-      notes: 'INP를 포함한 일부 CN1 기능은 파라미터 할당에 따라 핀이 달라질 수 있어 assignable 메타데이터로 표시한다.'
+      notes: 'QD75D 직접 결선은 F+→PP(10), F−→NP(35), R+→PG(11), R−→NG(36)이다. INP를 포함한 일부 CN1 기능은 파라미터 할당에 따라 핀이 달라질 수 있어 assignable 메타데이터로 표시한다.'
     },
     'MELSEC-QD77MS2-RACK': {
       cat: 'plc', label: 'Q03UDVCPU + QD77MS2', sub: '2축 Simple Motion · SSCNET III/H',

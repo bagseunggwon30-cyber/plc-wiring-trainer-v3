@@ -8,7 +8,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.9.0';
+  const VERSION = '3.0.0';
   const EPS = 1e-9;
   const MAX_TICK_STEP = 0.02;
   const AXIS_NAMES = Object.freeze(['X', 'Y']);
@@ -72,7 +72,7 @@
       id: 'mitsubishi',
       vendor: 'Mitsubishi Electric',
       family: 'QnU',
-      module: 'QD75D2N + MR-J4-A',
+      module: 'QD75D2N + MR-J4-40A',
       commandInterface: 'differential-pulse',
       addressStyle: 'X / Y / M / D',
       aliases: ['mitsubishi', 'qnu', 'qd75', 'mr-j4', 'mrj4'],
@@ -115,7 +115,7 @@
     family: 'MELSEC-Q Simple Motion',
     module: 'QD77MS2 + MR-J4-B',
     commandInterface: 'sscnet-iii-h',
-    addressStyle: 'X / Y / M / D (teaching map)',
+    addressStyle: 'X100 / Y100 / M300 / D300 (profile-local teaching map)',
     aliases: ['mitsubishi-sscnet', 'sscnet', 'sscnet-iii-h', 'qd77ms2', 'mr-j4-b', 'mrj4b'],
     reviewStatus: 'BLOCKED',
     blockers: ['ASSET_MODEL_UNVERIFIED'],
@@ -129,9 +129,39 @@
       manualId: 'SH030106-T',
       manualPages: ['1-24', '3-15', '3-39']
     },
-    // The simulated address map is intentionally scoped to this selected
-    // profile. It does not claim to be a QD77 buffer-memory/PLC driver map.
-    addresses: JSON.parse(JSON.stringify(PROFILES.mitsubishi.addresses))
+    // QD77 uses a distinct profile-local teaching address session. These are
+    // not claims about fixed QD77 head-I/O or buffer-memory addresses, which
+    // depend on the selected PLC rack/module configuration.
+    addresses: {
+      commands: {
+        servoOn: { X: 'Y100', Y: 'Y101' },
+        alarmReset: { X: 'Y102', Y: 'Y103' },
+        home: { X: 'M300', Y: 'M301' },
+        jogForward: { X: 'M310', Y: 'M312' },
+        jogReverse: { X: 'M311', Y: 'M313' },
+        move: { X: 'M320', Y: 'M321' },
+        linear: 'M322',
+        stop: { X: 'M323', Y: 'M324' },
+        executePoint: 'M325',
+        stopAll: 'M326'
+      },
+      data: {
+        pointNumber: 'D300', pointMode: 'D301',
+        target: { X: 'D310', Y: 'D312' }, speed: 'D314',
+        current: { X: 'D400', Y: 'D402' }
+      },
+      status: {
+        servoReady: { X: 'X100', Y: 'X101' },
+        homed: { X: 'X110', Y: 'X111' },
+        busy: { X: 'X120', Y: 'X121' },
+        inPosition: { X: 'X130', Y: 'X131' },
+        alarm: { X: 'X140', Y: 'X141' },
+        reverseLimit: { X: 'X150', Y: 'X151' },
+        forwardLimit: { X: 'X160', Y: 'X161' },
+        dog: { X: 'X170', Y: 'X171' },
+        linearBusy: 'M400', linearDone: 'M401'
+      }
+    }
   });
 
   const SSCNET_REFERENCE_CONNECTIONS = Object.freeze([
@@ -140,19 +170,143 @@
     Object.freeze({ id: 'sscnet-final-cap', kind: 'optical', from: Object.freeze({ moduleId: 'sscnet-axis2', anchorId: 'CN1B' }), to: Object.freeze({ moduleId: 'sscnet-cap', anchorId: 'PROTECTIVE_CAP' }) })
   ]);
 
+  // The pulse terminal maps are owned by the selected equipment profile. They
+  // are deliberately not a vendor-neutral PLC I/O map. The generated 3D
+  // panels use these manual-backed identifiers while the review result remains
+  // BLOCKED until the overlay geometry is calibrated against physical units.
+  const PULSE_TERMINAL_MAPS = {
+    ls: {
+      profileId: 'ls',
+      controller: { vendor: 'LS ELECTRIC', model: 'XBF-PD02A', moduleId: 'pulse-ls-controller', connector: 'A/B 40-pin' },
+      amplifier: { vendor: 'LS ELECTRIC', model: 'XDL-L7SA004A', moduleIds: { X: 'pulse-ls-axis-x', Y: 'pulse-ls-axis-y' }, connector: 'CN1', ratedVoltage: 'AC200V', ratedPowerKw: 0.4 },
+      electrical: {
+        driver: 'Am26C31-equivalent differential-line-driver', receiver: '5V line receiver',
+        sourceMaximumPulsePps: 2000000, receiverMaximumPulsePps: 1000000, pathMaximumPulsePps: 1000000,
+        maximumCableM: 10, twistedPairRequired: true, shieldRequired: true,
+        commandFormats: ['cw-ccw', 'pulse-direction'], logicRelation: 'same', parameterRestartRequired: false
+      },
+      evidence: { manualId: 'XBF-PD02A / XDL-L7S', pages: ['XBF 2-4~2-5, 2-12, 3-2', 'L7S 3-17, 3-25, 7-29'], localPdfPages: [28, 29, 36, 38] },
+      pairs: [
+        {
+          axis: 'X', direction: 'forward', signal: 'FP/PF',
+          source: [
+            { moduleId: 'pulse-ls-controller', anchorId: 'A18', terminal: 'A18', signal: 'FP+', polarity: '+' },
+            { moduleId: 'pulse-ls-controller', anchorId: 'A17', terminal: 'A17', signal: 'FP−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-ls-axis-x', anchorId: 'PF+', terminal: 'CN1-9', signal: 'PF+', polarity: '+' },
+            { moduleId: 'pulse-ls-axis-x', anchorId: 'PF-', terminal: 'CN1-10', signal: 'PF−', polarity: '−' }
+          ]
+        },
+        {
+          axis: 'X', direction: 'reverse', signal: 'RP/PR',
+          source: [
+            { moduleId: 'pulse-ls-controller', anchorId: 'A16', terminal: 'A16', signal: 'RP+', polarity: '+' },
+            { moduleId: 'pulse-ls-controller', anchorId: 'A15', terminal: 'A15', signal: 'RP−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-ls-axis-x', anchorId: 'PR+', terminal: 'CN1-11', signal: 'PR+', polarity: '+' },
+            { moduleId: 'pulse-ls-axis-x', anchorId: 'PR-', terminal: 'CN1-12', signal: 'PR−', polarity: '−' }
+          ]
+        },
+        {
+          axis: 'Y', direction: 'forward', signal: 'FP/PF',
+          source: [
+            { moduleId: 'pulse-ls-controller', anchorId: 'B18', terminal: 'B18', signal: 'FP+', polarity: '+' },
+            { moduleId: 'pulse-ls-controller', anchorId: 'B17', terminal: 'B17', signal: 'FP−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-ls-axis-y', anchorId: 'PF+', terminal: 'CN1-9', signal: 'PF+', polarity: '+' },
+            { moduleId: 'pulse-ls-axis-y', anchorId: 'PF-', terminal: 'CN1-10', signal: 'PF−', polarity: '−' }
+          ]
+        },
+        {
+          axis: 'Y', direction: 'reverse', signal: 'RP/PR',
+          source: [
+            { moduleId: 'pulse-ls-controller', anchorId: 'B16', terminal: 'B16', signal: 'RP+', polarity: '+' },
+            { moduleId: 'pulse-ls-controller', anchorId: 'B15', terminal: 'B15', signal: 'RP−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-ls-axis-y', anchorId: 'PR+', terminal: 'CN1-11', signal: 'PR+', polarity: '+' },
+            { moduleId: 'pulse-ls-axis-y', anchorId: 'PR-', terminal: 'CN1-12', signal: 'PR−', polarity: '−' }
+          ]
+        }
+      ]
+    },
+    mitsubishi: {
+      profileId: 'mitsubishi',
+      controller: { vendor: 'Mitsubishi Electric', model: 'QD75D2N', moduleId: 'pulse-mitsubishi-controller', connector: 'AX1/AX2 shared 40-pin (1A/1B)' },
+      amplifier: { vendor: 'Mitsubishi Electric', model: 'MR-J4-40A', moduleIds: { X: 'pulse-mitsubishi-axis-x', Y: 'pulse-mitsubishi-axis-y' }, connector: 'CN1', ratedVoltage: 'AC200V', ratedPowerKw: 0.4 },
+      electrical: {
+        driver: 'Am26C31-equivalent differential-line-driver', receiver: 'MR-J4-A photocoupler differential input',
+        sourceMaximumPulsePps: 4000000, receiverMaximumPulsePps: 4000000, pathMaximumPulsePps: 4000000,
+        maximumCableM: 10, twistedPairRequired: true, shieldRequired: true, shieldTermination: 'QD75-side-panel',
+        commandFormats: ['cw-ccw', 'pulse-sign'], logicRelation: 'opposite', parameterRestartRequired: true, parameter: 'PA13'
+      },
+      evidence: { manualId: 'SH-080058-V / SH-030107-V', pages: ['QD75 3-25', 'MR-J4-A 3-13, 3-30, 3-41, 5-19~20'], localPdfPages: [] },
+      pairs: [
+        {
+          axis: 'X', direction: 'forward', signal: 'F/PP',
+          source: [
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1A15', terminal: '1A15', signal: 'PULSE F+', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1A16', terminal: '1A16', signal: 'PULSE F−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-mitsubishi-axis-x', anchorId: 'PP', terminal: 'CN1-10', signal: 'PP', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-axis-x', anchorId: 'NP', terminal: 'CN1-35', signal: 'NP', polarity: '−' }
+          ]
+        },
+        {
+          axis: 'X', direction: 'reverse', signal: 'R/PG',
+          source: [
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1A17', terminal: '1A17', signal: 'PULSE R+', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1A18', terminal: '1A18', signal: 'PULSE R−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-mitsubishi-axis-x', anchorId: 'PG', terminal: 'CN1-11', signal: 'PG', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-axis-x', anchorId: 'NG', terminal: 'CN1-36', signal: 'NG', polarity: '−' }
+          ]
+        },
+        {
+          axis: 'Y', direction: 'forward', signal: 'F/PP',
+          source: [
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1B15', terminal: '1B15', signal: 'PULSE F+', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1B16', terminal: '1B16', signal: 'PULSE F−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-mitsubishi-axis-y', anchorId: 'PP', terminal: 'CN1-10', signal: 'PP', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-axis-y', anchorId: 'NP', terminal: 'CN1-35', signal: 'NP', polarity: '−' }
+          ]
+        },
+        {
+          axis: 'Y', direction: 'reverse', signal: 'R/PG',
+          source: [
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1B17', terminal: '1B17', signal: 'PULSE R+', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-controller', anchorId: '1B18', terminal: '1B18', signal: 'PULSE R−', polarity: '−' }
+          ],
+          target: [
+            { moduleId: 'pulse-mitsubishi-axis-y', anchorId: 'PG', terminal: 'CN1-11', signal: 'PG', polarity: '+' },
+            { moduleId: 'pulse-mitsubishi-axis-y', anchorId: 'NG', terminal: 'CN1-36', signal: 'NG', polarity: '−' }
+          ]
+        }
+      ]
+    }
+  };
+
   // This is a profile-owned commissioning exercise, not a shared PLC I/O map.
-  // Pulse-profile steps are manual-backed guided checks until exact 3D terminal
-  // geometry is available; only the SSCNET optical links are graph-verified.
+  // Pulse and SSCNET links are graph-verified. The pulse panels are explicit
+  // manual-backed educational overlays, not claims about calibrated enclosure
+  // or connector geometry, so verified prewire review remains blocked.
   const COMMISSIONING_GUIDES = {
     ls: {
       profileId: 'ls',
-      title: 'LS XBF-PD02A + XDL-L7S 결선·시운전',
-      evidence: { manualId: 'XBF-PD02A', pdfPages: [29, 36, 39], source: '08_LS_XBF-PD02A_Positioning_Manual_KR.pdf' },
+      title: 'LS XBF-PD02A + XDL-L7SA004A 결선·시운전',
+      evidence: { manualId: 'XBF-PD02A / XDL-L7S', pdfPages: [28, 29, 36, 38], source: '08_LS_XBF-PD02A_Positioning_Manual_KR.pdf + official XDL-L7S manuals' },
       reviewBlocker: 'PULSE_TERMINAL_GEOMETRY_UNVERIFIED',
       steps: [
-        { id: 'ls-identify', title: '장비·축 확인', path: 'XBF-PD02A 2축 라인드라이버 → XDL-L7S X/Y 앰프', kind: 'equipment' },
-        { id: 'ls-x-forward', title: 'X축 정방향 펄스쌍', path: 'XBF X축 A18 FP+ / A17 FP− → L7S X축 CN1-9 PF+ / CN1-10 PF−', kind: 'differential-pair' },
-        { id: 'ls-x-reverse', title: 'X축 역방향 펄스쌍', path: 'XBF X축 A16 RP+ / A15 RP− → L7S X축 CN1-11 PR+ / CN1-12 PR−', kind: 'differential-pair' },
+        { id: 'ls-identify', title: '장비·축 확인', path: 'XBF-PD02A 2축 라인드라이버 → XDL-L7SA004A X/Y 앰프', kind: 'equipment' },
+        { id: 'ls-x-forward', title: 'X축 FP/PF 1차 펄스쌍', path: 'XBF X축 A18 FP+ / A17 FP− → L7S X축 CN1-9 PF+ / CN1-10 PF− (CW/CCW에서는 정방향)', kind: 'differential-pair' },
+        { id: 'ls-x-reverse', title: 'X축 RP/PR 2차 펄스쌍', path: 'XBF X축 A16 RP+ / A15 RP− → L7S X축 CN1-11 PR+ / CN1-12 PR− (설정에 따라 역방향 또는 방향)', kind: 'differential-pair' },
         { id: 'ls-y-pairs', title: 'Y축 펄스쌍', path: 'XBF Y축 B18/B17 FP±, B16/B15 RP± → L7S Y축 PF±/PR±', kind: 'differential-pair' },
         { id: 'ls-enable-safety', title: 'DC24V·운전 허가', path: '+24V/GND24, CN1-47 SVON, CN1-18 EMG와 알람 리셋 회로 확인', kind: 'safety' },
         { id: 'ls-motor-feedback', title: '모터·피드백', path: 'L7S U/V/W·PE → 모터, CN2 엔코더와 브레이크 전원 확인', kind: 'motor' }
@@ -160,26 +314,26 @@
       faults: [
         { id: 'LS_SVON_OPEN', code: 'LS_SVON_OPEN', title: 'SVON 경로 단선', scope: 'servo', message: 'L7S CN1-47 SVON 운전 허가 경로가 열려 있습니다' },
         { id: 'LS_EMG_OPEN', code: 'LS_EMG_OPEN', title: 'EMG 안전입력 단선', scope: 'safety', message: 'L7S CN1-18 EMG 안전입력 경로가 열려 있습니다' },
-        { id: 'LS_PULSE_PATH_OPEN', code: 'LS_PULSE_PATH_OPEN', title: 'FP/RP 차동쌍 단선', scope: 'motion', message: '선택 축의 FP± 또는 RP± 차동 펄스 경로가 완성되지 않았습니다' }
+        { id: 'LS_PULSE_PATH_OPEN', code: 'LS_PULSE_PATH_OPEN', title: 'FP/RP 차동쌍 단선', scope: 'motion', connectionId: 'pulse-ls-x-forward-positive', message: '선택 축의 FP± 또는 RP± 차동 펄스 경로가 완성되지 않았습니다' }
       ]
     },
     mitsubishi: {
       profileId: 'mitsubishi',
-      title: 'Mitsubishi QD75D2N + MR-J4-A 결선·시운전',
+      title: 'Mitsubishi QD75D2N + MR-J4-40A 결선·시운전',
       evidence: { manualId: 'SH-080058-V / SH030107-V', pdfPages: [], source: 'Mitsubishi official manuals' },
       reviewBlocker: 'PULSE_TERMINAL_GEOMETRY_UNVERIFIED',
       steps: [
-        { id: 'mel-identify', title: '장비·인터페이스 확인', path: 'QD75D2N 차동 펄스 출력 → MR-J4-A 펄스열 입력', kind: 'equipment' },
-        { id: 'mel-x-forward', title: 'X축 정방향 펄스쌍', path: 'QD75D2N AX1 PF+/PF− → MR-J4-A X축 CN1 PP/PG', kind: 'differential-pair' },
-        { id: 'mel-x-reverse', title: 'X축 역방향 펄스쌍', path: 'QD75D2N AX1 RP+/RP− → MR-J4-A X축 CN1 NP/NG', kind: 'differential-pair' },
-        { id: 'mel-y-pairs', title: 'Y축 펄스쌍', path: 'QD75D2N AX2 PF±/RP± → MR-J4-A Y축 PP/PG·NP/NG', kind: 'differential-pair' },
-        { id: 'mel-enable-safety', title: '별도 PLC I/O·안전', path: 'MR-J4-A SON·EM2·LSP·LSN은 QD75 펄스 단자가 아닌 별도 PLC I/O/안전회로로 결선', kind: 'safety' },
-        { id: 'mel-motor-feedback', title: '모터·피드백', path: 'MR-J4-A U/V/W·PE → HG-KR, CN2 엔코더와 CN8/STO 적용 조건 확인', kind: 'motor' }
+        { id: 'mel-identify', title: '장비·인터페이스 확인', path: 'QD75D2N 차동 펄스 출력 → MR-J4-40A 펄스열 입력', kind: 'equipment' },
+        { id: 'mel-x-forward', title: 'X축 F/PP·NP 1차 펄스쌍', path: 'QD75D2N 1A15 PULSE F+ / 1A16 F− → MR-J4-40A X축 CN1-10 PP / CN1-35 NP', kind: 'differential-pair' },
+        { id: 'mel-x-reverse', title: 'X축 R/PG·NG 2차 펄스쌍', path: 'QD75D2N 1A17 PULSE R+ / 1A18 R− → MR-J4-40A X축 CN1-11 PG / CN1-36 NG (설정에 따라 역방향 또는 부호)', kind: 'differential-pair' },
+        { id: 'mel-y-pairs', title: 'Y축 펄스쌍', path: 'QD75D2N 1B15/16 F±, 1B17/18 R± → MR-J4-40A Y축 PP/NP·PG/NG', kind: 'differential-pair' },
+        { id: 'mel-enable-safety', title: '별도 PLC I/O·안전', path: 'MR-J4-40A SON·EM2·LSP·LSN은 QD75 펄스 단자가 아닌 별도 PLC I/O/안전회로로 결선', kind: 'safety' },
+        { id: 'mel-motor-feedback', title: '모터·피드백', path: 'MR-J4-40A U/V/W·PE → HG-KR43, CN2 엔코더와 CN8/STO 적용 조건 확인', kind: 'motor' }
       ],
       faults: [
-        { id: 'MELSEC_SON_OPEN', code: 'MELSEC_SON_OPEN', title: 'SON 경로 단선', scope: 'servo', message: 'MR-J4-A SON 운전 허가 경로가 열려 있습니다' },
-        { id: 'MELSEC_EM2_OPEN', code: 'MELSEC_EM2_OPEN', title: 'EM2 안전입력 단선', scope: 'safety', message: 'MR-J4-A EM2 안전입력 경로가 열려 있습니다' },
-        { id: 'MELSEC_PULSE_PATH_OPEN', code: 'MELSEC_PULSE_PATH_OPEN', title: 'PP/PG·NP/NG 경로 단선', scope: 'motion', message: 'QD75D2N과 MR-J4-A 사이 차동 펄스 경로가 완성되지 않았습니다' }
+        { id: 'MELSEC_SON_OPEN', code: 'MELSEC_SON_OPEN', title: 'SON 경로 단선', scope: 'servo', message: 'MR-J4-40A SON 운전 허가 경로가 열려 있습니다' },
+        { id: 'MELSEC_EM2_OPEN', code: 'MELSEC_EM2_OPEN', title: 'EM2 안전입력 단선', scope: 'safety', message: 'MR-J4-40A EM2 안전입력 경로가 열려 있습니다' },
+        { id: 'MELSEC_PULSE_PATH_OPEN', code: 'MELSEC_PULSE_PATH_OPEN', title: 'PP/NP·PG/NG 경로 단선', scope: 'motion', connectionId: 'pulse-mitsubishi-x-forward-positive', message: 'QD75D2N과 MR-J4-40A 사이 차동 펄스 경로가 완성되지 않았습니다' }
       ]
     },
     'mitsubishi-sscnet': {
@@ -217,6 +371,299 @@
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function pulseMapFor(stateOrId) {
+    const profile = getProfile(stateOrId);
+    return PULSE_TERMINAL_MAPS[profile.id] || null;
+  }
+
+  function getPulseTerminalMap(stateOrId) {
+    const map = pulseMapFor(stateOrId);
+    return map ? clone(map) : null;
+  }
+
+  function pulsePairId(pair) {
+    return `${pair.axis.toLowerCase()}-${pair.direction}`;
+  }
+
+  function referencePulseConnections(stateOrId) {
+    const map = pulseMapFor(stateOrId);
+    if (!map) return [];
+    const connections = [];
+    for (const pair of map.pairs) {
+      for (let index = 0; index < 2; index += 1) {
+        const polarity = index === 0 ? 'positive' : 'negative';
+        connections.push({
+          id: `pulse-${map.profileId}-${pulsePairId(pair)}-${polarity}`,
+          kind: 'electric',
+          from: { moduleId: pair.source[index].moduleId, anchorId: pair.source[index].anchorId },
+          to: { moduleId: pair.target[index].moduleId, anchorId: pair.target[index].anchorId }
+        });
+      }
+    }
+    return connections;
+  }
+
+  function defaultPulseSettings(profileId) {
+    return profileId === 'mitsubishi'
+      ? { sourceFormat: 'cw-ccw', amplifierFormat: 'cw-ccw', sourceLogic: 'positive', amplifierLogic: 'negative', commandPulsePps: 100000, cableLengthM: 3, twistedPair: true, shielded: true, parameterRestartApplied: true }
+      : { sourceFormat: 'cw-ccw', amplifierFormat: 'cw-ccw', sourceLogic: 'positive', amplifierLogic: 'positive', commandPulsePps: 100000, cableLengthM: 3, twistedPair: true, shielded: true, parameterRestartApplied: true };
+  }
+
+  function normalizePulseSettings(value, profileId) {
+    const defaults = defaultPulseSettings(profileId), electrical = PULSE_TERMINAL_MAPS[profileId]?.electrical;
+    if (!electrical) return defaults;
+    const source = value && typeof value === 'object' ? value : {};
+    const format = raw => raw == null || raw === '' || raw === 'unset' ? null : electrical.commandFormats.includes(String(raw)) ? String(raw) : null;
+    const logic = raw => raw == null || raw === '' || raw === 'unset' ? null : ['positive', 'negative'].includes(String(raw)) ? String(raw) : null;
+    return {
+      sourceFormat: Object.prototype.hasOwnProperty.call(source, 'sourceFormat') ? format(source.sourceFormat) : defaults.sourceFormat,
+      amplifierFormat: Object.prototype.hasOwnProperty.call(source, 'amplifierFormat') ? format(source.amplifierFormat) : defaults.amplifierFormat,
+      sourceLogic: Object.prototype.hasOwnProperty.call(source, 'sourceLogic') ? logic(source.sourceLogic) : defaults.sourceLogic,
+      amplifierLogic: Object.prototype.hasOwnProperty.call(source, 'amplifierLogic') ? logic(source.amplifierLogic) : defaults.amplifierLogic,
+      commandPulsePps: Math.max(0, Math.round(finite(source.commandPulsePps, defaults.commandPulsePps))),
+      cableLengthM: Math.max(0, finite(source.cableLengthM, defaults.cableLengthM)),
+      twistedPair: source.twistedPair == null ? defaults.twistedPair : !!source.twistedPair,
+      shielded: source.shielded == null ? defaults.shielded : !!source.shielded,
+      parameterRestartApplied: source.parameterRestartApplied == null ? defaults.parameterRestartApplied : !!source.parameterRestartApplied
+    };
+  }
+
+  function emptyPulseState() {
+    return {
+      connectionsByProfile: Object.fromEntries(Object.keys(PULSE_TERMINAL_MAPS).map(profileId => [profileId, referencePulseConnections(profileId)])),
+      settingsByProfile: Object.fromEntries(Object.keys(PULSE_TERMINAL_MAPS).map(profileId => [profileId, defaultPulseSettings(profileId)])),
+      solutionsByProfile: Object.fromEntries(Object.keys(PULSE_TERMINAL_MAPS).map(profileId => [profileId, null]))
+    };
+  }
+
+  function pulseModuleIds(profileId) {
+    const map = PULSE_TERMINAL_MAPS[profileId];
+    if (!map) return new Set();
+    return new Set([map.controller.moduleId, ...Object.values(map.amplifier.moduleIds)]);
+  }
+
+  function normalizePulseConnections(connections, profileId) {
+    if (!Array.isArray(connections) || !PULSE_TERMINAL_MAPS[profileId]) return [];
+    const modules = pulseModuleIds(profileId), normalized = [], ids = new Set();
+    for (const item of connections.slice(0, 64)) {
+      if (!item || typeof item !== 'object' || String(item.kind || '').toLowerCase() !== 'electric') continue;
+      const from = item.from || {}, to = item.to || {};
+      const fromModule = String(from.moduleId || '').trim(), fromAnchor = String(from.anchorId || '').trim();
+      const toModule = String(to.moduleId || '').trim(), toAnchor = String(to.anchorId || '').trim();
+      if (!fromModule || !fromAnchor || !toModule || !toAnchor) continue;
+      if (!modules.has(fromModule) && !modules.has(toModule)) continue;
+      const id = String(item.id || `pulse-${profileId}-link-${normalized.length + 1}`).trim();
+      if (!id || ids.has(id)) continue;
+      ids.add(id);
+      normalized.push({ id, kind: 'electric', from: { moduleId: fromModule, anchorId: fromAnchor }, to: { moduleId: toModule, anchorId: toAnchor } });
+    }
+    return normalized;
+  }
+
+  function normalizePulseState(saved) {
+    const pulse = emptyPulseState();
+    for (const profileId of Object.keys(PULSE_TERMINAL_MAPS)) {
+      const candidate = saved?.connectionsByProfile?.[profileId] ?? saved?.[profileId]?.connections;
+      if (Array.isArray(candidate)) pulse.connectionsByProfile[profileId] = normalizePulseConnections(candidate, profileId);
+      const savedSettings = saved?.settingsByProfile?.[profileId] ?? saved?.[profileId]?.settings;
+      if (savedSettings && typeof savedSettings === 'object') pulse.settingsByProfile[profileId] = normalizePulseSettings(savedSettings, profileId);
+    }
+    return pulse;
+  }
+
+  function endpointKey(endpoint) {
+    return `${endpoint?.moduleId || ''}::${endpoint?.anchorId || ''}`;
+  }
+
+  function sameLink(connection, expected) {
+    const from = endpointKey(connection.from), to = endpointKey(connection.to);
+    const expectedFrom = endpointKey(expected.from), expectedTo = endpointKey(expected.to);
+    return (from === expectedFrom && to === expectedTo) || (from === expectedTo && to === expectedFrom);
+  }
+
+  function pulseEndpointCatalog(map) {
+    const catalog = new Map();
+    for (const pair of map.pairs) {
+      const pairId = pulsePairId(pair);
+      for (const [role, terminals] of [['source', pair.source], ['target', pair.target]]) {
+        for (const terminal of terminals) catalog.set(endpointKey(terminal), { ...terminal, role, pairId, axis: pair.axis, direction: pair.direction });
+      }
+    }
+    return catalog;
+  }
+
+  function pulseIssue(code, message, related, manual, details = {}) {
+    return { code, severity: 'error', category: 'pulse-topology', message, related: clone(related || []), manual: clone(manual), ...details };
+  }
+
+  function evaluatePulseTopology(state, requestedProfileId) {
+    const selected = requestedProfileId == null ? getProfile(state).id : resolveProfile(requestedProfileId);
+    const map = PULSE_TERMINAL_MAPS[selected];
+    if (!map) return { profileId: selected || getProfile(state).id, interface: null, topologyStatus: 'NOT_APPLICABLE', reviewStatus: 'NOT_APPLICABLE', issues: [], paths: [] };
+    state.pulse ||= normalizePulseState();
+    state.pulse.connectionsByProfile ||= emptyPulseState().connectionsByProfile;
+    state.pulse.settingsByProfile ||= emptyPulseState().settingsByProfile;
+    state.pulse.solutionsByProfile ||= emptyPulseState().solutionsByProfile;
+    const connections = normalizePulseConnections(state.pulse.connectionsByProfile[selected], selected);
+    state.pulse.connectionsByProfile[selected] = connections;
+    const settings = normalizePulseSettings(state.pulse.settingsByProfile[selected], selected);
+    state.pulse.settingsByProfile[selected] = settings;
+    const reference = referencePulseConnections(selected), endpoints = pulseEndpointCatalog(map), issues = [], issueKeys = new Set();
+    const addIssue = (issue, key = `${issue.code}:${JSON.stringify(issue.related || [])}`) => {
+      if (issueKeys.has(key)) return;
+      issueKeys.add(key); issues.push(issue);
+    };
+
+    for (const connection of connections) {
+      const first = endpoints.get(endpointKey(connection.from)), second = endpoints.get(endpointKey(connection.to));
+      if (!first || !second) {
+        addIssue(pulseIssue('PULSE_CONNECTION_UNEXPECTED', '선택한 장비 프로필 밖의 단자와 펄스선을 연결할 수 없습니다', [connection.from, connection.to], map.evidence), `PULSE_CONNECTION_UNEXPECTED:${connection.id}`);
+        continue;
+      }
+      if (first.role === second.role) {
+        addIssue(pulseIssue('PULSE_ENDPOINT_ROLE_INVALID', '펄스 출력끼리 또는 서보 입력끼리 직접 연결할 수 없습니다', [connection.from, connection.to], map.evidence), `PULSE_ENDPOINT_ROLE_INVALID:${connection.id}`);
+        continue;
+      }
+      const source = first.role === 'source' ? first : second, target = first.role === 'target' ? first : second;
+      if (source.axis !== target.axis) {
+        addIssue(pulseIssue('PULSE_AXIS_CROSSED', `${source.axis}축 펄스쌍이 ${target.axis}축 서보 입력으로 교차 연결되었습니다`, [connection.from, connection.to], map.evidence, { sourceAxis: source.axis, targetAxis: target.axis }), `PULSE_AXIS_CROSSED:${source.pairId}:${target.pairId}`);
+      } else if (source.direction !== target.direction) {
+        addIssue(pulseIssue('PULSE_PAIR_ROLE_CROSSED', `${source.axis}축 1차·2차 펄스쌍이 서로 바뀌었습니다`, [connection.from, connection.to], map.evidence, { axis: source.axis, sourcePairRole: source.direction, targetPairRole: target.direction }), `PULSE_PAIR_ROLE_CROSSED:${source.pairId}:${target.pairId}`);
+      } else if (source.polarity !== target.polarity) {
+        addIssue(pulseIssue('PULSE_POLARITY_REVERSED', `${source.axis}축 ${source.direction === 'forward' ? '1차' : '2차'} 차동쌍의 +/− 극성이 뒤바뀌었습니다`, [connection.from, connection.to], map.evidence, { axis: source.axis, direction: source.direction }), `PULSE_POLARITY_REVERSED:${source.pairId}`);
+      }
+    }
+
+    const endpointUses = new Map();
+    for (const connection of connections) {
+      for (const endpoint of [connection.from, connection.to]) {
+        const key = endpointKey(endpoint);
+        if (!endpoints.has(key)) continue;
+        const uses = endpointUses.get(key) || [];
+        uses.push(connection.id);
+        endpointUses.set(key, uses);
+      }
+    }
+    for (const [key, connectionIds] of endpointUses) {
+      if (connectionIds.length <= 1) continue;
+      const terminal = endpoints.get(key);
+      addIssue(pulseIssue(
+        'PULSE_ENDPOINT_DUPLICATED',
+        `${terminal.terminal} ${terminal.signal} 단자에 펄스선 ${connectionIds.length}가닥이 중복 연결되었습니다`,
+        [{ moduleId: terminal.moduleId, anchorId: terminal.anchorId }],
+        map.evidence,
+        { connectionIds: [...connectionIds] }
+      ), `PULSE_ENDPOINT_DUPLICATED:${key}`);
+    }
+
+    for (const pair of map.pairs) {
+      const pairReferences = reference.filter(connection => connection.id.includes(`-${pulsePairId(pair)}-`));
+      const exactCount = pairReferences.filter(expected => connections.some(connection => sameLink(connection, expected))).length;
+      if (exactCount === pairReferences.length) continue;
+      const missing = pairReferences.filter(expected => !connections.some(connection => sameLink(connection, expected)));
+      addIssue(pulseIssue(
+        'PULSE_PAIR_OPEN',
+        `${pair.axis}축 ${pair.direction === 'forward' ? '1차' : '2차'} 차동 펄스쌍 ${missing.length}가닥이 열려 있습니다`,
+        missing.flatMap(connection => [connection.from, connection.to]),
+        map.evidence,
+        { axis: pair.axis, direction: pair.direction, missingConnectionIds: missing.map(connection => connection.id) }
+      ), `PULSE_PAIR_OPEN:${pulsePairId(pair)}`);
+    }
+
+    const settingRelated = [{ profileId: selected, controller: map.controller.model, amplifier: map.amplifier.model }];
+    if (!settings.sourceFormat || !settings.amplifierFormat) {
+      addIssue(pulseIssue('PULSE_COMMAND_FORMAT_UNSET', '컨트롤러와 서보 앰프의 펄스 명령 방식을 모두 선택해야 합니다', settingRelated, map.evidence, { category: 'pulse-settings' }), 'PULSE_COMMAND_FORMAT_UNSET');
+    } else if (settings.sourceFormat !== settings.amplifierFormat) {
+      addIssue(pulseIssue('PULSE_COMMAND_FORMAT_MISMATCH', '컨트롤러 출력 방식과 서보 앰프 입력 방식이 일치하지 않습니다', settingRelated, map.evidence, { category: 'pulse-settings', sourceFormat: settings.sourceFormat, amplifierFormat: settings.amplifierFormat }), 'PULSE_COMMAND_FORMAT_MISMATCH');
+    }
+    if (!settings.sourceLogic || !settings.amplifierLogic) {
+      addIssue(pulseIssue('PULSE_LOGIC_UNSET', '컨트롤러와 서보 앰프의 펄스 논리를 모두 선택해야 합니다', settingRelated, map.evidence, { category: 'pulse-settings' }), 'PULSE_LOGIC_UNSET');
+    } else {
+      const same = settings.sourceLogic === settings.amplifierLogic;
+      const valid = map.electrical.logicRelation === 'opposite' ? !same : same;
+      if (!valid) addIssue(pulseIssue('PULSE_LOGIC_MISMATCH', map.electrical.logicRelation === 'opposite' ? 'QD75 차동 출력 논리와 MR-J4 PA13 입력 논리는 서로 반대로 설정해야 합니다' : 'XBF 출력 논리와 L7S 입력 논리가 일치해야 합니다', settingRelated, map.evidence, { category: 'pulse-settings', sourceLogic: settings.sourceLogic, amplifierLogic: settings.amplifierLogic }), 'PULSE_LOGIC_MISMATCH');
+    }
+    if (settings.commandPulsePps > map.electrical.pathMaximumPulsePps) {
+      addIssue(pulseIssue('PULSE_RATE_EXCEEDS_RECEIVER', `명령 ${settings.commandPulsePps} pps가 선택 경로 한계 ${map.electrical.pathMaximumPulsePps} pps를 초과합니다`, settingRelated, map.evidence, { category: 'rating', commandPulsePps: settings.commandPulsePps, maximumPulsePps: map.electrical.pathMaximumPulsePps }), 'PULSE_RATE_EXCEEDS_RECEIVER');
+    }
+    if (settings.cableLengthM > map.electrical.maximumCableM) {
+      addIssue(pulseIssue('PULSE_CABLE_LENGTH_EXCEEDED', `펄스 케이블 ${settings.cableLengthM} m가 허용 길이 ${map.electrical.maximumCableM} m를 초과합니다`, settingRelated, map.evidence, { category: 'physical', cableLengthM: settings.cableLengthM, maximumCableM: map.electrical.maximumCableM }), 'PULSE_CABLE_LENGTH_EXCEEDED');
+    }
+    if (map.electrical.shieldRequired && !settings.shielded) {
+      const message = map.electrical.shieldTermination === 'QD75-side-panel'
+        ? '차동 펄스 케이블 실드를 적용하고 QD75 측 제어반에서 종단해야 합니다'
+        : '차동 펄스 케이블의 실드 적용을 확인해야 합니다';
+      addIssue(pulseIssue('PULSE_CABLE_SHIELD_UNVERIFIED', message, settingRelated, map.evidence, { category: 'physical' }), 'PULSE_CABLE_SHIELD_UNVERIFIED');
+    }
+    if (map.electrical.twistedPairRequired && !settings.twistedPair) {
+      addIssue(pulseIssue('PULSE_CABLE_TWIST_UNVERIFIED', '각 차동 펄스쌍은 트위스트 페어 케이블로 구성해야 합니다', settingRelated, map.evidence, { category: 'physical' }), 'PULSE_CABLE_TWIST_UNVERIFIED');
+    }
+    if (map.electrical.parameterRestartRequired && !settings.parameterRestartApplied) {
+      addIssue(pulseIssue('PULSE_PARAMETER_RESTART_REQUIRED', `${map.electrical.parameter} 변경 뒤 서보 앰프 전원을 재인가해야 설정이 적용됩니다`, settingRelated, map.evidence, { category: 'pulse-settings', parameter: map.electrical.parameter }), 'PULSE_PARAMETER_RESTART_REQUIRED');
+    }
+
+    issues.push({
+      code: 'PULSE_TERMINAL_GEOMETRY_UNVERIFIED',
+      severity: 'blocker',
+      category: 'evidence',
+      message: '단자 ID와 결선 규칙은 매뉴얼 기반이지만 교육용 3D 오버레이의 실물 치수·클릭 geometry는 아직 검토 등급으로 승인되지 않았습니다',
+      related: [{ profileId: selected }],
+      manual: clone(map.evidence)
+    });
+    const paths = reference.filter(expected => connections.some(connection => sameLink(connection, expected)));
+    const solution = {
+      profileId: selected,
+      interface: 'differential-pulse',
+      topologyStatus: issues.some(issue => issue.severity === 'error') ? 'FAIL' : 'PASS',
+      reviewStatus: 'BLOCKED',
+      issues,
+      paths: clone(paths),
+      settings: clone(settings),
+      ratings: clone(map.electrical)
+    };
+    state.pulse.solutionsByProfile[selected] = clone(solution);
+    return solution;
+  }
+
+  function setPulseConnections(state, connections, requestedProfileId) {
+    const selected = requestedProfileId == null ? getProfile(state).id : resolveProfile(requestedProfileId);
+    if (!PULSE_TERMINAL_MAPS[selected]) return evaluatePulseTopology(state, selected);
+    stopAll(state); setServo(state, false); resetAlarms(state);
+    state.pulse ||= normalizePulseState();
+    state.pulse.connectionsByProfile[selected] = normalizePulseConnections(connections, selected);
+    return evaluatePulseTopology(state, selected);
+  }
+
+  function getPulseSettings(state, requestedProfileId) {
+    const selected = requestedProfileId == null ? getProfile(state).id : resolveProfile(requestedProfileId);
+    if (!PULSE_TERMINAL_MAPS[selected]) return null;
+    state.pulse ||= normalizePulseState();
+    state.pulse.settingsByProfile ||= emptyPulseState().settingsByProfile;
+    state.pulse.settingsByProfile[selected] = normalizePulseSettings(state.pulse.settingsByProfile[selected], selected);
+    return clone(state.pulse.settingsByProfile[selected]);
+  }
+
+  function setPulseSettings(state, patch, requestedProfileId) {
+    const selected = requestedProfileId == null ? getProfile(state).id : resolveProfile(requestedProfileId);
+    if (!PULSE_TERMINAL_MAPS[selected] || !patch || typeof patch !== 'object') return false;
+    const previous = getPulseSettings(state, selected), next = normalizePulseSettings({ ...previous, ...patch }, selected);
+    const restartSensitiveChanged = previous.amplifierFormat !== next.amplifierFormat || previous.amplifierLogic !== next.amplifierLogic;
+    stopAll(state); setServo(state, false); resetAlarms(state);
+    if (PULSE_TERMINAL_MAPS[selected].electrical.parameterRestartRequired && restartSensitiveChanged) next.parameterRestartApplied = false;
+    state.pulse.settingsByProfile[selected] = next;
+    evaluatePulseTopology(state, selected);
+    return clone(next);
+  }
+
+  function acknowledgePulseParameterRestart(state, requestedProfileId) {
+    const selected = requestedProfileId == null ? getProfile(state).id : resolveProfile(requestedProfileId);
+    if (!PULSE_TERMINAL_MAPS[selected]) return false;
+    state.pulse ||= normalizePulseState(); state.pulse.settingsByProfile ||= emptyPulseState().settingsByProfile;
+    const settings = normalizePulseSettings(state.pulse.settingsByProfile[selected], selected);
+    settings.parameterRestartApplied = true; state.pulse.settingsByProfile[selected] = settings;
+    evaluatePulseTopology(state, selected); return true;
   }
 
   function emptyTrainingSessions() {
@@ -347,6 +794,7 @@
   }
 
   function setSscnetConnections(state, connections) {
+    stopAll(state); setServo(state, false); resetAlarms(state);
     state.sscnet ||= { connections: [], solution: null };
     state.sscnet.connections = normalizeSscnetConnections(connections);
     return evaluateSscnetTopology(state);
@@ -364,6 +812,9 @@
     if (guide.profileId === 'mitsubishi-sscnet') {
       const connections = referenceSscnetConnections().filter(connection => !fault?.connectionId || connection.id !== fault.connectionId);
       setSscnetConnections(state, connections);
+    } else {
+      const connections = referencePulseConnections(guide.profileId).filter(connection => !fault?.connectionId || connection.id !== fault.connectionId);
+      setPulseConnections(state, connections, guide.profileId);
     }
     addEvent(state, 'training', id === 'NONE' ? `${guide.title} 정상 예시 복원` : `${guide.title} 고장 삽입: ${fault.title}`);
     return true;
@@ -374,7 +825,10 @@
     const issues = [];
     if (guide.profileId === 'mitsubishi-sscnet') {
       issues.push(...evaluateSscnetTopology(state).issues);
-    } else if (session.faultId !== 'NONE') {
+    } else {
+      issues.push(...evaluatePulseTopology(state).issues);
+    }
+    if (guide.profileId !== 'mitsubishi-sscnet' && session.faultId !== 'NONE') {
       const fault = guide.faults.find(item => item.id === session.faultId);
       if (fault) issues.push({ code: fault.code, severity: 'error', category: fault.scope, message: fault.message, related: [{ profileId: guide.profileId }] });
     }
@@ -385,7 +839,7 @@
         category: 'evidence',
         message: guide.profileId === 'mitsubishi-sscnet'
           ? '가져온 SSCNET 장비 형상의 정확 품번·커넥터 치수가 확인되지 않아 실기 검토 근거로 사용할 수 없습니다'
-          : '펄스 프로필은 매뉴얼 기반 체크리스트이며 실제 3D 단자 클릭 영역이 아직 검증되지 않았습니다',
+          : '펄스 단자는 결선 그래프로 판정하지만 교육용 3D 오버레이의 실물 치수·클릭 geometry는 아직 검토 등급으로 승인되지 않았습니다',
         related: [{ profileId: guide.profileId }]
       });
     }
@@ -408,10 +862,14 @@
       return topology.issues.find(issue => ['SSCNET_CONTROLLER_PATH_OPEN', 'SSCNET_AXIS_CHAIN_OPEN'].includes(issue.code)) || null;
     }
     const fault = guide.faults.find(item => item.id === session.faultId);
-    if (!fault) return null;
-    if (operation === 'servo' && !['servo', 'safety'].includes(fault.scope)) return null;
-    if (operation === 'motion' && !['motion', 'safety'].includes(fault.scope)) return null;
-    return fault;
+    if (fault) {
+      if (operation === 'servo' && ['servo', 'safety'].includes(fault.scope)) return fault;
+      if (operation === 'motion' && ['motion', 'safety'].includes(fault.scope)) return fault;
+    }
+    if (profile.commandInterface === 'differential-pulse' && operation === 'motion') {
+      return evaluatePulseTopology(state).issues.find(issue => issue.severity === 'error') || null;
+    }
+    return null;
   }
 
   function rejectForOperationFault(state, operation, names = AXIS_NAMES) {
@@ -533,6 +991,7 @@
       },
       pointTable: {},
       linear: emptyLinear(),
+      pulse: normalizePulseState(),
       sscnet: { connections: [], solution: null },
       training: normalizeTrainingSessions(),
       memory: emptyMemory(),
@@ -545,7 +1004,10 @@
       for (const [number, point] of Object.entries(options.pointTable)) setPoint(state, number, point);
     }
     if (options.saved) importState(state, options.saved);
-    else evaluateSscnetTopology(state);
+    else {
+      evaluatePulseTopology(state);
+      evaluateSscnetTopology(state);
+    }
     return state;
   }
 
@@ -1199,6 +1661,7 @@
     state.profileId = profileId;
     state.profile = profileId;
     initializeMemory(state);
+    evaluatePulseTopology(state);
     evaluateSscnetTopology(state);
     addEvent(state, 'profile', `${getProfile(state).vendor} ${getProfile(state).module} 프로필 선택 · 이전 출력 안전 해제`);
     return true;
@@ -1214,6 +1677,10 @@
       axes: state.axes,
       pointTable: state.pointTable,
       linear: state.linear,
+      pulse: {
+        connectionsByProfile: Object.fromEntries(Object.keys(PULSE_TERMINAL_MAPS).map(profileId => [profileId, normalizePulseConnections(state.pulse?.connectionsByProfile?.[profileId], profileId)])),
+        settingsByProfile: Object.fromEntries(Object.keys(PULSE_TERMINAL_MAPS).map(profileId => [profileId, normalizePulseSettings(state.pulse?.settingsByProfile?.[profileId], profileId)]))
+      },
       sscnet: { connections: normalizeSscnetConnections(state.sscnet?.connections) },
       training: normalizeTrainingSessions(state.training),
       memory: state.memory,
@@ -1254,8 +1721,10 @@
       state.linear.pointNumber = saved.linear.pointNumber ?? null;
       state.linear.reason = 'restored-stopped';
     }
+    state.pulse = normalizePulseState(saved.pulse);
     state.sscnet = { connections: normalizeSscnetConnections(saved.sscnet?.connections), solution: null };
     state.training = normalizeTrainingSessions(saved.training);
+    evaluatePulseTopology(state);
     evaluateSscnetTopology(state);
     state.elapsed = Math.max(0, finite(saved.elapsed, 0));
     state.events = Array.isArray(saved.events) ? clone(saved.events).slice(-100) : [];
@@ -1283,6 +1752,7 @@
     AXIS_DEFAULTS: clone(AXIS_DEFAULTS),
     PROFILES: clone(PROFILES),
     VENDOR_PROFILES: clone(PROFILES),
+    PULSE_TERMINAL_MAPS: clone(PULSE_TERMINAL_MAPS),
     createAxis,
     createState,
     create: createState,
@@ -1312,6 +1782,13 @@
     setProfile,
     switchProfile: setProfile,
     resolveProfile,
+    getPulseTerminalMap,
+    referencePulseConnections,
+    setPulseConnections,
+    evaluatePulseTopology,
+    getPulseSettings,
+    setPulseSettings,
+    acknowledgePulseParameterRestart,
     referenceSscnetConnections,
     setSscnetConnections,
     evaluateSscnetTopology,

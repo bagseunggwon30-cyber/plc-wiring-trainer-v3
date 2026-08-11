@@ -120,7 +120,7 @@ test('LS and Mitsubishi profiles expose and execute their teaching-only address 
 
 test('pulse-train and SSCNET Mitsubishi servo profiles are separate selectable sessions', () => {
   const pulse = Runtime.getProfile('mitsubishi');
-  assert.equal(pulse.module, 'QD75D2N + MR-J4-A');
+  assert.equal(pulse.module, 'QD75D2N + MR-J4-40A');
   assert.equal(pulse.commandInterface, 'differential-pulse');
   assert.equal(pulse.sscnet, undefined);
 
@@ -131,6 +131,13 @@ test('pulse-train and SSCNET Mitsubishi servo profiles are separate selectable s
   assert.equal(sscnet.commandInterface, 'sscnet-iii-h');
   assert.equal(sscnet.reviewStatus, 'BLOCKED');
   assert.ok(sscnet.blockers.includes('ASSET_MODEL_UNVERIFIED'));
+  const flattenAddresses = profile => [...new Set(JSON.stringify(profile.addresses).match(/[PMXYD]\d+/g) || [])];
+  const pulseAddresses = new Set(flattenAddresses(pulse));
+  assert.equal(flattenAddresses(sscnet).some(address => pulseAddresses.has(address)), false);
+
+  const pulseState = Runtime.createState({ profile: 'mitsubishi' });
+  assert.equal(Runtime.writeDevice(pulseState, sscnet.commands.servoOn.X, true).ok, false);
+  assert.equal(Runtime.writeDevice(state, pulse.commands.servoOn.X, true).ok, false);
 
   const initial = Runtime.evaluateSscnetTopology(state);
   assert.equal(initial.topologyStatus, 'FAIL');
@@ -153,6 +160,155 @@ test('pulse-train and SSCNET Mitsubishi servo profiles are separate selectable s
   assert.equal(Object.values(state.axes).every(axis => !axis.servoOn), true);
 });
 
+test('LS and Mitsubishi pulse terminal maps are selectable and never share wiring state', () => {
+  const state = Runtime.createState({ profile: 'ls' });
+  const lsMap = Runtime.getPulseTerminalMap(state);
+  assert.equal(lsMap.profileId, 'ls');
+  assert.equal(lsMap.controller.model, 'XBF-PD02A');
+  assert.equal(lsMap.amplifier.model, 'XDL-L7SA004A');
+  assert.deepEqual(
+    lsMap.pairs.find(pair => pair.axis === 'X' && pair.direction === 'forward').source.map(pin => pin.terminal),
+    ['A18', 'A17']
+  );
+  assert.deepEqual(
+    lsMap.pairs.find(pair => pair.axis === 'X' && pair.direction === 'forward').target.map(pin => pin.terminal),
+    ['CN1-9', 'CN1-10']
+  );
+
+  const lsReference = Runtime.referencePulseConnections(state);
+  assert.equal(lsReference.length, 8);
+  Runtime.setPulseConnections(state, lsReference.filter(connection => connection.id !== 'pulse-ls-x-forward-positive'));
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_PAIR_OPEN'), true);
+
+  assert.equal(Runtime.setProfile(state, 'mitsubishi'), true);
+  const mitsubishiMap = Runtime.getPulseTerminalMap(state);
+  assert.equal(mitsubishiMap.profileId, 'mitsubishi');
+  assert.equal(mitsubishiMap.controller.model, 'QD75D2N');
+  assert.equal(mitsubishiMap.amplifier.model, 'MR-J4-40A');
+  assert.deepEqual(
+    mitsubishiMap.pairs.find(pair => pair.axis === 'X' && pair.direction === 'forward').source.map(pin => pin.terminal),
+    ['1A15', '1A16']
+  );
+  assert.deepEqual(
+    mitsubishiMap.pairs.find(pair => pair.axis === 'X' && pair.direction === 'forward').target.map(pin => `${pin.terminal} ${pin.signal}`),
+    ['CN1-10 PP', 'CN1-35 NP']
+  );
+  assert.deepEqual(
+    mitsubishiMap.pairs.find(pair => pair.axis === 'X' && pair.direction === 'reverse').target.map(pin => `${pin.terminal} ${pin.signal}`),
+    ['CN1-11 PG', 'CN1-36 NG']
+  );
+  assert.equal(Runtime.evaluatePulseTopology(state).topologyStatus, 'PASS');
+  assert.equal(Runtime.setProfile(state, 'ls'), true);
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_PAIR_OPEN'), true);
+});
+
+test('pulse topology distinguishes open, reversed polarity, crossed axis, and crossed pair role', () => {
+  const state = Runtime.createState({ profile: 'ls' });
+  const reference = Runtime.referencePulseConnections(state);
+
+  Runtime.setPulseConnections(state, reference.filter(connection => connection.id !== 'pulse-ls-x-forward-negative'));
+  assert.deepEqual(
+    [...new Set(Runtime.evaluatePulseTopology(state).issues.filter(issue => issue.severity === 'error').map(issue => issue.code))],
+    ['PULSE_PAIR_OPEN']
+  );
+
+  const reversed = reference.map(connection => {
+    if (connection.id === 'pulse-ls-x-forward-positive') return { ...connection, to: { moduleId: 'pulse-ls-axis-x', anchorId: 'PF-' } };
+    if (connection.id === 'pulse-ls-x-forward-negative') return { ...connection, to: { moduleId: 'pulse-ls-axis-x', anchorId: 'PF+' } };
+    return connection;
+  });
+  Runtime.setPulseConnections(state, reversed);
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_POLARITY_REVERSED'), true);
+
+  const axisCrossed = reference.map(connection => {
+    if (!connection.id.startsWith('pulse-ls-x-forward')) return connection;
+    return { ...connection, to: { ...connection.to, moduleId: 'pulse-ls-axis-y' } };
+  });
+  Runtime.setPulseConnections(state, axisCrossed);
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_AXIS_CROSSED'), true);
+
+  const directionCrossed = reference.map(connection => {
+    if (connection.id === 'pulse-ls-x-forward-positive') return { ...connection, to: { moduleId: 'pulse-ls-axis-x', anchorId: 'PR+' } };
+    if (connection.id === 'pulse-ls-x-forward-negative') return { ...connection, to: { moduleId: 'pulse-ls-axis-x', anchorId: 'PR-' } };
+    return connection;
+  });
+  Runtime.setPulseConnections(state, directionCrossed);
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_PAIR_ROLE_CROSSED'), true);
+
+  const duplicatedEndpoint = [
+    ...reference,
+    { ...reference[0], id: 'pulse-ls-duplicate-positive' }
+  ];
+  Runtime.setPulseConnections(state, duplicatedEndpoint);
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_ENDPOINT_DUPLICATED'), true);
+});
+
+test('pulse topology blocks motion but not servo enable and persists safely per profile', () => {
+  const state = Runtime.createState({ profile: 'mitsubishi' });
+  Runtime.setPulseConnections(state, []);
+  assert.equal(Runtime.setServo(state, true), true);
+  assert.equal(Runtime.commandAxis(state, 'X', 100, { speed: 80 }), false);
+  assert.equal(state.axes.X.alarm?.code, 'PULSE_PAIR_OPEN');
+
+  Runtime.resetAlarms(state);
+  Runtime.setPulseConnections(state, Runtime.referencePulseConnections(state));
+  assert.equal(Object.values(state.axes).every(axis => !axis.servoOn), true);
+  assert.equal(Runtime.setServo(state, true), true);
+  assert.equal(Runtime.commandAxis(state, 'X', 100, { speed: 80 }), true);
+  Runtime.stopAll(state);
+
+  const restored = Runtime.createState({ saved: Runtime.exportState(state) });
+  assert.equal(restored.profileId, 'mitsubishi');
+  assert.equal(Runtime.evaluatePulseTopology(restored).topologyStatus, 'PASS');
+  assert.equal(Object.values(restored.axes).every(axis => !axis.servoOn), true);
+  assert.equal(Runtime.setProfile(restored, 'mitsubishi-sscnet'), true);
+  assert.equal(Runtime.evaluatePulseTopology(restored).topologyStatus, 'NOT_APPLICABLE');
+});
+
+test('selected pulse profile validates command format, logic, rate, cable, and restart state', () => {
+  const state = Runtime.createState({ profile: 'ls' });
+  const lsSettings = Runtime.getPulseSettings(state);
+  assert.equal(lsSettings.commandPulsePps, 100000);
+  assert.equal(Runtime.getPulseTerminalMap(state).electrical.pathMaximumPulsePps, 1000000);
+  assert.equal(Runtime.evaluatePulseTopology(state).topologyStatus, 'PASS');
+
+  Runtime.setPulseSettings(state, { amplifierFormat: 'pulse-direction' });
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_COMMAND_FORMAT_MISMATCH'), true);
+  Runtime.setPulseSettings(state, { amplifierFormat: 'cw-ccw', commandPulsePps: 1200000 });
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_RATE_EXCEEDS_RECEIVER'), true);
+  Runtime.setPulseSettings(state, { commandPulsePps: 100000, cableLengthM: 10.1 });
+  assert.equal(Runtime.evaluatePulseTopology(state).issues.some(issue => issue.code === 'PULSE_CABLE_LENGTH_EXCEEDED'), true);
+  Runtime.setPulseSettings(state, { cableLengthM: 3, shielded: false, twistedPair: false });
+  const cableCodes = Runtime.evaluatePulseTopology(state).issues.map(issue => issue.code);
+  assert.ok(cableCodes.includes('PULSE_CABLE_SHIELD_UNVERIFIED'));
+  assert.ok(cableCodes.includes('PULSE_CABLE_TWIST_UNVERIFIED'));
+
+  Runtime.setPulseSettings(state, { shielded: true, twistedPair: true });
+  assert.equal(Runtime.evaluatePulseTopology(state).topologyStatus, 'PASS');
+});
+
+test('Mitsubishi PA13 logic is opposite QD75 logic and restart acknowledgement stays profile-local', () => {
+  const state = Runtime.createState({ profile: 'mitsubishi' });
+  assert.deepEqual(Runtime.getPulseSettings(state), {
+    sourceFormat: 'cw-ccw', amplifierFormat: 'cw-ccw', sourceLogic: 'positive', amplifierLogic: 'negative',
+    commandPulsePps: 100000, cableLengthM: 3, twistedPair: true, shielded: true, parameterRestartApplied: true
+  });
+  Runtime.setPulseSettings(state, { amplifierLogic: 'positive' });
+  let result = Runtime.evaluatePulseTopology(state);
+  assert.ok(result.issues.some(issue => issue.code === 'PULSE_LOGIC_MISMATCH'));
+  assert.ok(result.issues.some(issue => issue.code === 'PULSE_PARAMETER_RESTART_REQUIRED'));
+  assert.equal(Runtime.acknowledgePulseParameterRestart(state), true);
+  result = Runtime.evaluatePulseTopology(state);
+  assert.equal(result.issues.some(issue => issue.code === 'PULSE_PARAMETER_RESTART_REQUIRED'), false);
+  assert.equal(result.issues.some(issue => issue.code === 'PULSE_LOGIC_MISMATCH'), true);
+
+  Runtime.setPulseSettings(state, { amplifierLogic: 'negative' });
+  Runtime.acknowledgePulseParameterRestart(state);
+  assert.equal(Runtime.evaluatePulseTopology(state).topologyStatus, 'PASS');
+  Runtime.setProfile(state, 'ls');
+  assert.equal(Runtime.getPulseSettings(state).amplifierLogic, 'positive');
+});
+
 test('SSCNET profile persists its own optical topology and detects a missing protective cap', () => {
   const state = Runtime.createState({ profile: 'mitsubishi-sscnet' });
   const withoutCap = Runtime.referenceSscnetConnections().filter(connection => connection.id !== 'sscnet-final-cap');
@@ -170,7 +326,7 @@ test('commissioning guides and fault sessions stay isolated for every selectable
   const state = Runtime.createState({ profile: 'ls' });
   const lsGuide = Runtime.getCommissioningGuide(state);
   assert.equal(lsGuide.profileId, 'ls');
-  assert.equal(lsGuide.evidence.manualId, 'XBF-PD02A');
+  assert.equal(lsGuide.evidence.manualId, 'XBF-PD02A / XDL-L7S');
   assert.ok(lsGuide.evidence.pdfPages.includes(29));
   assert.match(lsGuide.steps.map(step => step.path).join('\n'), /FP\+.*PF\+/);
   assert.match(lsGuide.steps.map(step => step.path).join('\n'), /RP\+.*PR\+/);
@@ -186,7 +342,7 @@ test('commissioning guides and fault sessions stay isolated for every selectable
   assert.equal(Object.values(state.axes).every(axis => axis.alarm === null), true);
   const mitsubishiGuide = Runtime.getCommissioningGuide(state);
   assert.equal(mitsubishiGuide.profileId, 'mitsubishi');
-  assert.match(mitsubishiGuide.steps.map(step => step.path).join('\n'), /QD75D2N.*MR-J4-A/);
+  assert.match(mitsubishiGuide.steps.map(step => step.path).join('\n'), /QD75D2N.*MR-J4-40A/);
   assert.deepEqual(Runtime.getTrainingSession(state), { completedStepIds: [], faultId: 'NONE' });
   assert.equal(Runtime.setServo(state, true), true);
 
@@ -202,6 +358,9 @@ test('selected pulse and SSCNET training faults affect only their real command t
   assert.equal(Runtime.commandAxis(pulse, 'X', 100, { speed: 80 }), false);
   assert.equal(pulse.axes.X.alarm?.code, 'MELSEC_PULSE_PATH_OPEN');
   assert.equal(Runtime.setTrainingFault(pulse, 'SSCNET_AXIS_CHAIN_OPEN'), false);
+  assert.equal(Runtime.evaluatePulseTopology(pulse).issues.some(issue => issue.code === 'PULSE_PAIR_OPEN'), true);
+  assert.equal(Runtime.setTrainingFault(pulse, 'NONE'), true);
+  assert.equal(Runtime.evaluatePulseTopology(pulse).topologyStatus, 'PASS');
 
   const sscnet = Runtime.createState({ profile: 'mitsubishi-sscnet' });
   assert.equal(Runtime.setServo(sscnet, true), false);
