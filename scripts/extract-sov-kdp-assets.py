@@ -16,7 +16,6 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -27,10 +26,16 @@ from PIL import Image
 from trimesh.visual.material import PBRMaterial
 from trimesh.visual.texture import TextureVisuals
 
-from sov_glb_assets import inline_webp_textures
+from sov_glb_assets import inline_lossless_webp_textures, material_fidelity_summary
 
 
-MAX_EMBEDDED_TEXTURE_SIZE = 2048
+MAX_SURFACE_TEXTURE_SIZE = 2048
+MAX_LABEL_TEXTURE_SIZE = 4096
+
+FIDELITY_TEXTURE_PATTERN = re.compile(
+    r"(?:Sticker|Name\s*Plate|Nameplate|Label|Dial|Display|Ruler|Button|Unit|PLC|Power\s*Supply|Hole)",
+    re.IGNORECASE,
+)
 
 # UnityPy's OBJ exporter mirrors mesh vertices on X.  Conjugating every authored
 # local transform by the same basis change keeps the hierarchy in the matching
@@ -100,8 +105,19 @@ KNOWN_LIMITATIONS = (
     {
         "code": "SKINNED_FND_NOT_EXPORTED",
         "affects": ["timer-box.glb", "counter-box.glb", "servo-amplifier.glb", "mps-complete-station.glb", "servo2-workshop.glb"],
-        "status": "pending-runtime-overlay",
-        "detail": "Skinned seven-segment display meshes are not baked into the static GLB and no runtime digit overlay is implemented yet.",
+        "status": "partial-runtime-overlay",
+        "detail": "Skinned seven-segment meshes remain absent from static GLBs. The 24V discrete I/O bench supplies deterministic CanvasTexture overlays for timer-box.glb and counter-box.glb; servo and MPS displays remain pending.",
+    },
+)
+
+RUNTIME_OVERLAYS = (
+    {
+        "code": "TIMER_COUNTER_FND_OVERLAY_V1",
+        "models": ["timer-box.glb", "counter-box.glb", "counter-unit.glb"],
+        "scope": "discrete-lab",
+        "owner": "src/ui/automation-labs.js",
+        "status": "implemented",
+        "detail": "Displays deterministic simulated timer PV, counter PV and counter preset values. It is a runtime teaching overlay, not extracted manufacturer geometry.",
     },
 )
 
@@ -196,6 +212,64 @@ def _rgba(color: Any | None, fallback: tuple[int, int, int, int] = (126, 145, 15
     return [int(round(max(0.0, min(1.0, float(value))) * 255)) for value in values]
 
 
+def _texture_image(
+    pointer: Any | None,
+    texture_cache: dict[tuple[str, int], Any],
+    *,
+    maximum_size: int,
+) -> tuple[str | None, Any | None]:
+    if pointer is None or not getattr(pointer, "path_id", 0):
+        return None, None
+    try:
+        texture = pointer.read()
+        reader = texture.object_reader
+        cache_key = (str(getattr(reader.assets_file, "name", "unknown")), int(reader.path_id))
+        if cache_key not in texture_cache:
+            texture_cache[cache_key] = texture.image.convert("RGBA")
+        image = texture_cache[cache_key].copy()
+        image.thumbnail((maximum_size, maximum_size), Image.Resampling.LANCZOS)
+        return str(getattr(texture, "m_Name", "Texture")), image
+    except Exception:
+        return None, None
+
+
+def _normal_texture(image: Any | None) -> Any | None:
+    if image is None:
+        return None
+    source = np.asarray(image.convert("RGBA"), dtype=np.float32)
+    x = source[:, :, 3] / 255.0 * 2.0 - 1.0
+    y = source[:, :, 1] / 255.0 * 2.0 - 1.0
+    z = np.sqrt(np.maximum(0.0, 1.0 - x * x - y * y))
+    converted = np.empty_like(source, dtype=np.uint8)
+    converted[:, :, 0] = np.clip((x * 0.5 + 0.5) * 255.0, 0, 255).astype(np.uint8)
+    converted[:, :, 1] = np.clip((y * 0.5 + 0.5) * 255.0, 0, 255).astype(np.uint8)
+    converted[:, :, 2] = np.clip(z * 255.0, 0, 255).astype(np.uint8)
+    converted[:, :, 3] = 255
+    return Image.fromarray(converted, "RGBA")
+
+
+def _metallic_roughness_texture(image: Any | None) -> Any | None:
+    if image is None:
+        return None
+    source = np.asarray(image.convert("RGBA"), dtype=np.uint8)
+    converted = np.full_like(source, 255)
+    converted[:, :, 1] = 255 - source[:, :, 3]
+    converted[:, :, 2] = source[:, :, 0]
+    return Image.fromarray(converted, "RGBA")
+
+
+def _occlusion_texture(image: Any | None) -> Any | None:
+    if image is None:
+        return None
+    source = np.asarray(image.convert("RGBA"), dtype=np.uint8)
+    converted = np.empty_like(source)
+    converted[:, :, 0] = source[:, :, 1]
+    converted[:, :, 1] = source[:, :, 1]
+    converted[:, :, 2] = source[:, :, 1]
+    converted[:, :, 3] = 255
+    return Image.fromarray(converted, "RGBA")
+
+
 def material_info(
     renderer: Any | None,
     material_index: int,
@@ -208,9 +282,16 @@ def material_info(
         "texture_image": None,
         "texture_scale": [1.0, 1.0],
         "texture_offset": [0.0, 0.0],
+        "normal_image": None,
+        "metallic_roughness_image": None,
+        "occlusion_image": None,
+        "emissive_image": None,
         "metallic": 0.0,
         "roughness": 0.65,
         "emissive": [0.0, 0.0, 0.0],
+        "alpha_mode": "OPAQUE",
+        "alpha_cutoff": None,
+        "double_sided": False,
     }
     pointers = list(getattr(renderer, "m_Materials", ()) or ()) if renderer is not None else []
     if not pointers:
@@ -238,8 +319,19 @@ def material_info(
             for channel in ("r", "g", "b")
         ]
 
+    mode = float(floats.get("_Mode", 0.0))
+    surface = float(floats.get("_Surface", 0.0))
+    alpha_clip = float(floats.get("_AlphaClip", floats.get("_AlphaClipEnable", 0.0)))
+    if mode == 1.0 or alpha_clip > 0.0:
+        info["alpha_mode"] = "MASK"
+        info["alpha_cutoff"] = max(0.0, min(1.0, float(floats.get("_Cutoff", 0.5))))
+    elif mode >= 2.0 or surface >= 1.0 or info["rgba"][3] < 255:
+        info["alpha_mode"] = "BLEND"
+    info["double_sided"] = float(floats.get("_Cull", 2.0)) == 0.0
+
     texture_environments = dict(getattr(saved, "m_TexEnvs", ()) or ())
     texture_pointer = None
+    texture_name = None
     for key in ("_BaseMap", "_MainTex"):
         environment = texture_environments.get(key)
         candidate = getattr(environment, "m_Texture", None)
@@ -256,46 +348,118 @@ def material_info(
                 float(getattr(offset_value, "y", 0.0)),
             ]
             break
-    if texture_pointer is None:
-        return info
-    try:
-        texture = texture_pointer.read()
-        reader = texture.object_reader
-        cache_key = (str(getattr(reader.assets_file, "name", "unknown")), int(reader.path_id))
-        if cache_key not in texture_cache:
-            image = texture.image.convert("RGBA")
-            image.thumbnail((MAX_EMBEDDED_TEXTURE_SIZE, MAX_EMBEDDED_TEXTURE_SIZE), Image.Resampling.LANCZOS)
-            texture_cache[cache_key] = image
-        info["texture_name"] = str(getattr(texture, "m_Name", "Texture"))
-        info["texture_image"] = texture_cache[cache_key]
-    except Exception:
-        pass
+    if texture_pointer is not None:
+        try:
+            texture_name = str(getattr(texture_pointer.read(), "m_Name", "Texture"))
+        except Exception:
+            texture_name = None
+        label_texture = FIDELITY_TEXTURE_PATTERN.search(f"{info['name']} {texture_name or ''}") is not None
+        info["texture_name"], info["texture_image"] = _texture_image(
+            texture_pointer,
+            texture_cache,
+            maximum_size=MAX_LABEL_TEXTURE_SIZE if label_texture else MAX_SURFACE_TEXTURE_SIZE,
+        )
+
+    slot_images: dict[str, Any | None] = {}
+    for slot in ("_BumpMap", "_MetallicGlossMap", "_OcclusionMap", "_EmissionMap"):
+        environment = texture_environments.get(slot)
+        _, slot_images[slot] = _texture_image(
+            getattr(environment, "m_Texture", None),
+            texture_cache,
+            maximum_size=MAX_SURFACE_TEXTURE_SIZE,
+        )
+    info["normal_image"] = _normal_texture(slot_images["_BumpMap"])
+    info["metallic_roughness_image"] = _metallic_roughness_texture(slot_images["_MetallicGlossMap"])
+    info["occlusion_image"] = _occlusion_texture(slot_images["_OcclusionMap"])
+    info["emissive_image"] = slot_images["_EmissionMap"]
     return info
 
 
-def _calculate_vertex_normals(vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
-    """Compute deterministic smooth normals without trimesh's optional SciPy path."""
-    normals = np.zeros_like(vertices, dtype=float)
-    if len(faces) == 0:
-        return normals
-    triangles = vertices[faces]
-    face_normals = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
-    for corner in range(3):
-        np.add.at(normals, faces[:, corner], face_normals)
-    lengths = np.linalg.norm(normals, axis=1)
-    valid = lengths > 1e-12
-    normals[valid] /= lengths[valid, None]
-    return normals
-
-
 def _load_obj_part(obj_text: str) -> trimesh.Trimesh:
-    loaded = trimesh.load(BytesIO(obj_text.encode("utf-8")), file_type="obj", process=False)
-    if isinstance(loaded, trimesh.Scene):
-        loaded = loaded.to_geometry()
-    if not isinstance(loaded, trimesh.Trimesh):
-        raise TypeError(f"Unsupported mesh conversion result: {type(loaded).__name__}")
-    loaded.remove_unreferenced_vertices()
-    loaded.vertex_normals = _calculate_vertex_normals(np.asarray(loaded.vertices), np.asarray(loaded.faces))
+    """Load one Unity OBJ material group without losing indexed UVs/normals.
+
+    ``trimesh.load_obj`` retains every definition preceding a split group. For
+    Unity meshes that means material 2 can inherit thousands of unused vertices
+    from material 1; its independent vt/vn indices are then collapsed and the
+    texture silently disappears. Re-index the exact v/vt/vn tuples referenced
+    by this group's faces instead.
+    """
+
+    positions: list[tuple[float, float, float]] = []
+    texture_coordinates: list[tuple[float, float]] = []
+    normals: list[tuple[float, float, float]] = []
+    face_tokens: list[list[str]] = []
+    for line in obj_text.splitlines():
+        values = line.split()
+        if not values:
+            continue
+        if values[0] == "v" and len(values) >= 4:
+            positions.append(tuple(float(value) for value in values[1:4]))
+        elif values[0] == "vt" and len(values) >= 3:
+            texture_coordinates.append(tuple(float(value) for value in values[1:3]))
+        elif values[0] == "vn" and len(values) >= 4:
+            normals.append(tuple(float(value) for value in values[1:4]))
+        elif values[0] == "f" and len(values) >= 4:
+            # UnityPy emits triangles, but fan triangulation keeps the parser
+            # safe for an authored quad without changing winding.
+            for index in range(2, len(values) - 1):
+                face_tokens.append([values[1], values[index], values[index + 1]])
+    if not face_tokens:
+        raise TypeError("OBJ material group has no faces")
+
+    def obj_index(raw: str, count: int) -> int | None:
+        if not raw:
+            return None
+        value = int(raw)
+        return value - 1 if value > 0 else count + value
+
+    vertices: list[tuple[float, float, float]] = []
+    uvs: list[tuple[float, float]] = []
+    authored_normals: list[tuple[float, float, float]] = []
+    faces: list[list[int]] = []
+    remap: dict[tuple[int, int | None, int | None], int] = {}
+    has_uv = True
+    has_normals = True
+    for source_face in face_tokens:
+        target_face: list[int] = []
+        for token in source_face:
+            indices = token.split("/")
+            vertex_index = obj_index(indices[0], len(positions))
+            # UnityPy can emit `v/vt/vn`-shaped tokens even when the source
+            # mesh has no UV channel (and therefore writes no `vt` records).
+            uv_index = obj_index(indices[1], len(texture_coordinates)) if len(indices) > 1 and texture_coordinates else None
+            normal_index = obj_index(indices[2], len(normals)) if len(indices) > 2 and normals else None
+            if vertex_index is None:
+                raise TypeError(f"OBJ face token has no vertex index: {token}")
+            key = (vertex_index, uv_index, normal_index)
+            target_index = remap.get(key)
+            if target_index is None:
+                target_index = len(vertices)
+                remap[key] = target_index
+                vertices.append(positions[vertex_index])
+                if uv_index is None:
+                    has_uv = False
+                    uvs.append((0.0, 0.0))
+                else:
+                    uvs.append(texture_coordinates[uv_index])
+                if normal_index is None:
+                    has_normals = False
+                    authored_normals.append((0.0, 0.0, 1.0))
+                else:
+                    authored_normals.append(normals[normal_index])
+            target_face.append(target_index)
+        faces.append(target_face)
+
+    visual = TextureVisuals(uv=np.asarray(uvs, dtype=float)) if has_uv else None
+    loaded = trimesh.Trimesh(
+        vertices=np.asarray(vertices, dtype=float),
+        faces=np.asarray(faces, dtype=np.int64),
+        vertex_normals=np.asarray(authored_normals, dtype=float) if has_normals else None,
+        visual=visual,
+        process=False,
+    )
+    if has_normals:
+        loaded.metadata["_sov_authored_normals"] = np.asarray(authored_normals, dtype=float)
     return loaded
 
 
@@ -344,14 +508,23 @@ def apply_material(geometry: trimesh.Trimesh, info: dict[str, Any]) -> None:
         scale = np.asarray(info.get("texture_scale", [1.0, 1.0]), dtype=float)
         offset = np.asarray(info.get("texture_offset", [0.0, 0.0]), dtype=float)
         transformed_uv = transformed_uv * scale + offset
+        # Some Unity submeshes leave UV entries undefined for vertices that do
+        # not sample a texture. glTF requires finite accessor values.
+        transformed_uv = np.nan_to_num(transformed_uv, nan=0.0, posinf=0.0, neginf=0.0)
     material = PBRMaterial(
         name=info.get("name") or "Material",
         baseColorFactor=info["rgba"],
         baseColorTexture=image if image is not None and valid_uv else None,
         metallicFactor=info["metallic"],
         roughnessFactor=info["roughness"],
+        normalTexture=info.get("normal_image"),
+        metallicRoughnessTexture=info.get("metallic_roughness_image"),
+        occlusionTexture=info.get("occlusion_image"),
+        emissiveTexture=info.get("emissive_image"),
         emissiveFactor=info.get("emissive", [0.0, 0.0, 0.0]),
-        alphaMode="BLEND" if info["rgba"][3] < 255 else "OPAQUE",
+        alphaMode=info["alpha_mode"],
+        alphaCutoff=info.get("alpha_cutoff"),
+        doubleSided=info.get("double_sided", False),
     )
     # Replacing the visual is essential.  Assigning vertex_colors onto an
     # existing TextureVisuals object leaves trimesh's generic grey texture in the
@@ -410,10 +583,12 @@ def export_subtree(root_game_object: Any, destination: Path, *, root_transform_m
                     info = material_info(renderer, material_index, texture_cache)
                     if HELPER_VISUAL_PATTERN.search(str(game_object.m_Name)) or HELPER_VISUAL_PATTERN.search(str(source_mesh.m_Name)) or HELPER_VISUAL_PATTERN.search(str(info.get("name") or "")):
                         continue
+                    authored_normals = geometry.metadata.pop("_sov_authored_normals", None)
                     apply_material(geometry, info)
-                    # Replacing `geometry.visual` invalidates trimesh's normal
-                    # cache, so restore it immediately before scene insertion.
-                    geometry.vertex_normals = _calculate_vertex_normals(np.asarray(geometry.vertices), np.asarray(geometry.faces))
+                    if authored_normals is not None:
+                        authored_normals = np.asarray(authored_normals, dtype=float)
+                        if authored_normals.shape == np.asarray(geometry.vertices).shape:
+                            geometry.vertex_normals = authored_normals
                     geometry_node_name = f"{node_name}__mesh{material_index}"
                     geometry_name = f"{safe_name(str(source_mesh.m_Name))}__{int(source_reader.path_id)}_{material_index}"
                     scene.add_geometry(
@@ -449,8 +624,8 @@ def export_subtree(root_game_object: Any, destination: Path, *, root_transform_m
     # Rotate the asset only through its own authored hierarchy. Handedness is left
     # untouched so the consuming Three.js scene can choose its desired convention.
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(scene.export(file_type="glb", extension_webp=True, include_normals=True))
-    inlined_texture_count = inline_webp_textures(destination)
+    destination.write_bytes(scene.export(file_type="glb", extension_webp=False, include_normals=True))
+    inlined_texture_count = inline_lossless_webp_textures(destination)
     bounds = np.asarray(scene.bounds, dtype=float)
     return {
         "file": destination.name,
@@ -458,15 +633,17 @@ def export_subtree(root_game_object: Any, destination: Path, *, root_transform_m
         "sourceGameObjectPathId": int(root_game_object.object_reader.path_id),
         "rootTransformMode": root_transform_mode,
         "transformNodeCount": transform_nodes,
-        "embeddedTextureFormat": "webp",
+        "embeddedTextureFormat": "webp-lossless",
         "embeddedTextureTransport": "data-uri" if inlined_texture_count else "none",
-        "embeddedTextureMaxSize": MAX_EMBEDDED_TEXTURE_SIZE,
+        "embeddedTextureMaxSize": MAX_LABEL_TEXTURE_SIZE,
+        "surfaceTextureMaxSize": MAX_SURFACE_TEXTURE_SIZE,
         "nodeCount": len(nodes),
         "triangleCount": int(sum(len(geometry.faces) for geometry in scene.geometry.values())),
         "bounds": bounds.round(6).tolist() if bounds.shape == (2, 3) else None,
         "bytes": destination.stat().st_size,
         "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
         "nodes": [node.__dict__ for node in nodes],
+        "materialFidelity": material_fidelity_summary(destination),
     }
 
 
@@ -599,6 +776,16 @@ def main() -> int:
         "textures": [],
         "geometryExclusions": [dict(item) for item in GEOMETRY_EXCLUSIONS],
         "knownLimitations": [dict(item) for item in KNOWN_LIMITATIONS],
+        "runtimeOverlays": [dict(item) for item in RUNTIME_OVERLAYS],
+        "materialFidelity": {
+            "version": 2,
+            "textureEncoding": "lossless-webp",
+            "labelTextureMaxSize": MAX_LABEL_TEXTURE_SIZE,
+            "surfaceTextureMaxSize": MAX_SURFACE_TEXTURE_SIZE,
+            "preservesAlphaClip": True,
+            "preservesAuthoredNormals": True,
+            "preservesAuxiliaryMaps": True,
+        },
     }
 
     prefabs = find_game_objects(environment, "sharedassets0.assets", PREFAB_TARGETS)

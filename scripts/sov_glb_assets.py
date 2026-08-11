@@ -16,8 +16,11 @@ import base64
 import hashlib
 import json
 import struct
+from io import BytesIO
 from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 
 GLB_MAGIC = b"glTF"
@@ -84,8 +87,23 @@ def _encode_glb(document: dict[str, Any], binary: bytes) -> bytes:
     )
 
 
-def inline_webp_textures(path: Path) -> int:
-    """Inline bufferView-backed WebP images and return the converted count."""
+def _lossless_webp(payload: bytes) -> bytes:
+    image = Image.open(BytesIO(payload)).convert("RGBA")
+    output = BytesIO()
+    # `method` changes encoding effort, not decoded pixels. Level 2 keeps the
+    # lossless fidelity contract while allowing the 18-texture MPS model to be
+    # rebuilt within the normal development verification window.
+    image.save(output, "WEBP", lossless=True, quality=100, method=2, exact=True)
+    return output.getvalue()
+
+
+def inline_lossless_webp_textures(path: Path) -> int:
+    """Convert embedded images to lossless WebP data URIs.
+
+    Trimesh writes texture images into GLB buffer views.  Converting the
+    lossless PNG source here keeps authored label pixels and alpha masks while
+    retaining the CSP-safe data-URI transport required by the offline renderer.
+    """
 
     data = path.read_bytes()
     document, old_binary = _parse_glb(data)
@@ -94,32 +112,53 @@ def inline_webp_textures(path: Path) -> int:
     image_views = {
         int(image["bufferView"])
         for image in images
-        if image.get("mimeType") == "image/webp" and isinstance(image.get("bufferView"), int)
+        if isinstance(image.get("bufferView"), int)
     }
-    if not image_views:
-        return 0
 
     references = _buffer_view_references(document)
-    for image in images:
+    converted_images: set[int] = set()
+    for image_index, image in enumerate(images):
         view_index = image.get("bufferView")
-        if view_index not in image_views:
+        payload: bytes | None = None
+        if view_index in image_views:
+            unexpected = [
+                item
+                for item in references.get(view_index, [])
+                if not (len(item) == 3 and item[0] == "images" and item[2] == "bufferView")
+            ]
+            if unexpected:
+                raise ValueError(f"{path.name}: image bufferView {view_index} is shared by {unexpected}")
+            view = document["bufferViews"][view_index]
+            start = int(view.get("byteOffset", 0))
+            payload = old_binary[start : start + int(view["byteLength"])]
+        elif isinstance(image.get("uri"), str) and image["uri"].startswith("data:image/"):
+            try:
+                payload = base64.b64decode(image["uri"].split(",", 1)[1])
+            except (IndexError, ValueError) as error:
+                raise ValueError(f"{path.name}: invalid image data URI") from error
+        if payload is None:
             continue
-        unexpected = [
-            item
-            for item in references.get(view_index, [])
-            if not (len(item) == 3 and item[0] == "images" and item[2] == "bufferView")
-        ]
-        if unexpected:
-            raise ValueError(f"{path.name}: image bufferView {view_index} is shared by {unexpected}")
-
-        view = document["bufferViews"][view_index]
-        start = int(view.get("byteOffset", 0))
-        end = start + int(view["byteLength"])
-        payload = old_binary[start:end]
-        if not (payload.startswith(b"RIFF") and payload[8:12] == b"WEBP"):
-            raise ValueError(f"{path.name}: image bufferView {view_index} is not WebP")
-        image["uri"] = "data:image/webp;base64," + base64.b64encode(payload).decode("ascii")
+        lossless = _lossless_webp(payload)
+        image["mimeType"] = "image/webp"
+        image["uri"] = "data:image/webp;base64," + base64.b64encode(lossless).decode("ascii")
         image.pop("bufferView", None)
+        converted_images.add(image_index)
+
+    for texture in document.get("textures") or []:
+        source = texture.get("source")
+        if source not in converted_images:
+            source = (texture.get("extensions") or {}).get("EXT_texture_webp", {}).get("source")
+        if source not in converted_images:
+            continue
+        texture.pop("source", None)
+        texture.setdefault("extensions", {})["EXT_texture_webp"] = {"source": int(source)}
+    if converted_images:
+        used = document.setdefault("extensionsUsed", [])
+        if "EXT_texture_webp" not in used:
+            used.append("EXT_texture_webp")
+        required = document.setdefault("extensionsRequired", [])
+        if "EXT_texture_webp" not in required:
+            required.append("EXT_texture_webp")
 
     rebuilt = bytearray()
     for index, view in enumerate(document.get("bufferViews") or []):
@@ -137,7 +176,33 @@ def inline_webp_textures(path: Path) -> int:
     if document.get("buffers"):
         document["buffers"][0]["byteLength"] = len(rebuilt)
     path.write_bytes(_encode_glb(document, bytes(rebuilt)))
-    return len(image_views)
+    return len(converted_images)
+
+
+def inline_webp_textures(path: Path) -> int:
+    """Backward-compatible alias for the lossless texture normalizer."""
+
+    return inline_lossless_webp_textures(path)
+
+
+def material_fidelity_summary(path: Path) -> dict[str, int]:
+    document, _ = _parse_glb(path.read_bytes())
+    materials = document.get("materials") or []
+    return {
+        "maskMaterials": sum(material.get("alphaMode") == "MASK" for material in materials),
+        "blendMaterials": sum(material.get("alphaMode") == "BLEND" for material in materials),
+        "normalTextures": sum("normalTexture" in material for material in materials),
+        "metallicRoughnessTextures": sum(
+            "metallicRoughnessTexture" in (material.get("pbrMetallicRoughness") or {}) for material in materials
+        ),
+        "occlusionTextures": sum("occlusionTexture" in material for material in materials),
+        "emissiveTextures": sum("emissiveTexture" in material for material in materials),
+        "losslessTextures": sum(
+            b"VP8L" in base64.b64decode(image.get("uri", "").split(",", 1)[1])[:32]
+            for image in document.get("images") or []
+            if str(image.get("uri", "")).startswith("data:image/webp;base64,")
+        ),
+    }
 
 
 def normalize_package(asset_root: Path) -> dict[str, int]:
@@ -146,13 +211,15 @@ def normalize_package(asset_root: Path) -> dict[str, int]:
     converted_models = converted_images = 0
     for model in manifest.get("models", []):
         path = asset_root / "models" / model["file"]
-        count = inline_webp_textures(path)
+        count = inline_lossless_webp_textures(path)
         if count:
             converted_models += 1
             converted_images += count
         payload = path.read_bytes()
         document, _ = _parse_glb(payload)
         model["embeddedTextureTransport"] = "data-uri" if document.get("images") else "none"
+        model["embeddedTextureFormat"] = "webp-lossless" if document.get("images") else "none"
+        model["materialFidelity"] = material_fidelity_summary(path)
         model["bytes"] = len(payload)
         model["sha256"] = hashlib.sha256(payload).hexdigest()
 

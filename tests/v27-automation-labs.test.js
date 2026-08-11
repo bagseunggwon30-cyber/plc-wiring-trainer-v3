@@ -252,7 +252,12 @@ test('asset extractor records the selective boundary and has no credential const
   assert.match(extractor, /source.*required=True/);
   assert.match(extractor, /m_IsActive/);
   assert.match(extractor, /SkinnedMeshRenderer/);
-  assert.match(extractor, /extension_webp=True/);
+  assert.match(extractor, /extension_webp=False/);
+  assert.match(extractor, /inline_lossless_webp_textures/);
+  assert.match(extractor, /alphaMode=info\["alpha_mode"\]/);
+  assert.match(extractor, /normalTexture=info\.get\("normal_image"\)/);
+  assert.match(extractor, /metallicRoughnessTexture=info\.get\("metallic_roughness_image"\)/);
+  assert.match(extractor, /occlusionTexture=info\.get\("occlusion_image"\)/);
   assert.match(extractor, /include_normals=True/);
   assert.match(extractor, /renderer is not None/);
   assert.match(extractor, /UNITY_TO_GLTF_BASIS @ matrix @ UNITY_TO_GLTF_BASIS/);
