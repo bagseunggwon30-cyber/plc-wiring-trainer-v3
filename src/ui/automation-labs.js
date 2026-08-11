@@ -170,6 +170,7 @@
       .al-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.al-field{display:block;color:#819cac;font-size:8px}.al-field input,.al-field select{display:block;margin-top:3px}.al-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.al-indicator{padding:5px 3px;border:1px solid #2f4654;border-radius:3px;background:#0b151b;text-align:center;color:#657d8c;font:8px Consolas}.al-indicator.on{border-color:#2fa765;color:#88f0b3;background:#123828}.al-indicator.metal.on{border-color:#e0a72e;color:#ffd779;background:#4c3712}
       .al-checks{display:grid;grid-template-columns:1fr 1fr;gap:5px}.al-check{display:flex;align-items:center;gap:5px;padding:6px;border:1px solid #2e4654;border-radius:3px;background:#0c171e;color:#a8bdc8;font-size:9px}.al-check input{accent-color:#20a3e0}.al-counters{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.al-counter{padding:6px 3px;border-radius:3px;background:#0b151c;text-align:center}.al-counter b{display:block;color:#fff;font:700 13px Consolas}.al-counter span{color:#7591a2;font-size:7px}
       .al-log{max-height:72px;overflow:auto;color:#82a0b0;font:8px Consolas}.al-log div{padding:2px 0;border-bottom:1px dotted #29414f}.al-log .fault{color:#ff8077}.al-memory{width:100%;border-collapse:collapse;font:8px Consolas}.al-memory td{border:1px solid #29414f;padding:3px}.al-memory td:last-child{text-align:right;color:#fff}
+      .al-guide-steps{display:grid;gap:4px;max-height:176px;overflow:auto;margin:6px 0;padding-right:2px}.al-guide-step{display:grid;grid-template-columns:16px minmax(0,1fr);gap:5px;align-items:start;padding:5px;border:1px solid #2d4655;border-radius:4px;background:#0b171f;color:#a9bdc7;font-size:8px;line-height:1.35}.al-guide-step input{margin:1px 0 0;accent-color:#37b873}.al-guide-step b{display:block;color:#dceaf0;font-size:8px}.al-guide-step span{display:block;margin-top:1px;color:#7895a5;font:7px/1.4 Consolas;overflow-wrap:anywhere}.al-guide-step.done{border-color:#2c7452;background:#10291f}.al-guide-step.done b{color:#8ee2ad}.al-training-controls{display:grid;grid-template-columns:1fr;gap:5px}.al-training-controls select{width:100%;border:1px solid #4f6370;border-radius:3px;background:#08131a;color:#ecf5f8;padding:5px;font:8px Consolas}
       .al-io-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}.al-io{min-width:0;padding:4px 3px;border:1px solid #2d4553;border-radius:3px;background:#0b151b;color:#6f8795;font:7px Consolas;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.al-io.on{border-color:#2fa765;background:#123828;color:#8af0b4}.al-io.reserved{opacity:.42}.al-output-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}.al-output{display:flex;align-items:center;gap:4px;min-width:0;padding:4px;border:1px solid #304957;border-radius:3px;background:#0c171e;color:#a8bdc8;font-size:8px}.al-output input{margin:0;accent-color:#20a3e0}.al-output span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.al-servo-slide{display:grid;grid-template-columns:70px 1fr 38px;gap:5px;align-items:center;color:#8ca6b5;font-size:8px}.al-servo-slide input{width:100%;accent-color:#20a3e0}.al-servo-slide output{text-align:right;color:#fff;font:8px Consolas}
       .al-pressure{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.al-gauge{padding:7px 3px;border-radius:4px;background:#0a151c;text-align:center}.al-gauge b{display:block;color:#75d0f4;font:700 14px Consolas}.al-gauge span{color:#7894a4;font-size:7px}.al-stroke{height:9px;overflow:hidden;border-radius:7px;background:#071017}.al-stroke i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b7eae,#5de2ff);transition:width .08s linear}
       .al-asset-note{margin:6px 0 0;padding:6px;border-left:3px solid #587a8e;background:#0b161d;color:#809bab;font-size:8px;line-height:1.45}
@@ -201,6 +202,7 @@
   function servoPane() {
     return `<div class="al-pane-grid"><div class="al-scene" data-scene="servo2"><div class="al-scene-title"><b>2축 서보 제어 실습실</b><span>선택형 LS / Mitsubishi</span></div>${cameraPresetButtons()}${editorToolbar('servo2')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-servo-status"><b>대기</b><span>IDLE</span></div><label class="al-profile">장비 프로필<select id="al-servo-profile"><option value="ls">LS XBF-PD02A + L7S</option><option value="mitsubishi">Mitsubishi QD75D2N + MR-J4-A</option><option value="mitsubishi-sscnet">Mitsubishi QD77MS2 + MR-J4-B (SSCNET III/H)</option></select></label><div class="al-actions three"><button class="al-btn run" data-servo-action="servo">SERVO ON</button><button class="al-btn" data-servo-action="home">전축 원점</button><button class="al-btn stop" data-servo-action="stop">전축 정지</button></div></section>
+      <section class="al-section" id="al-servo-guide"><h3><span id="al-servo-guide-title">선택 장비 결선·시운전 순서</span> <small id="al-servo-guide-evidence">매뉴얼 근거</small></h3><div class="al-status" id="al-servo-guide-status"><b>교육 시나리오 준비</b><span>PASS · BLOCKED</span></div><div class="al-guide-steps" id="al-servo-guide-steps" aria-label="선택 서보 프로필 작업 단계"></div><div class="al-training-controls"><select id="al-servo-training-fault" aria-label="선택 프로필 고장 시나리오"><option value="NONE">정상 예시</option></select><div class="al-actions three"><button class="al-btn stop" data-servo-training-action="fault">오결선 적용</button><button class="al-btn" data-servo-training-action="restore">정상 복원</button><button class="al-btn" data-servo-training-action="reset-progress">단계 초기화</button></div></div><div class="al-log" id="al-servo-guide-issues"></div><div class="al-asset-note">현재 선택한 장비 프로필의 상태와 주소만 사용합니다. 펄스 프로필은 매뉴얼 체크리스트·고장 시나리오이고, SSCNET 광링크만 3D 연결 그래프로 자동 판정합니다. 모두 자산 근거가 완성될 때까지 검토 판정은 BLOCKED입니다.</div></section>
       <section class="al-section"><h3>축 수동 운전 <small>누르는 동안 JOG</small></h3>${['X', 'Y'].map(axis => `<div class="al-axis"><strong>${axis}</strong><div><div class="al-axis-value" data-servo-pos="${axis}">0.00 mm</div><div class="al-axis-flags" data-servo-flags="${axis}">SERVO OFF</div><div class="al-axis-target"><input data-servo-target="${axis}" type="number" step="1" value="${axis === 'X' ? 320 : 240}"><button data-servo-move="${axis}">ABS</button></div></div><div class="al-jog"><button data-servo-jog="${axis},-1">−</button><button data-servo-jog="${axis},1">＋</button></div></div>`).join('')}</section>
       <section class="al-section"><h3>2축 직선 보간</h3><div class="al-fields"><label class="al-field">X 목표<input id="al-linear-x" type="number" value="380"></label><label class="al-field">Y 목표<input id="al-linear-y" type="number" value="300"></label><label class="al-field">속도<input id="al-linear-speed" type="number" value="140"></label></div><button class="al-btn" data-servo-action="linear" style="width:100%;margin-top:6px">X/Y 동시 직선 보간</button></section>
       <section class="al-section" id="al-servo-sscnet" hidden><h3>SSCNET III/H 광 토폴로지 <small>MR-J4-B 전용</small></h3><div class="al-status" id="al-servo-sscnet-status"><b>광링크 미완성</b><span>FAIL</span></div><div class="al-actions"><button class="al-btn" data-servo-sscnet="reference">매뉴얼 기준 예시 연결</button><button class="al-btn stop" data-servo-sscnet="clear">광링크 제거</button></div><div class="al-log" id="al-servo-sscnet-issues"></div><div class="al-asset-note">Controller → 1축 CN1A, 1축 CN1B → 2축 CN1A, 마지막 CN1B → PROTECTIVE_CAP. 캡은 종단저항이 아니라 광커넥터 보호용입니다. ASSET_MODEL_UNVERIFIED 상태이므로 실기 검토 판정은 BLOCKED입니다.</div></section>
@@ -1002,9 +1004,35 @@
       syncServoTopology(); syncServoNetworkVisual(); schedule(); updateUi(true); persist(true);
     };
     qa('[data-servo-sscnet]', A.hub).forEach(button => button.onclick = () => {
-      if (Servo.getProfile(A.state.labs.servo2).commandInterface !== 'sscnet-iii-h') return;
-      applyServoSscnetConnections(button.dataset.servoSscnet === 'reference' ? Servo.referenceSscnetConnections() : []);
+      const state = A.state.labs.servo2;
+      if (Servo.getProfile(state).commandInterface !== 'sscnet-iii-h') return;
+      if (button.dataset.servoSscnet === 'reference') {
+        Servo.setTrainingFault(state, 'NONE');
+        applyServoSscnetConnections(Servo.referenceSscnetConnections());
+      } else {
+        Servo.setTrainingFault(state, 'NONE');
+        applyServoSscnetConnections([]);
+      }
+      q('#al-servo-training-fault', A.hub).value = 'NONE';
       updateUi(true);
+    });
+    q('#al-servo-guide-steps', A.hub).onchange = event => {
+      const stepId = event.target?.dataset?.servoGuideStep;
+      if (!stepId) return;
+      Servo.setTrainingStepComplete(A.state.labs.servo2, stepId, !!event.target.checked);
+      updateUi(true); persist(true);
+    };
+    qa('[data-servo-training-action]', A.hub).forEach(button => button.onclick = () => {
+      const state = A.state.labs.servo2, guide = Servo.getCommissioningGuide(state), action = button.dataset.servoTrainingAction;
+      if (action === 'reset-progress') {
+        for (const step of guide.steps) Servo.setTrainingStepComplete(state, step.id, false);
+      } else {
+        const faultId = action === 'restore' ? 'NONE' : q('#al-servo-training-fault', A.hub).value;
+        if (!Servo.setTrainingFault(state, faultId)) return;
+        q('#al-servo-training-fault', A.hub).value = faultId;
+        if (Servo.getProfile(state).commandInterface === 'sscnet-iii-h') applyServoSscnetConnections(state.sscnet.connections);
+      }
+      schedule(); updateUi(true); persist(true);
     });
     qa('[data-servo-action]', A.hub).forEach(button => button.onclick = () => {
       const state = A.state.labs.servo2, profile = Servo.getProfile(state), action = button.dataset.servoAction;
@@ -1227,9 +1255,39 @@
 
   function updateScenes() { updateServoScene(); updateMpsScene(); updatePneumaticScene(); updateDiscreteScene(); }
 
+  function updateServoGuideUi(servo) {
+    const guide = Servo.getCommissioningGuide(servo), session = Servo.getTrainingSession(servo), result = Servo.evaluateCommissioning(servo);
+    q('#al-servo-guide-title', A.hub).textContent = guide.title;
+    q('#al-servo-guide-evidence', A.hub).textContent = `${guide.evidence.manualId}${guide.evidence.pdfPages.length ? ` · PDF ${guide.evidence.pdfPages.join(', ')}` : ''}`;
+    const status = q('#al-servo-guide-status', A.hub), errors = result.issues.filter(issue => issue.severity === 'error');
+    q('b', status).textContent = errors.length
+      ? errors[0].message
+      : result.exerciseStatus === 'PASS'
+        ? '교육 절차 완료'
+        : `작업 단계 ${result.progress.completed}/${result.progress.total}`;
+    q('span', status).textContent = `${result.exerciseStatus} · ${result.reviewStatus} · ${result.progress.completed}/${result.progress.total}`;
+    status.classList.toggle('fault', errors.length > 0);
+
+    const steps = q('#al-servo-guide-steps', A.hub), completed = new Set(session.completedStepIds);
+    const stepSignature = `${guide.profileId}|${guide.steps.map(step => `${step.id}:${completed.has(step.id) ? 1 : 0}`).join('|')}`;
+    if (steps.dataset.signature !== stepSignature) {
+      steps.dataset.signature = stepSignature;
+      steps.innerHTML = guide.steps.map(step => `<label class="al-guide-step${completed.has(step.id) ? ' done' : ''}"><input type="checkbox" data-servo-guide-step="${esc(step.id)}"${completed.has(step.id) ? ' checked' : ''}><span><b>${esc(step.title)}</b><span>${esc(step.path)}</span></span></label>`).join('');
+    }
+
+    const faultSelect = q('#al-servo-training-fault', A.hub);
+    if (faultSelect.dataset.profileId !== guide.profileId) {
+      faultSelect.dataset.profileId = guide.profileId;
+      faultSelect.innerHTML = [`<option value="NONE">정상 예시</option>`, ...guide.faults.map(fault => `<option value="${esc(fault.id)}">${esc(fault.title)}</option>`)].join('');
+      faultSelect.value = session.faultId;
+    }
+    q('#al-servo-guide-issues', A.hub).innerHTML = result.issues.map(issue => `<div class="${issue.severity === 'error' ? 'fault' : ''}"><b>${esc(issue.code)}</b> · ${esc(issue.message)}</div>`).join('');
+  }
+
   function updateUi(force = false) {
     if (!A.hub) return; const now = performance.now(); if (!force && now - A.lastUi < 90) return; A.lastUi = now;
     const servo = A.state.labs.servo2, servoBusy = Object.values(servo.axes).some(axis => axis.busy), servoFault = Object.values(servo.axes).some(axis => axis.alarm); const servoStatus = q('#al-servo-status', A.hub); q('b', servoStatus).textContent = servoFault ? '서보 알람' : servoBusy ? '위치결정 운전' : '서보 대기'; q('span', servoStatus).textContent = servo.linear.active ? 'LINEAR' : servoFault ? 'FAULT' : servoBusy ? 'BUSY' : 'READY'; servoStatus.classList.toggle('fault', servoFault); q('#al-servo-profile', A.hub).value = servo.profileId;
+    updateServoGuideUi(servo);
     for (const name of ['X', 'Y']) { const axis = servo.axes[name]; q(`[data-servo-pos="${name}"]`, A.hub).textContent = `${axis.current.toFixed(2)} mm`; q(`[data-servo-flags="${name}"]`, A.hub).textContent = axis.alarm ? axis.alarm.code : [axis.servoOn ? 'SV ON' : 'SV OFF', axis.homed ? 'HOME' : 'NO HOME', axis.busy ? 'BUSY' : 'READY', axis.dog ? 'DOG' : ''].filter(Boolean).join(' · '); }
     const allServo = Object.values(servo.axes).every(axis => axis.servoOn), servoButton = q('[data-servo-action="servo"]', A.hub); servoButton.textContent = allServo ? 'SERVO OFF' : 'SERVO ON'; servoButton.classList.toggle('on', allServo);
     const sp = Servo.getProfile(servo), memoryRows = [['ON X', sp.commands.servoOn.X, Servo.readDevice(servo, sp.status.servoReady.X)], ['ON Y', sp.commands.servoOn.Y, Servo.readDevice(servo, sp.status.servoReady.Y)], ['X 목표', sp.data.target.X, Servo.readDevice(servo, sp.data.target.X)], ['Y 목표', sp.data.target.Y, Servo.readDevice(servo, sp.data.target.Y)], ['직선보간', sp.commands.linear, Servo.readDevice(servo, sp.status.linearBusy)]]; q('#al-servo-memory', A.hub).innerHTML = memoryRows.map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] === true ? 'ON' : row[2] === false ? 'OFF' : Number(row[2] || 0).toFixed(1)}</td></tr>`).join('');
@@ -1292,10 +1350,24 @@
   function getEditor(lab = A.activeLab) { return A.editors[lab] || null; }
   function getSceneDiagnostics() {
     const plant = A.scenes.mps?.parts?.importedPlant;
+    const servo = A.state?.labs?.servo2, commissioning = servo ? Servo.evaluateCommissioning(servo) : null;
     return {
       activeLab: A.activeLab,
       cameraNavigationPreset: A.state?.cameraNavigationPreset || '3ds-max',
       editors: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, { mode: editor.mode, modules: editor.modules.size, connections: editor.connections.size }])),
+      servo2: servo ? {
+        profileId: servo.profileId,
+        commandInterface: Servo.getProfile(servo).commandInterface,
+        outputsSafe: Object.values(servo.axes).every(axis => !axis.servoOn),
+        training: Servo.getTrainingSession(servo),
+        commissioning: {
+          exerciseStatus: commissioning.exerciseStatus,
+          reviewStatus: commissioning.reviewStatus,
+          progress: commissioning.progress,
+          issueCodes: commissioning.issues.map(issue => issue.code)
+        },
+        opticalConnections: servo.sscnet.connections.map(connection => connection.id)
+      } : null,
       mps: plant ? {
         supplyZ: plant.supply?.node?.position.z,
         drillZ: plant.drill?.node?.position.z,
@@ -1334,6 +1406,6 @@
     injectCss(); A.state = loadSaved(); syncMpsWorkpiecePhysicalSize(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
   }
 
-  window.PLCTrainerAutomationLabs = { version: '2.12.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
+  window.PLCTrainerAutomationLabs = { version: '2.13.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
   init();
 })();

@@ -8,7 +8,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.8.0';
+  const VERSION = '2.9.0';
   const EPS = 1e-9;
   const MAX_TICK_STEP = 0.02;
   const AXIS_NAMES = Object.freeze(['X', 'Y']);
@@ -140,6 +140,68 @@
     Object.freeze({ id: 'sscnet-final-cap', kind: 'optical', from: Object.freeze({ moduleId: 'sscnet-axis2', anchorId: 'CN1B' }), to: Object.freeze({ moduleId: 'sscnet-cap', anchorId: 'PROTECTIVE_CAP' }) })
   ]);
 
+  // This is a profile-owned commissioning exercise, not a shared PLC I/O map.
+  // Pulse-profile steps are manual-backed guided checks until exact 3D terminal
+  // geometry is available; only the SSCNET optical links are graph-verified.
+  const COMMISSIONING_GUIDES = {
+    ls: {
+      profileId: 'ls',
+      title: 'LS XBF-PD02A + XDL-L7S 결선·시운전',
+      evidence: { manualId: 'XBF-PD02A', pdfPages: [29, 36, 39], source: '08_LS_XBF-PD02A_Positioning_Manual_KR.pdf' },
+      reviewBlocker: 'PULSE_TERMINAL_GEOMETRY_UNVERIFIED',
+      steps: [
+        { id: 'ls-identify', title: '장비·축 확인', path: 'XBF-PD02A 2축 라인드라이버 → XDL-L7S X/Y 앰프', kind: 'equipment' },
+        { id: 'ls-x-forward', title: 'X축 정방향 펄스쌍', path: 'XBF X축 A18 FP+ / A17 FP− → L7S X축 CN1-9 PF+ / CN1-10 PF−', kind: 'differential-pair' },
+        { id: 'ls-x-reverse', title: 'X축 역방향 펄스쌍', path: 'XBF X축 A16 RP+ / A15 RP− → L7S X축 CN1-11 PR+ / CN1-12 PR−', kind: 'differential-pair' },
+        { id: 'ls-y-pairs', title: 'Y축 펄스쌍', path: 'XBF Y축 B18/B17 FP±, B16/B15 RP± → L7S Y축 PF±/PR±', kind: 'differential-pair' },
+        { id: 'ls-enable-safety', title: 'DC24V·운전 허가', path: '+24V/GND24, CN1-47 SVON, CN1-18 EMG와 알람 리셋 회로 확인', kind: 'safety' },
+        { id: 'ls-motor-feedback', title: '모터·피드백', path: 'L7S U/V/W·PE → 모터, CN2 엔코더와 브레이크 전원 확인', kind: 'motor' }
+      ],
+      faults: [
+        { id: 'LS_SVON_OPEN', code: 'LS_SVON_OPEN', title: 'SVON 경로 단선', scope: 'servo', message: 'L7S CN1-47 SVON 운전 허가 경로가 열려 있습니다' },
+        { id: 'LS_EMG_OPEN', code: 'LS_EMG_OPEN', title: 'EMG 안전입력 단선', scope: 'safety', message: 'L7S CN1-18 EMG 안전입력 경로가 열려 있습니다' },
+        { id: 'LS_PULSE_PATH_OPEN', code: 'LS_PULSE_PATH_OPEN', title: 'FP/RP 차동쌍 단선', scope: 'motion', message: '선택 축의 FP± 또는 RP± 차동 펄스 경로가 완성되지 않았습니다' }
+      ]
+    },
+    mitsubishi: {
+      profileId: 'mitsubishi',
+      title: 'Mitsubishi QD75D2N + MR-J4-A 결선·시운전',
+      evidence: { manualId: 'SH-080058-V / SH030107-V', pdfPages: [], source: 'Mitsubishi official manuals' },
+      reviewBlocker: 'PULSE_TERMINAL_GEOMETRY_UNVERIFIED',
+      steps: [
+        { id: 'mel-identify', title: '장비·인터페이스 확인', path: 'QD75D2N 차동 펄스 출력 → MR-J4-A 펄스열 입력', kind: 'equipment' },
+        { id: 'mel-x-forward', title: 'X축 정방향 펄스쌍', path: 'QD75D2N AX1 PF+/PF− → MR-J4-A X축 CN1 PP/PG', kind: 'differential-pair' },
+        { id: 'mel-x-reverse', title: 'X축 역방향 펄스쌍', path: 'QD75D2N AX1 RP+/RP− → MR-J4-A X축 CN1 NP/NG', kind: 'differential-pair' },
+        { id: 'mel-y-pairs', title: 'Y축 펄스쌍', path: 'QD75D2N AX2 PF±/RP± → MR-J4-A Y축 PP/PG·NP/NG', kind: 'differential-pair' },
+        { id: 'mel-enable-safety', title: '별도 PLC I/O·안전', path: 'MR-J4-A SON·EM2·LSP·LSN은 QD75 펄스 단자가 아닌 별도 PLC I/O/안전회로로 결선', kind: 'safety' },
+        { id: 'mel-motor-feedback', title: '모터·피드백', path: 'MR-J4-A U/V/W·PE → HG-KR, CN2 엔코더와 CN8/STO 적용 조건 확인', kind: 'motor' }
+      ],
+      faults: [
+        { id: 'MELSEC_SON_OPEN', code: 'MELSEC_SON_OPEN', title: 'SON 경로 단선', scope: 'servo', message: 'MR-J4-A SON 운전 허가 경로가 열려 있습니다' },
+        { id: 'MELSEC_EM2_OPEN', code: 'MELSEC_EM2_OPEN', title: 'EM2 안전입력 단선', scope: 'safety', message: 'MR-J4-A EM2 안전입력 경로가 열려 있습니다' },
+        { id: 'MELSEC_PULSE_PATH_OPEN', code: 'MELSEC_PULSE_PATH_OPEN', title: 'PP/PG·NP/NG 경로 단선', scope: 'motion', message: 'QD75D2N과 MR-J4-A 사이 차동 펄스 경로가 완성되지 않았습니다' }
+      ]
+    },
+    'mitsubishi-sscnet': {
+      profileId: 'mitsubishi-sscnet',
+      title: 'Mitsubishi QD77MS2 + MR-J4-B 광네트워크 시운전',
+      evidence: { manualId: 'SH030106-T', pdfPages: [41, 115], source: '05_Mitsubishi_MR-J4-B_RJ_Servo_Manual.pdf' },
+      reviewBlocker: 'ASSET_MODEL_UNVERIFIED',
+      steps: [
+        { id: 'ssc-identify', title: '장비·인터페이스 확인', path: 'QD77MS2 SSCNET III/H 컨트롤러 + MR-J4-B 2축', kind: 'equipment' },
+        { id: 'ssc-controller-axis1', title: '컨트롤러 → 1축', path: 'QD77MS2 SSCNET OUT → 1축 MR-J4-B CN1A', kind: 'optical' },
+        { id: 'ssc-axis-chain', title: '1축 → 2축', path: '1축 CN1B → 2축 CN1A', kind: 'optical' },
+        { id: 'ssc-final-cap', title: '마지막 포트 보호', path: '2축 CN1B → 동봉 PROTECTIVE_CAP (종단저항 아님)', kind: 'physical' },
+        { id: 'ssc-safety', title: '전원·안전 별도 확인', path: '주회로·제어전원, CN8 STO, 모터 U/V/W·PE와 CN2 엔코더 확인', kind: 'safety' }
+      ],
+      faults: [
+        { id: 'SSCNET_CONTROLLER_PATH_OPEN', code: 'SSCNET_CONTROLLER_PATH_OPEN', title: '컨트롤러 광경로 단선', scope: 'network', connectionId: 'sscnet-controller-axis1', message: '컨트롤러와 1축 CN1A 사이 광경로가 열려 있습니다' },
+        { id: 'SSCNET_AXIS_CHAIN_OPEN', code: 'SSCNET_AXIS_CHAIN_OPEN', title: '축간 광경로 단선', scope: 'network', connectionId: 'sscnet-axis1-axis2', message: '1축 CN1B와 2축 CN1A 사이 광경로가 열려 있습니다' },
+        { id: 'SSCNET_FINAL_CAP_MISSING', code: 'SSCNET_FINAL_CAP_MISSING', title: '마지막 보호캡 누락', scope: 'physical', connectionId: 'sscnet-final-cap', message: '마지막 축 CN1B 보호캡이 누락되었습니다' }
+      ]
+    }
+  };
+
   function finite(value, fallback = 0) {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
@@ -155,6 +217,53 @@
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function emptyTrainingSessions() {
+    return Object.fromEntries(Object.keys(COMMISSIONING_GUIDES).map(profileId => [profileId, { completedStepIds: [], faultId: 'NONE' }]));
+  }
+
+  function normalizeTrainingSessions(saved) {
+    const sessions = emptyTrainingSessions();
+    for (const [profileId, guide] of Object.entries(COMMISSIONING_GUIDES)) {
+      const source = saved?.sessions?.[profileId] || saved?.[profileId] || {};
+      const validSteps = new Set(guide.steps.map(step => step.id));
+      const completedStepIds = Array.isArray(source.completedStepIds)
+        ? [...new Set(source.completedStepIds.map(String).filter(id => validSteps.has(id)))]
+        : [];
+      const faultId = String(source.faultId || 'NONE');
+      sessions[profileId] = {
+        completedStepIds,
+        faultId: faultId === 'NONE' || guide.faults.some(fault => fault.id === faultId) ? faultId : 'NONE'
+      };
+    }
+    return { sessions };
+  }
+
+  function getCommissioningGuide(stateOrId) {
+    const profile = getProfile(stateOrId);
+    return clone(COMMISSIONING_GUIDES[profile.id]);
+  }
+
+  function trainingSessionRef(state, profileId = getProfile(state).id) {
+    state.training ||= normalizeTrainingSessions();
+    state.training.sessions ||= emptyTrainingSessions();
+    state.training.sessions[profileId] ||= { completedStepIds: [], faultId: 'NONE' };
+    return state.training.sessions[profileId];
+  }
+
+  function getTrainingSession(state, profileId = getProfile(state).id) {
+    if (!COMMISSIONING_GUIDES[profileId]) return null;
+    return clone(trainingSessionRef(state, profileId));
+  }
+
+  function setTrainingStepComplete(state, stepId, completed = true) {
+    const guide = COMMISSIONING_GUIDES[getProfile(state).id], id = String(stepId || '');
+    if (!guide.steps.some(step => step.id === id)) return false;
+    const session = trainingSessionRef(state), completedSet = new Set(session.completedStepIds);
+    if (completed) completedSet.add(id); else completedSet.delete(id);
+    session.completedStepIds = guide.steps.map(step => step.id).filter(item => completedSet.has(item));
+    return true;
   }
 
   function referenceSscnetConnections() {
@@ -241,6 +350,75 @@
     state.sscnet ||= { connections: [], solution: null };
     state.sscnet.connections = normalizeSscnetConnections(connections);
     return evaluateSscnetTopology(state);
+  }
+
+  function setTrainingFault(state, faultId = 'NONE') {
+    const guide = COMMISSIONING_GUIDES[getProfile(state).id], id = String(faultId || 'NONE');
+    const fault = guide.faults.find(item => item.id === id);
+    if (id !== 'NONE' && !fault) return false;
+    stopAll(state);
+    setServo(state, false);
+    resetAlarms(state);
+    const session = trainingSessionRef(state);
+    session.faultId = id;
+    if (guide.profileId === 'mitsubishi-sscnet') {
+      const connections = referenceSscnetConnections().filter(connection => !fault?.connectionId || connection.id !== fault.connectionId);
+      setSscnetConnections(state, connections);
+    }
+    addEvent(state, 'training', id === 'NONE' ? `${guide.title} 정상 예시 복원` : `${guide.title} 고장 삽입: ${fault.title}`);
+    return true;
+  }
+
+  function evaluateCommissioning(state) {
+    const guide = COMMISSIONING_GUIDES[getProfile(state).id], session = trainingSessionRef(state);
+    const issues = [];
+    if (guide.profileId === 'mitsubishi-sscnet') {
+      issues.push(...evaluateSscnetTopology(state).issues);
+    } else if (session.faultId !== 'NONE') {
+      const fault = guide.faults.find(item => item.id === session.faultId);
+      if (fault) issues.push({ code: fault.code, severity: 'error', category: fault.scope, message: fault.message, related: [{ profileId: guide.profileId }] });
+    }
+    if (!issues.some(issue => issue.code === guide.reviewBlocker)) {
+      issues.push({
+        code: guide.reviewBlocker,
+        severity: 'blocker',
+        category: 'evidence',
+        message: guide.profileId === 'mitsubishi-sscnet'
+          ? '가져온 SSCNET 장비 형상의 정확 품번·커넥터 치수가 확인되지 않아 실기 검토 근거로 사용할 수 없습니다'
+          : '펄스 프로필은 매뉴얼 기반 체크리스트이며 실제 3D 단자 클릭 영역이 아직 검증되지 않았습니다',
+        related: [{ profileId: guide.profileId }]
+      });
+    }
+    const progress = { completed: session.completedStepIds.length, total: guide.steps.length };
+    return {
+      profileId: guide.profileId,
+      exerciseStatus: issues.some(issue => issue.severity === 'error') ? 'FAIL' : progress.completed === progress.total ? 'PASS' : 'INCOMPLETE',
+      reviewStatus: 'BLOCKED',
+      progress,
+      faultId: session.faultId,
+      issues: clone(issues),
+      evidence: clone(guide.evidence)
+    };
+  }
+
+  function operationFault(state, operation) {
+    const profile = getProfile(state), guide = COMMISSIONING_GUIDES[profile.id], session = trainingSessionRef(state);
+    if (profile.commandInterface === 'sscnet-iii-h') {
+      const topology = evaluateSscnetTopology(state);
+      return topology.issues.find(issue => ['SSCNET_CONTROLLER_PATH_OPEN', 'SSCNET_AXIS_CHAIN_OPEN'].includes(issue.code)) || null;
+    }
+    const fault = guide.faults.find(item => item.id === session.faultId);
+    if (!fault) return null;
+    if (operation === 'servo' && !['servo', 'safety'].includes(fault.scope)) return null;
+    if (operation === 'motion' && !['motion', 'safety'].includes(fault.scope)) return null;
+    return fault;
+  }
+
+  function rejectForOperationFault(state, operation, names = AXIS_NAMES) {
+    const fault = operationFault(state, operation);
+    if (!fault) return null;
+    for (const name of names) raiseAlarm(state, name, fault.code, fault.message);
+    return fault;
   }
 
   function asBool(value) {
@@ -356,6 +534,7 @@
       pointTable: {},
       linear: emptyLinear(),
       sscnet: { connections: [], solution: null },
+      training: normalizeTrainingSessions(),
       memory: emptyMemory(),
       events: []
     };
@@ -460,6 +639,7 @@
     }
     const names = name == null ? AXIS_NAMES : [normalizeAxis(name)];
     if (names.some(key => !key)) return false;
+    if (on && rejectForOperationFault(state, 'servo', names)) return false;
     for (const key of names) {
       const axis = state.axes[key];
       axis.servoOn = !!on;
@@ -492,6 +672,7 @@
   function commandAxis(state, name, value, options = {}) {
     const axis = axisFor(state, name);
     if (!axis) return false;
+    if (rejectForOperationFault(state, 'motion', [axis.name])) return false;
     if (!axis.servoOn) return raiseAlarm(state, axis, 'SERVO_OFF', '서보 ON 후 운전해야 합니다');
     if (axis.alarm) return false;
     const mode = normalizeMode(options.mode);
@@ -528,6 +709,7 @@
       Y: source.Y ?? source.y
     };
     if (requested.X == null || requested.Y == null) return false;
+    if (rejectForOperationFault(state, 'motion')) return false;
     const absolute = {};
     for (const name of AXIS_NAMES) {
       const axis = state.axes[name];
@@ -581,6 +763,7 @@
   function homeAxis(state, name) {
     const axis = axisFor(state, name);
     if (!axis) return false;
+    if (rejectForOperationFault(state, 'motion', [axis.name])) return false;
     if (!axis.servoOn) return raiseAlarm(state, axis, 'SERVO_OFF', '원점복귀 전 서보 ON이 필요합니다');
     if (axis.alarm) return false;
     if (state.linear.active) cancelLinear(state, 'home-command');
@@ -607,6 +790,7 @@
     if (!axis) return false;
     const sign = Math.sign(finite(direction, 0));
     if (!sign) return stopAxis(state, name);
+    if (rejectForOperationFault(state, 'motion', [axis.name])) return false;
     if (!axis.servoOn) return raiseAlarm(state, axis, 'SERVO_OFF', '조그 전 서보 ON이 필요합니다');
     if (axis.alarm) return false;
     updateSensors(axis);
@@ -1011,6 +1195,7 @@
     if (profileId === state.profileId) return true;
     stopAll(state);
     setServo(state, false);
+    resetAlarms(state);
     state.profileId = profileId;
     state.profile = profileId;
     initializeMemory(state);
@@ -1030,6 +1215,7 @@
       pointTable: state.pointTable,
       linear: state.linear,
       sscnet: { connections: normalizeSscnetConnections(state.sscnet?.connections) },
+      training: normalizeTrainingSessions(state.training),
       memory: state.memory,
       events: state.events
     });
@@ -1069,6 +1255,7 @@
       state.linear.reason = 'restored-stopped';
     }
     state.sscnet = { connections: normalizeSscnetConnections(saved.sscnet?.connections), solution: null };
+    state.training = normalizeTrainingSessions(saved.training);
     evaluateSscnetTopology(state);
     state.elapsed = Math.max(0, finite(saved.elapsed, 0));
     state.events = Array.isArray(saved.events) ? clone(saved.events).slice(-100) : [];
@@ -1128,6 +1315,11 @@
     referenceSscnetConnections,
     setSscnetConnections,
     evaluateSscnetTopology,
+    getCommissioningGuide,
+    getTrainingSession,
+    setTrainingStepComplete,
+    setTrainingFault,
+    evaluateCommissioning,
     readDevice,
     writeDevice,
     readMemory: readDevice,

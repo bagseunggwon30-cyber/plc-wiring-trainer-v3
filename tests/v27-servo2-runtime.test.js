@@ -166,6 +166,89 @@ test('SSCNET profile persists its own optical topology and detects a missing pro
   assert.equal(Object.values(restored.axes).every(axis => !axis.servoOn), true);
 });
 
+test('commissioning guides and fault sessions stay isolated for every selectable servo profile', () => {
+  const state = Runtime.createState({ profile: 'ls' });
+  const lsGuide = Runtime.getCommissioningGuide(state);
+  assert.equal(lsGuide.profileId, 'ls');
+  assert.equal(lsGuide.evidence.manualId, 'XBF-PD02A');
+  assert.ok(lsGuide.evidence.pdfPages.includes(29));
+  assert.match(lsGuide.steps.map(step => step.path).join('\n'), /FP\+.*PF\+/);
+  assert.match(lsGuide.steps.map(step => step.path).join('\n'), /RP\+.*PR\+/);
+  assert.equal(Runtime.evaluateCommissioning(state).exerciseStatus, 'INCOMPLETE');
+
+  assert.equal(Runtime.setTrainingStepComplete(state, lsGuide.steps[0].id, true), true);
+  assert.equal(Runtime.setTrainingFault(state, 'LS_SVON_OPEN'), true);
+  assert.equal(Runtime.evaluateCommissioning(state).exerciseStatus, 'FAIL');
+  assert.equal(Runtime.setServo(state, true), false);
+  assert.equal(Object.values(state.axes).every(axis => axis.alarm?.code === 'LS_SVON_OPEN'), true);
+
+  assert.equal(Runtime.setProfile(state, 'mitsubishi'), true);
+  assert.equal(Object.values(state.axes).every(axis => axis.alarm === null), true);
+  const mitsubishiGuide = Runtime.getCommissioningGuide(state);
+  assert.equal(mitsubishiGuide.profileId, 'mitsubishi');
+  assert.match(mitsubishiGuide.steps.map(step => step.path).join('\n'), /QD75D2N.*MR-J4-A/);
+  assert.deepEqual(Runtime.getTrainingSession(state), { completedStepIds: [], faultId: 'NONE' });
+  assert.equal(Runtime.setServo(state, true), true);
+
+  assert.equal(Runtime.setProfile(state, 'ls'), true);
+  assert.deepEqual(Runtime.getTrainingSession(state), { completedStepIds: [lsGuide.steps[0].id], faultId: 'LS_SVON_OPEN' });
+  assert.equal(Object.values(state.axes).every(axis => !axis.servoOn), true);
+});
+
+test('selected pulse and SSCNET training faults affect only their real command topology', () => {
+  const pulse = Runtime.createState({ profile: 'mitsubishi' });
+  assert.equal(Runtime.setTrainingFault(pulse, 'MELSEC_PULSE_PATH_OPEN'), true);
+  assert.equal(Runtime.setServo(pulse, true), true);
+  assert.equal(Runtime.commandAxis(pulse, 'X', 100, { speed: 80 }), false);
+  assert.equal(pulse.axes.X.alarm?.code, 'MELSEC_PULSE_PATH_OPEN');
+  assert.equal(Runtime.setTrainingFault(pulse, 'SSCNET_AXIS_CHAIN_OPEN'), false);
+
+  const sscnet = Runtime.createState({ profile: 'mitsubishi-sscnet' });
+  assert.equal(Runtime.setServo(sscnet, true), false);
+  assert.equal(sscnet.axes.X.alarm?.code, 'SSCNET_CONTROLLER_PATH_OPEN');
+  Runtime.resetAlarms(sscnet);
+  assert.equal(Runtime.setTrainingFault(sscnet, 'SSCNET_AXIS_CHAIN_OPEN'), true);
+  assert.equal(Runtime.evaluateCommissioning(sscnet).issues.some(issue => issue.code === 'SSCNET_AXIS_CHAIN_OPEN'), true);
+  assert.equal(Runtime.setTrainingFault(sscnet, 'NONE'), true);
+  assert.equal(Runtime.evaluateSscnetTopology(sscnet).topologyStatus, 'PASS');
+  assert.equal(Runtime.setServo(sscnet, true), true);
+
+  const withoutCap = Runtime.referenceSscnetConnections().filter(connection => connection.id !== 'sscnet-final-cap');
+  Runtime.setSscnetConnections(sscnet, withoutCap);
+  Runtime.resetAlarms(sscnet);
+  assert.equal(Runtime.setServo(sscnet, true), true);
+  const capResult = Runtime.evaluateCommissioning(sscnet);
+  assert.equal(capResult.exerciseStatus, 'FAIL');
+  assert.equal(capResult.issues.some(issue => issue.code === 'SSCNET_FINAL_CAP_MISSING'), true);
+});
+
+test('commissioning progress and profile-specific faults persist without restoring energized outputs', () => {
+  const state = Runtime.createState({ profile: 'mitsubishi' });
+  const guide = Runtime.getCommissioningGuide(state);
+  Runtime.setTrainingStepComplete(state, guide.steps[0].id, true);
+  Runtime.setTrainingStepComplete(state, guide.steps[1].id, true);
+  Runtime.setTrainingFault(state, 'MELSEC_SON_OPEN');
+
+  const restored = Runtime.createState({ saved: Runtime.exportState(state) });
+  assert.equal(restored.profileId, 'mitsubishi');
+  assert.deepEqual(Runtime.getTrainingSession(restored), {
+    completedStepIds: [guide.steps[0].id, guide.steps[1].id],
+    faultId: 'MELSEC_SON_OPEN'
+  });
+  assert.equal(Object.values(restored.axes).every(axis => !axis.servoOn), true);
+  assert.equal(Runtime.evaluateCommissioning(restored).reviewStatus, 'BLOCKED');
+});
+
+test('commissioning exercise passes only after every selected-profile step is checked', () => {
+  const state = Runtime.createState({ profile: 'ls' });
+  const guide = Runtime.getCommissioningGuide(state);
+  for (const step of guide.steps) Runtime.setTrainingStepComplete(state, step.id, true);
+  const result = Runtime.evaluateCommissioning(state);
+  assert.equal(result.exerciseStatus, 'PASS');
+  assert.equal(result.reviewStatus, 'BLOCKED');
+  assert.deepEqual(result.progress, { completed: guide.steps.length, total: guide.steps.length });
+});
+
 test('export/import preserves profile, points, axis data, and setpoints without resuming motion', () => {
   const state = Runtime.createState({ profile: 'mitsubishi', axes: { X: { current: 15 }, Y: { current: 30 } } });
   Runtime.setServo(state, true);

@@ -182,6 +182,13 @@ test('selected imported assets match their manifest and contain no executable pa
   assert.match(labUi, /CN1B/);
   assert.match(labUi, /PROTECTIVE_CAP/);
   assert.match(labUi, /ASSET_MODEL_UNVERIFIED/);
+  assert.match(labUi, /id="al-servo-guide"/);
+  assert.match(labUi, /data-servo-guide-step/);
+  assert.match(labUi, /data-servo-training-action="fault"/);
+  assert.match(labUi, /getCommissioningGuide/);
+  assert.match(labUi, /setTrainingStepComplete/);
+  assert.match(labUi, /setTrainingFault/);
+  assert.match(labUi, /evaluateCommissioning/);
   assert.match(labUi, /servo-amplifier\|sscnet\|relay/);
   assert.match(labUi, /'banana-plug-black\.glb': '바나나 플러그 · BPlugBlack'/);
   assert.match(labUi, /A\.equipmentCatalog\.length.*종/);
