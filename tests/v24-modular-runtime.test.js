@@ -230,7 +230,7 @@ test('modular runtimes preserve v2.3 analogConfig, modbus, and driveConfig proje
 });
 
 test('g23 uses the official XBL-C41A TX/RX terminal names and role-specific Modbus defaults', () => {
-  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/\r\n?/g, '\n');
   const start = html.indexOf("id:'g23'");
   const end = html.indexOf("\n      ]\n    }", start);
   const block = html.slice(start, end + 20);
