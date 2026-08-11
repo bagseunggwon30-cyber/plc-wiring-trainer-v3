@@ -50,6 +50,10 @@ function wire(
 
 export function createXbcDr32hSelfHoldSliceDefinition(): XbcRelayLampSliceDefinition {
   return Object.freeze({
+    plcDeviceId: 'plc1',
+    relayDeviceId: 'relay1',
+    lampDeviceId: 'runLamp',
+    plcOutputTerminalId: 'P21',
     startInputBindingId: 'start-input',
     stopInputBindingId: 'stop-input',
     runOutputBindingId: 'run-output',

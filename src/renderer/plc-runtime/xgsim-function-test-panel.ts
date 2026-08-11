@@ -17,6 +17,7 @@ import {
 import type { WorkshopDocumentV2 } from '../../domain/types';
 import { buildPrewireCircuitV3 } from '../../domain/v3';
 import { XgSimRuntimeAdapter } from './xgsim-adapter';
+import { createXgSimRuntimeVisualFrame, type XgSimRuntimeVisualFrameV1 } from './xgsim-runtime-visual';
 
 export interface XgSimFunctionTestPanelOptions {
   readonly manifest: XgSimTestProjectManifestV1;
@@ -25,6 +26,8 @@ export interface XgSimFunctionTestPanelOptions {
   readonly setStatus: (message: string) => void;
   readonly downloadReport: (report: FunctionalSimulationReportV2, filename: string) => void;
   readonly onResult?: (result: XbcClosedLoopRunResult, projectReference: XgSimLocalProjectRefV1) => void;
+  readonly onVisualFrame?: (frame: XgSimRuntimeVisualFrameV1) => void;
+  readonly onVisualClear?: (reason: string) => void;
 }
 
 export interface XgSimFunctionTestPanel {
@@ -125,6 +128,7 @@ export function createXgSimFunctionTestPanel(options: XgSimFunctionTestPanelOpti
 
   controller.subscribe((snapshot) => {
     state.textContent = `${snapshot.state.toUpperCase()} · ${snapshot.outcome}${snapshot.issueCodes.length ? ` · ${snapshot.issueCodes.join(', ')}` : ''}${snapshot.lastError ? ` · ${snapshot.lastError}` : ''}`;
+    if (['disconnected', 'stale', 'faulted', 'safe-stopped'].includes(snapshot.state)) options.onVisualClear?.(`session-${snapshot.state}`);
     refreshButtons();
   });
 
@@ -144,6 +148,7 @@ export function createXgSimFunctionTestPanel(options: XgSimFunctionTestPanelOpti
     path.textContent = load
       ? `+24V → ${load.sourcePath?.branchIds.join(' → ') || `끊김(${load.state})`} → ${definition.relayCoilElementId} → ${load.returnPath?.branchIds.join(' → ') || `끊김(${load.state})`} → 24G`
       : '+24V → 회로 결과 없음 → 24G';
+    options.onVisualFrame?.(createXgSimRuntimeVisualFrame(step, definition));
   };
 
   const appendStepResult = (step: XbcClosedLoopStepResult): void => {
@@ -291,10 +296,12 @@ export function createXgSimFunctionTestPanel(options: XgSimFunctionTestPanelOpti
   });
 
   const disconnect = async (): Promise<void> => {
+    options.onVisualClear?.('disconnect');
     if (['disconnected', 'safe-stopped'].includes(controller.snapshot.state)) return;
     await controller.safeStop('window-close');
   };
   const markStale = async (reason: string): Promise<void> => {
+    options.onVisualClear?.('stale');
     workingDocumentHash = null;
     if (!['disconnected', 'safe-stopped', 'stale'].includes(controller.snapshot.state)) await controller.markStale(reason);
   };

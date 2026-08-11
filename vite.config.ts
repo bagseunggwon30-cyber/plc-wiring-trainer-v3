@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import packageJson from './package.json';
@@ -12,6 +12,17 @@ const ASSET_PREFIXES = {
   CODEX_BOM: 'assets/devices/codex/bom/',
   CODEX_EXACT: 'assets/devices/codex/exact/',
 } as const;
+
+const STATIC_RUNTIME_DIRECTORIES = [
+  'src/device-packs',
+  'src/runtime',
+  'src/ui',
+  'assets/vendor',
+  'assets/imported/sov-kdp',
+  'assets/devices/gpt',
+  'assets/devices/gpt-expansion',
+  'assets/devices/gpt-v24',
+] as const;
 
 function runtimeAssetPaths(source: string): string[] {
   const paths = new Set<string>();
@@ -63,6 +74,15 @@ export default defineConfig({
           const target = resolve(__dirname, 'build/renderer', relativePath);
           mkdirSync(dirname(target), { recursive: true });
           copyFileSync(source, target);
+        }
+
+        for (const relativeDirectory of STATIC_RUNTIME_DIRECTORIES) {
+          const source = resolve(__dirname, relativeDirectory);
+          if (!existsSync(source)) {
+            throw new Error(`Static runtime directory is missing: ${relativeDirectory}`);
+          }
+          const target = resolve(__dirname, 'build/renderer', relativeDirectory);
+          cpSync(source, target, { recursive: true, force: true });
         }
       },
     },

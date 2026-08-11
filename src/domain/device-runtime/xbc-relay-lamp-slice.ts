@@ -8,6 +8,10 @@ import type { DeviceBehaviorProfile, DeviceBehaviorSnapshot } from './contracts'
 import { DeviceBehaviorProfileSchema } from './schema';
 
 export interface XbcRelayLampSliceDefinition {
+  readonly plcDeviceId: string;
+  readonly relayDeviceId: string;
+  readonly lampDeviceId: string;
+  readonly plcOutputTerminalId: string;
   readonly startInputBindingId: string;
   readonly stopInputBindingId: string;
   readonly runOutputBindingId: string;

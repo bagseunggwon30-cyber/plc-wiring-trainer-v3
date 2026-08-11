@@ -113,6 +113,10 @@ function workshop(options: { coilReturn?: boolean; outputCommon?: boolean; plcPo
 }
 
 const definition: XbcRelayLampSliceDefinition = {
+  plcDeviceId: 'plc1',
+  relayDeviceId: 'relay1',
+  lampDeviceId: 'runLamp',
+  plcOutputTerminalId: 'P21',
   startInputBindingId: 'start-input',
   stopInputBindingId: 'stop-input',
   runOutputBindingId: 'run-output',

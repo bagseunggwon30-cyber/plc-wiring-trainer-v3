@@ -11,6 +11,8 @@ tmp/
 .superpowers/
 *.log
 *.tmp
+__pycache__/
+*.pyc
 native/**/bin/
 native/**/obj/
 tools/**/bin/

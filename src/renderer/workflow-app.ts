@@ -689,6 +689,8 @@ export function installWorkflowApp(): void {
     },
     setStatus: (message) => bridge.setStatus(message),
     downloadReport: (report, filename) => bridge.downloadJson(report, filename),
+    onVisualFrame: (frame) => window.dispatchEvent(new CustomEvent('xgsim-runtime-visual-frame', { detail: frame })),
+    onVisualClear: (reason) => window.dispatchEvent(new CustomEvent('xgsim-runtime-visual-clear', { detail: { reason } })),
   });
   advancedBody.appendChild(xgSimFunctionTest.element);
   if (counter) header.insertBefore(advanced, counter); else header.appendChild(advanced);

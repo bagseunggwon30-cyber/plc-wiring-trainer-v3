@@ -18,7 +18,11 @@ test('v3 wiring assistant uses the typed domain planner instead of legacy polari
 test('selection and suggested-wire preview cross a narrow non-committing renderer bridge', () => {
   assert.match(html, /workshop-selection-change/);
   assert.match(html, /readSelection\(\)\{return \{deviceIds:selectedDeviceIds\(\)\.sort\(\)\};\}/);
-  const preview = /previewSuggestedWire\(from,to\)\{([\s\S]*?)\n\s*\},\n\s*focusRefs/.exec(html)?.[1] ?? '';
+  const previewStart = html.indexOf('previewSuggestedWire(from,to){');
+  const previewEnd = html.indexOf('focusRefs(refs){', previewStart);
+  assert.notEqual(previewStart, -1);
+  assert.notEqual(previewEnd, -1);
+  const preview = html.slice(previewStart, previewEnd);
   assert.match(preview, /connectionAssessment\(source,target\)/);
   assert.match(preview, /S\.pending=\{dev:source\.dev,term:source\.term/);
   assert.doesNotMatch(preview, /S\.wires\.push|connectTerms\(/);

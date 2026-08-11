@@ -73,8 +73,15 @@ svg.canvas.pan:active{cursor:grabbing}
 .device.locked .device-body{stroke:#7a9;stroke-width:1.4;stroke-dasharray:4 3}
 .device.locked.sel .device-body{stroke:#f60;stroke-dasharray:none}
 .device-lock-badge{font-size:11px;font-weight:700;fill:#c70;pointer-events:none;user-select:none}
+.device-config-modal{display:none;position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.68);align-items:center;justify-content:center;padding:20px}.device-config-modal.show{display:flex}.device-config-box{width:min(720px,94vw);max-height:88vh;overflow:auto;background:#20242a;border:1px solid #52606d;border-radius:10px;padding:16px 18px;color:#ddd;box-shadow:0 12px 38px rgba(0,0,0,.62)}.device-config-box h3{margin:0 0 10px;color:#9cf}.device-config-box fieldset{border:1px solid #45515c;border-radius:6px;margin:10px 0;padding:10px}.device-config-box legend{color:#8f8;padding:0 6px;font-weight:700}.device-config-box label{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1.2fr);gap:10px;align-items:center;margin:7px 0;font-size:11px}.device-config-box input,.device-config-box select{width:100%;background:#15191d;color:#eee;border:1px solid #58636e;border-radius:4px;padding:5px 7px}.device-config-box input[type=checkbox]{width:auto;justify-self:start}.config-channel{padding:8px;margin:7px 0;background:#181d22;border-radius:5px}.config-channel>b{display:block;color:#9df;margin-bottom:5px}.config-note{font-size:10px;color:#9aa8b5;line-height:1.5}.device-config-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.device-config-actions button{background:#303740;color:#ddd;border:1px solid #596674;border-radius:4px;padding:6px 14px;cursor:pointer}.device-config-actions button.primary{background:#276749;border-color:#38a169;color:#fff}
 .device.sel .device-body{stroke:#f60;stroke-width:2.5}
 .device-body{fill:#fdfdfd;stroke:#999;stroke-width:1;fill-opacity:0.96}
+.device.runtime-output-on,.device.runtime-coil-on{filter:drop-shadow(0 0 6px rgba(54,211,153,.9))}
+.device.runtime-load-on{filter:drop-shadow(0 0 9px rgba(250,204,21,.95))}
+.device.runtime-load-on .device-image{filter:brightness(1.12) saturate(1.18)}
+.device.runtime-fault{filter:drop-shadow(0 0 8px rgba(239,68,68,.95))}
+.runtime-state-badge{pointer-events:none}.runtime-state-badge rect{fill:#063b2c;stroke:#50e3a4;stroke-width:1}.runtime-state-badge text{fill:#a7f3d0;font:700 8px Consolas,sans-serif}.runtime-state-badge.fault rect{fill:#531919;stroke:#ff7066}.runtime-state-badge.fault text{fill:#ffd0cc}
+.terminal.runtime-contact-closed{stroke:#42f5a7!important;stroke-width:4!important;filter:drop-shadow(0 0 5px #42f5a7)}
 .image-device .device-body{fill:transparent;fill-opacity:0;stroke:none}
 .image-device.sel .device-body{stroke:#f60;stroke-width:2.5;stroke-opacity:1}
 .device.asset-missing .device-body{fill:#f8fafc;fill-opacity:1;stroke:#dc2626;stroke-width:1.5;stroke-dasharray:5 3}
@@ -309,6 +316,15 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 </style>
 <script src="/vendor/rbush.min.js"></script>
 <script src="/safety-policy.js"></script>
+<script src="src/device-packs/device-pack-registry.js"></script>
+<script src="src/device-packs/ls-xgb-v24-pack.js"></script>
+<script src="src/device-packs/ls-xgb-expansion-pack.js"></script>
+<script src="src/device-packs/automation-equipment-pack.js"></script>
+<script src="src/runtime/rack-runtime.js"></script>
+<script src="src/runtime/analog-runtime.js"></script>
+<script src="src/runtime/modbus-runtime.js"></script>
+<script src="src/runtime/drive-runtime.js"></script>
+<script src="src/ui/device-config.js"></script>
 <script type="module" src="/src/renderer/main.ts"></script>
 </head>
 <body>
@@ -4235,9 +4251,9 @@ const GOALS = [
       '⚠ TX-TX, RX-RX 직결은 통신 안 됨 (스트레이트 케이블 ≠ RS232 크로스).'
     ],
     checks:[
-      {kind:'connect', from:{type:'EXP2-700',term:'TXD'}, to:{type:'XBC-DR32H',term:'RX'}, label:'HMI TXD → PLC RX', tip:'송신을 상대 수신으로'},
-      {kind:'connect', from:{type:'EXP2-700',term:'RXD'}, to:{type:'XBC-DR32H',term:'TX'}, label:'HMI RXD → PLC TX', tip:'수신을 상대 송신에서'},
-      {kind:'connect', from:{type:'EXP2-700',term:'SG'},  to:{type:'XBC-DR32H',term:'SG'}, label:'HMI SG → PLC SG', tip:'시그널 그라운드 공통'},
+      {kind:'connect', from:{type:'EXP2-700',term:'COM2-3'}, to:{type:'XBC-DR32H',term:'RX'}, label:'HMI COM2-3(TXD) → PLC RX', tip:'COM2 DB9 3번 송신을 상대 수신으로'},
+      {kind:'connect', from:{type:'EXP2-700',term:'COM2-2'}, to:{type:'XBC-DR32H',term:'TX'}, label:'HMI COM2-2(RXD) → PLC TX', tip:'COM2 DB9 2번 수신을 상대 송신에서'},
+      {kind:'connect', from:{type:'EXP2-700',term:'COM2-5'}, to:{type:'XBC-DR32H',term:'SG'}, label:'HMI COM2-5(SG) → PLC SG', tip:'COM2 DB9 5번 시그널 그라운드 공통'},
     ]
   },
   {
@@ -4431,8 +4447,8 @@ function missionForbiddenConnections(goal){
   }
   if(goal.id==='g6'){
     list.push(
-      {id:'rs232_tx_to_tx',severity:'function',terms:[{type:'EXP2-700',term:'TXD'},{type:'XBC-DR32H',term:'TX'}],message:'RS232 TXD가 상대 TX에 연결됨. TXD는 RX로 크로스 연결해야 함'},
-      {id:'rs232_rx_to_rx',severity:'function',terms:[{type:'EXP2-700',term:'RXD'},{type:'XBC-DR32H',term:'RX'}],message:'RS232 RXD가 상대 RX에 연결됨. RXD는 TX로 크로스 연결해야 함'}
+      {id:'rs232_tx_to_tx',severity:'function',terms:[{type:'EXP2-700',term:'COM2-3'},{type:'XBC-DR32H',term:'TX'}],message:'RS232 COM2-3(TXD)가 상대 TX에 연결됨. TXD는 RX로 크로스 연결해야 함'},
+      {id:'rs232_rx_to_rx',severity:'function',terms:[{type:'EXP2-700',term:'COM2-2'},{type:'XBC-DR32H',term:'RX'}],message:'RS232 COM2-2(RXD)가 상대 RX에 연결됨. RXD는 TX로 크로스 연결해야 함'}
     );
   }
   if(goal.id==='g11'){
@@ -4466,12 +4482,22 @@ const MISSION_JSON={
 };
 window.MISSION_JSON=MISSION_JSON;
 
+/* GitHub v2.7 장비 팩은 현재 매뉴얼 기반 장비 정의를 덮어쓰지 않고,
+   아직 없는 교육용 장비만 LIB에 추가한다. 전기 판정은 계속 v3 엔진만 사용한다. */
+window.V27_DEVICE_PACK_REPORT=window.PLCDevicePacks
+  ? window.PLCDevicePacks.installAll(LIB,{force:false,replaceExisting:false})
+  : {packs:[],devices:[],replaced:[],skipped:[],errors:[{message:'device pack registry unavailable'}]};
+
 /* ===================================================================
    상태
    =================================================================== */
 const S={
   devices:{}, wires:[],
   mode:'select',         // select | wire | pan
+  workspaceView:'panel', // panel | schematic | sequence | io | palletizer
+  diagramLayouts:{schematic:{},sequence:{}},
+  palletizer3d:null,
+  automationLab:null,
   boardMode:'panel-layout', // free | panel-layout | distribution | door-panel
   cabinet:null,
   rails:{},
@@ -4782,6 +4808,9 @@ function uid(p){return p+(S.nextId++)}
 function captureUndoState(){
   return {
     d:S.devices,w:S.wires,n:S.nextId,j:S.jumpers,
+    workspaceView:S.workspaceView,diagramLayouts:S.diagramLayouts,
+    palletizer3d:window.PLCTrainerPalletizer3D?.exportState?.()||S.palletizer3d||null,
+    automationLab:window.PLCTrainerAutomationLabs?.exportState?.()||S.automationLab||null,
     boardMode:S.boardMode,cabinet:S.cabinet,rails:S.rails,ducts:S.ducts,doorPanel:S.doorPanel,
     panelConfig:S.panelConfig,
     workflowState:S.workflowState,
@@ -4791,6 +4820,12 @@ function captureUndoState(){
 function restoreUndoState(x){
   S.devices=x.d;S.wires=x.w;S.nextId=x.n;
   if(x.j)S.jumpers=x.j;
+  S.workspaceView=x.workspaceView||'panel';
+  S.diagramLayouts=x.diagramLayouts||{schematic:{},sequence:{}};
+  if(!S.diagramLayouts.schematic)S.diagramLayouts.schematic={};
+  if(!S.diagramLayouts.sequence)S.diagramLayouts.sequence={};
+  S.palletizer3d=x.palletizer3d||null;
+  S.automationLab=x.automationLab||null;
   if(x.boardMode)S.boardMode=x.boardMode;
   if(x.cabinet!==undefined)S.cabinet=x.cabinet;
   if(x.rails)S.rails=x.rails;
@@ -4812,6 +4847,8 @@ function restoreUndoState(x){
   applyTerminalCalibrationToRegistry(S.terminalCalibration);
   persistTerminalCalibration();
   markTerminalSnapDirty();
+  window.PLCTrainerPalletizer3D?.importState?.(S.palletizer3d);
+  window.PLCTrainerAutomationLabs?.importState?.(S.automationLab);
 }
 function notifyWorkshopRevision(revision){
   // 편집 함수는 snapshot() 뒤에 실제 상태 변경과 render()를 수행한다.
@@ -5707,6 +5744,9 @@ function routePanelWire(p1,p2,wire,excludeIds,laneOffset=0,routeContext=null){
 function serializeState(){
   return {
     d:S.devices,w:S.wires,n:S.nextId,revision:S.revision,goal:S.goal,pan:S.pan,
+    workspaceView:S.workspaceView||'panel',diagramLayouts:S.diagramLayouts||{schematic:{},sequence:{}},
+    palletizer3d:window.PLCTrainerPalletizer3D?.exportState?.()||S.palletizer3d||null,
+    automationLab:window.PLCTrainerAutomationLabs?.exportState?.()||S.automationLab||null,
     color:S.color,autoColor:S.autoColor,
     boardMode:S.boardMode,cabinet:S.cabinet,rails:S.rails,ducts:S.ducts,doorPanel:S.doorPanel,
     panelConfig:S.panelConfig||{rows:3,cols:1,door:true},
@@ -5721,6 +5761,12 @@ function applyLoadedState(x){
   S.history=[];S.future=[];
   S.devices=x.d||{}; S.wires=x.w||[]; S.nextId=x.n||1; S.goal=x.goal||null;
   S.revision=Number.isFinite(x.revision)?x.revision:(S.revision||1)+1;
+  S.workspaceView=x.workspaceView||'panel';
+  S.diagramLayouts=x.diagramLayouts||{schematic:{},sequence:{}};
+  if(!S.diagramLayouts.schematic)S.diagramLayouts.schematic={};
+  if(!S.diagramLayouts.sequence)S.diagramLayouts.sequence={};
+  S.palletizer3d=x.palletizer3d||null;
+  S.automationLab=x.automationLab||null;
   if(x.color)S.color=x.color;
   S.autoColor=!!x.autoColor;
   if(x.pan)S.pan=x.pan;
@@ -5747,6 +5793,9 @@ function applyLoadedState(x){
   syncColorSwatches();
   syncBoardModeUI();
   clearSelection();
+  window.PLCTrainerPalletizer3D?.importState?.(S.palletizer3d);
+  window.PLCTrainerAutomationLabs?.importState?.(S.automationLab);
+  window.PLCTrainerMultiView?.setView?.('panel');
   queueMicrotask(()=>window.dispatchEvent(new CustomEvent('workshop-document-replaced',{detail:{revision:S.revision}})));
 }
 
@@ -8007,6 +8056,7 @@ function renderDevices(){
   }
   markTerminalSnapDirty();
   $('#counter').textContent=Object.keys(S.devices).length;
+  window.PLCTrainerRuntimeVisuals?.apply?.();
 }
 
 /* 직각 라우팅: 장비 이미지 위를 지나지 않고 바깥으로 우회 결선 */
@@ -9156,6 +9206,8 @@ function render(){
   updateMissionCoach();
   renderNetlist();
   renderStats();
+  try{window.PLCTrainerMultiView?.renderActive?.();}catch(error){console.warn('멀티뷰 갱신 실패',error);}
+  try{(window.PLCTrainerAutomationLabs||window.PLCTrainerPalletizer3D)?.renderActive?.();}catch(error){console.warn('자동화 실습실 갱신 실패',error);}
   const jc=$('#jcounter'); if(jc)jc.textContent=(S.jumpers||[]).length;
 }
 
@@ -10788,6 +10840,7 @@ function paletteManualStatus(type){
   if(PROFILE_ONLY_DEVICE_TYPES.has(type))return {kind:'family',label:'공식 핀 확인 · 검토 기능 미완'};
   if(EXACT_MANUAL_DEVICE_TYPES.has(type))return {kind:'exact',label:'정확 품번 · 공식 매뉴얼'};
   if(FAMILY_MANUAL_DEVICE_TYPES.has(type))return {kind:'family',label:'계열 매뉴얼 · 전체 품번 필요'};
+  if(LIB[type]?.manualVerified)return {kind:'family',label:'공식 매뉴얼 · 연습 프로필'};
   if(type==='MY-MD02')return {kind:'unresolved',label:'공식 제조사·매뉴얼 미확인'};
   return {kind:'unresolved',label:'교육용 · 제조사/전체 품번 필요'};
 }
@@ -11493,6 +11546,26 @@ function ctxMenuSep(menu){
   menu.appendChild(s);
 }
 
+function openDeviceRuntimeConfig(devId){
+  const dev=S.devices[devId],def=LIB[dev?.type];
+  if(!dev||!def)return status('설정할 장비를 선택하세요.');
+  const api=window.PLCTrainerDeviceConfig;
+  if(!api?.isConfigurable?.(dev,def))return status('이 장비에는 변경 가능한 설정이 없습니다.');
+  const before=JSON.stringify(captureUndoState());
+  api.open({
+    devId,device:dev,definition:def,
+    assignment:{rackId:dev.rackHostId||dev.rackId,slot:dev.rackSlot||dev.slot,pRange:dev.ioBinding?.pRange,uPrefix:dev.ioBinding?.uPrefix},
+    analogApi:window.PLCTrainerAnalog||window.PLCAnalogRuntime,
+    modbusApi:window.PLCTrainerModbus||window.PLCModbusRuntime,
+    driveApi:window.PLCTrainerDrive||window.PLCDriveRuntime,
+    onSave:()=>{
+      S.history.push(before);if(S.history.length>50)S.history.shift();S.future=[];
+      S.revision=(S.revision||0)+1;notifyWorkshopRevision(S.revision);
+      render();status(`${def.label} 설정 저장됨 · 다음 검증 전까지 결과 STALE`);
+    }
+  });
+}
+
 function showDeviceContextMenu(px,py,devId,def,ctx={}){
   document.querySelectorAll('.ctx-menu').forEach(x=>x.remove());
   const menu=document.createElement('div');
@@ -11504,6 +11577,11 @@ function showDeviceContextMenu(px,py,devId,def,ctx={}){
   title.textContent=def.label+(ctx.termId?` · ${ctx.termId}`:'');
   title.style.cssText='font-weight:700;color:#9cf;margin-bottom:6px;padding:0 4px';
   menu.appendChild(title);
+
+  if(window.PLCTrainerDeviceConfig?.isConfigurable?.(S.devices[devId],def)){
+    ctxMenuItem(menu,'⚙ 장비 설정 · 채널/통신/구동',()=>openDeviceRuntimeConfig(devId),{accent:true});
+    ctxMenuSep(menu);
+  }
 
   /* ===== 단자 편집 ===== */
   const termHead=document.createElement('div');
@@ -12255,7 +12333,10 @@ $('#b-clear').onclick=()=>{
   snapshot();
   cancelPendingWire('',{render:false});
   S.devices={};S.wires=[];S.jumpers=[];clearSelection();
-  S.goal=null;
+  S.goal=null;S.workspaceView='panel';S.diagramLayouts={schematic:{},sequence:{}};S.palletizer3d=null;S.automationLab=null;
+  window.PLCTrainerPalletizer3D?.importState?.(null);
+  window.PLCTrainerAutomationLabs?.importState?.({schemaVersion:1,activeLab:'servo2',labs:{}});
+  window.PLCTrainerMultiView?.setView?.('panel');
   localStorage.removeItem(LSK);
   applyRailConfig({rows:S.panelConfig?.rows||3, cols:S.panelConfig?.cols||1, door:S.panelConfig?.door!==false, keepDevices:false},{silent:true});
   // 빈 작업장 (데모 장비 자동 배치 없음)
@@ -12405,6 +12486,9 @@ window.LegacyTrainerBridge={
     return structuredClone({
       devices:S.devices,wires:S.wires,jumpers:S.jumpers,nextId:S.nextId,revision:S.revision,goal:S.goal,
       workflowState:S.workflowState,
+      workspaceView:S.workspaceView,diagramLayouts:S.diagramLayouts,
+      palletizer3d:window.PLCTrainerPalletizer3D?.exportState?.()||S.palletizer3d||null,
+      automationLab:window.PLCTrainerAutomationLabs?.exportState?.()||S.automationLab||null,
       boardMode:S.boardMode,cabinet:S.cabinet,rails:S.rails,ducts:S.ducts,doorPanel:S.doorPanel,
       panelConfig:S.panelConfig,terminalCalibration:S.terminalCalibration
     });
@@ -12559,12 +12643,23 @@ window.LegacyTrainerBridge={
     S.nextId=Number(document.extensions?.legacy?.nextId)||Object.keys(nextDevices).length+S.wires.length+S.jumpers.length+10;
     S.goal=document.settings?.goal||null;
     S.workflowState=structuredClone(document.settings?.v3Workflow??null);
+    const legacyExtension=document.extensions?.legacy||{};
+    S.workspaceView=legacyExtension.workspaceView||'panel';
+    S.diagramLayouts=structuredClone(legacyExtension.diagramLayouts||{schematic:{},sequence:{}});
+    if(!S.diagramLayouts.schematic)S.diagramLayouts.schematic={};
+    if(!S.diagramLayouts.sequence)S.diagramLayouts.sequence={};
+    S.palletizer3d=structuredClone(legacyExtension.palletizer3d||null);
+    S.automationLab=structuredClone(legacyExtension.automationLab||null);
     const layout=document.layout||{};
     S.boardMode=layout.boardMode||'panel-layout';S.cabinet=layout.cabinet||null;S.rails=layout.rails||{};
     S.ducts=layout.ducts||{};S.doorPanel=layout.doorPanel||null;S.panelConfig=layout.panelConfig||{rows:3,cols:1,door:true};
     S.terminalCalibration=document.extensions?.legacy?.terminalCalibration||{};
     applyTerminalCalibrationToRegistry(S.terminalCalibration);
-    markTerminalSnapDirty();clearSelection();syncBoardModeUI();render();refreshTrainerUI();
+    markTerminalSnapDirty();clearSelection();syncBoardModeUI();
+    window.PLCTrainerPalletizer3D?.importState?.(S.palletizer3d);
+    window.PLCTrainerAutomationLabs?.importState?.(S.automationLab);
+    window.PLCTrainerMultiView?.setView?.('panel');
+    render();refreshTrainerUI();
     // A restored document must be visible immediately; waiting for two paint
     // frames allowed startup status to report success while devices were still
     // outside the current viewport.
@@ -12647,5 +12742,17 @@ window.LegacyTrainerBridge={
 };
 status('빈 작업장 준비됨 — 좌측 부품을 배치하세요 · F=화면맞춤 · K=고정 · L/R=패널');
 </script>
+<script src="assets/vendor/three.min.js"></script>
+<script src="src/runtime/palletizer-runtime.js"></script>
+<script src="src/runtime/servo2-runtime.js"></script>
+<script src="src/runtime/mps-runtime.js"></script>
+<script src="src/runtime/pneumatic-runtime.js"></script>
+<script src="src/ui/multiview-core.js"></script>
+<script src="src/ui/multiview-ui.js"></script>
+<script src="src/ui/runtime-visual-state.js"></script>
+<script src="src/ui/palletizer-3d.js"></script>
+<script src="src/ui/sov-editor-engine.js"></script>
+<script src="src/ui/automation-labs.js"></script>
+<script type="module" src="src/ui/imported-models.js"></script>
 </body>
 </html>

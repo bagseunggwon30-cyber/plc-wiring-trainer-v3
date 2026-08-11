@@ -1,0 +1,889 @@
+(function () {
+  'use strict';
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const Three = window.THREE;
+  const Servo = window.PLCTrainerServo2Runtime;
+  const MPS = window.PLCTrainerMPSRuntime;
+  const Pneumatic = window.PLCTrainerPneumaticRuntime;
+  if (!Servo || !MPS || !Pneumatic) {
+    console.error('Automation lab runtimes are missing');
+    return;
+  }
+
+  const LABS = ['palletizer3d', 'servo2', 'mps', 'pneumatic', 'equipment3d'];
+  const EQUIPMENT_LABELS = Object.freeze({
+    'mitsubishi-q-plc-module.glb': 'Mitsubishi Q PLC 모듈',
+    'servo-amplifier.glb': '서보 앰프',
+    'relay-module.glb': '8핀 릴레이 모듈',
+    'timer-box.glb': '디지털 타이머 박스',
+    'counter-unit.glb': '디지털 카운터',
+    'smps.glb': 'DC 전원공급기(SMPS)',
+    'switch-box.glb': '3버튼 스위치 박스',
+    'buzzer-lamp.glb': '버저·표시등 박스',
+    'tower-lamp.glb': '3단 타워 램프',
+    'photo-sensor-npn.glb': '광전 센서 NPN',
+    'photo-sensor-pnp.glb': '광전 센서 PNP',
+    'inductive-sensor-npn.glb': '유도형 근접 센서 NPN',
+    'inductive-sensor-pnp.glb': '유도형 근접 센서 PNP',
+    'capacitive-sensor-npn.glb': '정전용량 센서 NPN',
+    'capacitive-sensor-pnp.glb': '정전용량 센서 PNP',
+    'limit-switch-left.glb': '리미트 스위치 좌형',
+    'limit-switch-right.glb': '리미트 스위치 우형',
+    'double-acting-cylinder.glb': '복동 실린더',
+    'valve-5-2-single.glb': '5/2 단솔 밸브',
+    'valve-5-2-double.glb': '5/2 복솔 밸브',
+    'service-unit.glb': '공압 서비스 유닛',
+    'air-distributor.glb': '에어 분배기',
+    'speed-controller.glb': '스피드 컨트롤러',
+    'mps-complete-station.glb': 'MPS 통합 스테이션',
+    'servo2-workshop.glb': '2축 서보 워크숍',
+    'workpiece-steel.glb': '강재 워크',
+    'workpiece-plastic.glb': '수지 워크'
+  });
+  const EQUIPMENT_GROUPS = Object.freeze([
+    ['control', '제어·전원', /(?:plc|servo-amplifier|relay|timer|counter|smps|switch-box|buzzer|tower)/],
+    ['sensor', '센서·스위치', /(?:sensor|limit-switch)/],
+    ['pneumatic', '공압 장비', /(?:cylinder|valve|service-unit|air-distributor|speed-controller)/],
+    ['plant', '설비·워크', /(?:mps|servo2-workshop|workpiece)/]
+  ]);
+  const CAMERA_DISTANCE = 16.17;
+  const CAMERA_PRESETS = Object.freeze({
+    // Keep the audited default direction and focus, but frame the equipment
+    // instead of the classroom scenery that has intentionally been removed.
+    default: Object.freeze({ focus: [-2.8e-8, .882998, .0190001], pitch: 10.67, yaw: 360, scale: .9 }),
+    space: Object.freeze({ focus: [0, .82, 0], pitch: 90, yaw: 0, scale: 1 }),
+    f1: Object.freeze({ focus: [5.72e-6, .819996, 0], pitch: 24.9, yaw: 20.2, scale: .9 }),
+    f2: Object.freeze({ focus: [0, .87, 0], pitch: 27.33, yaw: 332.5, scale: .76 })
+  });
+  const MPS_OUTPUT_LABELS = Object.freeze([
+    '공급 F', '공급 R', '드릴 승강', '분배 F', '분배 R', '배출 F', '배출 R',
+    '리프트 F', '리프트 R', '진공', '언로딩 F', '언로딩 R', '스토퍼',
+    '드릴 모터', '컨베이어', '적색등', '황색등', '녹색등'
+  ]);
+  const MPS_INPUT_LABELS = Object.freeze([
+    '공급 FLS', '공급 RLS', '드릴 FLS', '드릴 RLS', '분배 FLS', '분배 RLS',
+    '배출 FLS', '배출 RLS', '스토퍼 FLS', '스토퍼 RLS', '리프트 FLS',
+    '리프트 RLS', '언로딩 FLS', '언로딩 RLS', '공급 감지', '분배 감지',
+    '금속 감지', '정전용량', '종단 감지', '진공 확인', '미사용', '미사용',
+    '미사용', '미사용', '서보 RLS(NC)', '서보 DOG', '서보 FLS(NC)'
+  ]);
+  const A = {
+    host: null, hub: null, content: null, activeLab: 'servo2', visible: false, initialized: false,
+    state: null, renderer: null, canvasHost: null, raf: 0, lastTime: 0, lastUi: 0, lastSave: 0,
+    scenes: {}, editors: {}, editorMarkers: {}, drag: null, editorDrag: null,
+    resizeObserver: null, importedLoaded: false, equipmentCatalog: [], equipmentLoadToken: 0
+  };
+  const q = (selector, root = document) => root.querySelector(selector);
+  const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const wrapDegrees = value => ((value % 360) + 360) % 360;
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+  function loadSaved() {
+    let saved = null;
+    try { if (typeof S !== 'undefined') saved = S.automationLab || null; } catch (_) { /* standalone */ }
+    const activeLab = LABS.includes(saved?.activeLab) ? saved.activeLab : 'servo2';
+    return {
+      schemaVersion: 1,
+      activeLab,
+      labs: {
+        servo2: Servo.createState({ saved: saved?.labs?.servo2 }),
+        mps: MPS.createState({ saved: saved?.labs?.mps }),
+        pneumatic: Pneumatic.createState({ saved: saved?.labs?.pneumatic })
+      },
+      editor: saved?.editor || null,
+      equipment: { selected: typeof saved?.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' }
+    };
+  }
+
+  function exportState() {
+    if (!A.state) return null;
+    return {
+      schemaVersion: 1,
+      activeLab: A.activeLab,
+      labs: {
+        servo2: Servo.exportState(A.state.labs.servo2),
+        mps: MPS.exportState(A.state.labs.mps),
+        pneumatic: Pneumatic.exportState(A.state.labs.pneumatic)
+      },
+      editor: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, editor.serialize()])),
+      equipment: { selected: A.state.equipment?.selected || 'relay-module.glb' }
+    };
+  }
+
+  function persist(force = false) {
+    const now = performance.now();
+    if (!force && now - A.lastSave < 700) return;
+    A.lastSave = now;
+    const value = exportState();
+    try { if (typeof S !== 'undefined') S.automationLab = value; } catch (_) { /* standalone */ }
+  }
+
+  function injectCss() {
+    if (q('#al-style')) return;
+    const style = document.createElement('style');
+    style.id = 'al-style';
+    style.textContent = `
+      #al-hub{position:absolute;inset:0;display:grid;grid-template-rows:43px minmax(0,1fr);background:#091119;color:#dce8ef;font-family:'Malgun Gothic',sans-serif}
+      #al-tabs{position:relative;z-index:20;display:flex;align-items:center;gap:5px;padding:5px 9px;border-bottom:1px solid #2a4456;background:#101c25;box-shadow:0 3px 12px rgba(0,0,0,.24)}
+      #al-tabs b{margin-right:7px;color:#b7d3e3;font-size:11px;white-space:nowrap}#al-tabs small{margin-left:auto;color:#68889b;font:9px Consolas,monospace;white-space:nowrap}
+      .al-tab{height:31px;padding:0 11px;border:1px solid #3b5667;border-radius:4px;background:#1c2c37;color:#b9cbd5;cursor:pointer;font-size:10px}.al-tab:hover{background:#284457;color:#fff}.al-tab.active{border-color:#4ba8d9;background:#176b9b;color:#fff;box-shadow:0 0 0 1px rgba(75,168,217,.2) inset}
+      #al-content{position:relative;min-height:0}.al-pane{display:none;position:absolute;inset:0;min-height:0}.al-pane.active{display:block}.al-pane-grid{display:grid;grid-template-columns:minmax(0,1fr) 350px;height:100%;min-height:0;background:#091119}
+      .al-scene{position:relative;min-width:0;min-height:0;overflow:hidden;background:radial-gradient(circle at 45% 35%,#243746,#071018 72%)}.al-scene canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
+      .al-scene-title{position:absolute;z-index:4;left:14px;top:12px;display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #35566c;border-radius:5px;background:rgba(5,13,19,.84);pointer-events:none}.al-scene-title b{font-size:12px;color:#fff}.al-scene-title span{font:9px Consolas;color:#7fb5d2}
+      .al-camera-presets{position:absolute;z-index:6;right:14px;top:12px;display:flex;gap:4px}.al-camera-preset{height:28px;padding:0 8px;border:1px solid #567184;border-radius:4px;background:rgba(13,27,36,.9);color:#d9e8ef;cursor:pointer;font:9px Consolas}.al-camera-preset:hover,.al-camera-preset:focus-visible{border-color:#7dc5ed;background:#28536c;color:#fff;outline:none}
+      .al-editor-tools{position:absolute;z-index:7;left:14px;top:53px;display:flex;gap:3px;padding:4px;border:1px solid #526b7a;border-radius:4px;background:rgba(17,25,30,.9)}.al-editor-mode{height:26px;padding:0 7px;border:1px solid #4b5d67;border-radius:3px;background:#313b40;color:#d9e3e8;cursor:pointer;font-size:8px}.al-editor-mode.active{border-color:#8f83ff;background:#514a91;color:#fff}.al-editor-mode:disabled{opacity:.28;cursor:not-allowed}.al-editor-mode:not(:disabled):hover{background:#485861}.al-editor-mode kbd{font:7px Consolas;color:#9fb4c0}
+      .al-scene-hint{position:absolute;z-index:4;left:14px;bottom:12px;padding:5px 8px;border-radius:4px;background:rgba(5,13,19,.75);color:#8da5b4;font-size:9px;pointer-events:none}
+      .al-side{overflow:auto;border-left:1px solid #263f50;background:#101b23;padding:11px 11px 24px;scrollbar-color:#496271 #101b23}.al-section{margin:0 0 9px;padding:9px;border:1px solid #2a4353;border-radius:6px;background:#14232d}.al-section h3{margin:0 0 7px;color:#a9cede;font-size:10px;letter-spacing:.04em}.al-section small{color:#7796a8;font-size:8px}
+      .al-status{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px;padding:7px;border-radius:4px;background:#0b151c}.al-status b{font-size:11px;color:#fff}.al-status span{font:9px Consolas;color:#75c9ef;text-align:right}.al-status.fault b,.al-status.fault span{color:#ff8077}
+      .al-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:5px}.al-actions.three{grid-template-columns:repeat(3,1fr)}.al-btn{min-height:29px;border:1px solid #456174;border-radius:4px;background:#253946;color:#e9f3f8;padding:6px 4px;cursor:pointer;font-size:9px}.al-btn:hover{background:#31556b;border-color:#64a1c5}.al-btn.run{background:#17623f;border-color:#2e9668}.al-btn.stop{background:#74332e;border-color:#aa554d}.al-btn.on{color:#8cf3b6;border-color:#43ae70;background:#174b35}
+      .al-profile{display:grid;grid-template-columns:88px 1fr;gap:6px;align-items:center;margin-bottom:7px;color:#8ba7b7;font-size:9px}.al-profile select,.al-field input,.al-field select{width:100%;box-sizing:border-box;border:1px solid #3a5364;border-radius:3px;background:#071118;color:#e0edf4;padding:5px;font:9px Consolas}
+      .al-axis{display:grid;grid-template-columns:22px 1fr 62px;gap:6px;align-items:center;margin:5px 0;padding:6px;border-radius:4px;background:#0c171e}.al-axis>strong{font:700 13px Consolas;color:#68c9f3}.al-axis-value{font:700 11px Consolas;color:#fff}.al-axis-flags{margin-top:2px;color:#7895a5;font:8px Consolas;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.al-jog{display:grid;grid-template-columns:1fr 1fr;gap:3px}.al-jog button{height:27px;border:1px solid #405b6c;border-radius:3px;background:#21333f;color:#fff;cursor:pointer}.al-axis-target{display:grid;grid-template-columns:1fr 37px;gap:3px;margin-top:3px}.al-axis-target input{min-width:0;border:1px solid #385160;border-radius:3px;background:#061017;color:#dcecf4;padding:4px;font:9px Consolas}.al-axis-target button{border:1px solid #49677a;border-radius:3px;background:#29485c;color:#fff;font-size:8px;cursor:pointer}
+      .al-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.al-field{display:block;color:#819cac;font-size:8px}.al-field input,.al-field select{display:block;margin-top:3px}.al-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.al-indicator{padding:5px 3px;border:1px solid #2f4654;border-radius:3px;background:#0b151b;text-align:center;color:#657d8c;font:8px Consolas}.al-indicator.on{border-color:#2fa765;color:#88f0b3;background:#123828}.al-indicator.metal.on{border-color:#e0a72e;color:#ffd779;background:#4c3712}
+      .al-checks{display:grid;grid-template-columns:1fr 1fr;gap:5px}.al-check{display:flex;align-items:center;gap:5px;padding:6px;border:1px solid #2e4654;border-radius:3px;background:#0c171e;color:#a8bdc8;font-size:9px}.al-check input{accent-color:#20a3e0}.al-counters{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.al-counter{padding:6px 3px;border-radius:3px;background:#0b151c;text-align:center}.al-counter b{display:block;color:#fff;font:700 13px Consolas}.al-counter span{color:#7591a2;font-size:7px}
+      .al-log{max-height:72px;overflow:auto;color:#82a0b0;font:8px Consolas}.al-log div{padding:2px 0;border-bottom:1px dotted #29414f}.al-log .fault{color:#ff8077}.al-memory{width:100%;border-collapse:collapse;font:8px Consolas}.al-memory td{border:1px solid #29414f;padding:3px}.al-memory td:last-child{text-align:right;color:#fff}
+      .al-io-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}.al-io{min-width:0;padding:4px 3px;border:1px solid #2d4553;border-radius:3px;background:#0b151b;color:#6f8795;font:7px Consolas;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.al-io.on{border-color:#2fa765;background:#123828;color:#8af0b4}.al-io.reserved{opacity:.42}.al-output-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}.al-output{display:flex;align-items:center;gap:4px;min-width:0;padding:4px;border:1px solid #304957;border-radius:3px;background:#0c171e;color:#a8bdc8;font-size:8px}.al-output input{margin:0;accent-color:#20a3e0}.al-output span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.al-servo-slide{display:grid;grid-template-columns:70px 1fr 38px;gap:5px;align-items:center;color:#8ca6b5;font-size:8px}.al-servo-slide input{width:100%;accent-color:#20a3e0}.al-servo-slide output{text-align:right;color:#fff;font:8px Consolas}
+      .al-pressure{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.al-gauge{padding:7px 3px;border-radius:4px;background:#0a151c;text-align:center}.al-gauge b{display:block;color:#75d0f4;font:700 14px Consolas}.al-gauge span{color:#7894a4;font-size:7px}.al-stroke{height:9px;overflow:hidden;border-radius:7px;background:#071017}.al-stroke i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1b7eae,#5de2ff);transition:width .08s linear}
+      .al-asset-note{margin:6px 0 0;padding:6px;border-left:3px solid #587a8e;background:#0b161d;color:#809bab;font-size:8px;line-height:1.45}
+      .al-equipment-select{width:100%;min-height:310px;box-sizing:border-box;border:1px solid #38586b;border-radius:5px;background:#08131a;color:#dbeaf1;padding:4px;font:9px 'Malgun Gothic',sans-serif}.al-equipment-select option{padding:5px}.al-equipment-select optgroup{color:#78b9d8;font-weight:700}.al-equipment-meta{display:grid;grid-template-columns:80px minmax(0,1fr);gap:5px;margin-top:8px;font:8px Consolas;color:#89a5b5}.al-equipment-meta dt{color:#638092}.al-equipment-meta dd{margin:0;color:#d8e8ef;overflow-wrap:anywhere}.al-equipment-loading{color:#78cff3}.al-equipment-error{color:#ff8077}
+      @media(max-width:960px){.al-pane-grid{grid-template-columns:minmax(0,1fr) 300px}#al-tabs small{display:none}.al-tab{padding:0 7px}.al-side{padding:8px}.al-camera-presets{top:48px}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function cameraPresetButtons() {
+    return `<div class="al-camera-presets" aria-label="카메라 프리셋"><button class="al-camera-preset" data-camera-preset="space" title="상단 보기 (Space)">SPACE 상단</button><button class="al-camera-preset" data-camera-preset="f1" title="프리셋 1 (F1)">F1</button><button class="al-camera-preset" data-camera-preset="f2" title="프리셋 2 (F2)">F2</button></div>`;
+  }
+
+  function editorToolbar(lab) {
+    const modes = [['CONTROL', '제어', '1'], ['MOVE', '이동', '2'], ['DELETE_MODULE', '장비삭제', '3'], ['WIRE', '결선', '4'], ['AIR', '튜브', '5'], ['DELETE_WIRE', '선삭제', '6']];
+    const allowed = lab === 'pneumatic' ? new Set(modes.map(item => item[0])) : new Set(['CONTROL', 'WIRE', 'DELETE_WIRE']);
+    return `<div class="al-editor-tools" data-editor-tools="${lab}" aria-label="SoV 편집 모드">${modes.map(([mode, label, key]) => `<button class="al-editor-mode" data-editor-mode="${mode}"${allowed.has(mode) ? '' : ' disabled'} title="${label} (${key})">${label} <kbd>${key}</kbd></button>`).join('')}</div>`;
+  }
+
+  function servoPane() {
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="servo2"><div class="al-scene-title"><b>2축 서보 제어 실습실</b><span>XBF-PD02A / QD75D2N</span></div>${cameraPresetButtons()}${editorToolbar('servo2')}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · SPACE/F1/F2 시점</div></div><aside class="al-side">
+      <section class="al-section"><div class="al-status" id="al-servo-status"><b>대기</b><span>IDLE</span></div><label class="al-profile">장비 프로필<select id="al-servo-profile"><option value="ls">LS XBF-PD02A + L7S</option><option value="mitsubishi">Mitsubishi QD75 + MR-J4</option></select></label><div class="al-actions three"><button class="al-btn run" data-servo-action="servo">SERVO ON</button><button class="al-btn" data-servo-action="home">전축 원점</button><button class="al-btn stop" data-servo-action="stop">전축 정지</button></div></section>
+      <section class="al-section"><h3>축 수동 운전 <small>누르는 동안 JOG</small></h3>${['X', 'Y'].map(axis => `<div class="al-axis"><strong>${axis}</strong><div><div class="al-axis-value" data-servo-pos="${axis}">0.00 mm</div><div class="al-axis-flags" data-servo-flags="${axis}">SERVO OFF</div><div class="al-axis-target"><input data-servo-target="${axis}" type="number" step="1" value="${axis === 'X' ? 320 : 240}"><button data-servo-move="${axis}">ABS</button></div></div><div class="al-jog"><button data-servo-jog="${axis},-1">−</button><button data-servo-jog="${axis},1">＋</button></div></div>`).join('')}</section>
+      <section class="al-section"><h3>2축 직선 보간</h3><div class="al-fields"><label class="al-field">X 목표<input id="al-linear-x" type="number" value="380"></label><label class="al-field">Y 목표<input id="al-linear-y" type="number" value="300"></label><label class="al-field">속도<input id="al-linear-speed" type="number" value="140"></label></div><button class="al-btn" data-servo-action="linear" style="width:100%;margin-top:6px">X/Y 동시 직선 보간</button></section>
+      <section class="al-section"><h3>내부 PLC 주소 이미지 <small>실제 PLC 전송 없음</small></h3><table class="al-memory" id="al-servo-memory"></table><div class="al-asset-note">LS L7S/XML 및 Mitsubishi Q/MR-J4 공개 단자 의미를 분리했습니다. 모듈 오류와 서보 ALM은 서로 다른 상태입니다.</div></section>
+    </aside></div>`;
+  }
+
+  function mpsPane() {
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="mps"><div class="al-scene-title"><b>MPS 제어 실습실</b><span>CONVEYOR · PROCESSING · TRANSFER</span></div>${cameraPresetButtons()}${editorToolbar('mps')}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · SPACE/F1/F2 시점</div></div><aside class="al-side">
+      <section class="al-section"><div class="al-status" id="al-mps-status"><b>PLC 출력 대기</b><span>18 OUT · 27 IN</span></div><label class="al-profile">PLC 주소 프로필<select id="al-mps-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><div class="al-actions"><button class="al-btn run" data-mps-action="auto">▶ PLC 제어</button><button class="al-btn stop" data-mps-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-mps-action="steel">＋ 강재 워크</button><button class="al-btn" data-mps-action="plastic">＋ PP 워크</button><button class="al-btn" data-mps-action="reset">↺ 설비 리셋</button><button class="al-btn" data-mps-action="clear">워크 비우기</button></div></section>
+      <section class="al-section"><h3>리프트 서보 <small>I24 RLS · I25 DOG · I26 FLS</small></h3><label class="al-servo-slide"><span>위치 명령</span><input id="al-mps-lift" type="range" min="0" max="100" value="0"><output id="al-mps-lift-value">0%</output></label></section>
+      <section class="al-section"><h3>PLC 출력 O0–O17 <small>원본 MPS 물리 플랜트</small></h3><div class="al-output-grid">${MPS_OUTPUT_LABELS.map((label, index) => `<label class="al-output" title="O${index} ${label}"><input type="checkbox" data-mps-output-index="${index}"><span>O${index} ${label}</span></label>`).join('')}</div></section>
+      <section class="al-section"><h3>설비 입력 I0–I26</h3><div class="al-io-grid">${MPS_INPUT_LABELS.map((label, index) => `<div class="al-io${index >= 20 && index <= 23 ? ' reserved' : ''}" data-mps-input-index="${index}" title="I${index} ${label}">I${index} ${label}</div>`).join('')}</div></section>
+      <section class="al-section"><h3>이벤트</h3><div class="al-log" id="al-mps-log"></div><div class="al-asset-note">강재/PP 분류 순서는 내장하지 않습니다. XG5000 또는 수동 O0–O17 출력으로 원본 설비를 직접 구동합니다.</div></section>
+    </aside></div>`;
+  }
+
+  function pneumaticPane() {
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="pneumatic"><div class="al-scene-title"><b>공압 제어 실습실</b><span>5/2 VALVE · D/A CYLINDER · VACUUM</span></div>${cameraPresetButtons()}${editorToolbar('pneumatic')}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · SPACE/F1/F2 시점</div></div><aside class="al-side">
+      <section class="al-section"><div class="al-status" id="al-pneu-status"><b>대기</b><span>IDLE</span></div><label class="al-profile">PLC 주소 프로필<select id="al-pneu-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><div class="al-actions"><button class="al-btn" data-pneu-action="supply">AIR ON</button><button class="al-btn run" data-pneu-action="auto">▶ 자동 1사이클</button><button class="al-btn stop" data-pneu-action="stop">■ 정지</button><button class="al-btn" data-pneu-action="reset">↺ 고장 리셋</button></div></section>
+      <section class="al-section"><h3>압력·스트로크</h3><div class="al-pressure"><div class="al-gauge"><b data-pneu-gauge="input">0.0</b><span>IN bar</span></div><div class="al-gauge"><b data-pneu-gauge="output">0.0</b><span>REG bar</span></div><div class="al-gauge"><b data-pneu-gauge="vacuum">0.0</b><span>VAC bar</span></div></div><div class="al-stroke" style="margin-top:7px"><i id="al-pneu-stroke"></i></div></section>
+      <section class="al-section"><h3>밸브·유량 설정</h3><div class="al-fields"><label class="al-field">밸브<select id="al-pneu-valve"><option value="single">5/2 단솔</option><option value="double">5/2 복솔</option></select></label><label class="al-field">설정압 bar<input id="al-pneu-reg" type="number" min="0" max="8" step=".5" value="5"></label><label class="al-field">전진 유량<input id="al-pneu-throttle" type="number" min=".05" max="1" step=".05" value="1"></label></div><div class="al-checks" style="margin-top:6px"><label class="al-check"><input type="checkbox" data-pneu-coil="A">SOL A 전진</label><label class="al-check"><input type="checkbox" data-pneu-coil="B">SOL B 후진</label><label class="al-check"><input type="checkbox" id="al-pneu-vacuum">진공 흡착</label><label class="al-check"><input type="checkbox" id="al-pneu-part" checked>제품 감지</label></div></section>
+      <section class="al-section"><h3>고장 삽입</h3><label class="al-field">T03 공급호스 누설 <span id="al-pneu-leak-label">0%</span><input id="al-pneu-leak" type="range" min="0" max="1" step=".05" value="0"></label><div class="al-grid4" style="margin-top:7px"><div class="al-indicator" data-pneu-sensor="retracted">RET</div><div class="al-indicator" data-pneu-sensor="extended">EXT</div><div class="al-indicator" data-pneu-sensor="vacuum">VAC</div><div class="al-indicator" data-pneu-sensor="fault">FAULT</div></div></section>
+      <section class="al-section"><h3>이벤트</h3><div class="al-log" id="al-pneu-log"></div><div class="al-asset-note">압축성·힘 해석이 아닌 교육용 기능 모델입니다. 실제 안전밸브·잔압배기·압력정격을 대신하지 않습니다.</div></section>
+    </aside></div>`;
+  }
+
+  function equipmentPane() {
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="equipment3d"><div class="al-scene-title"><b>3D 장비 검사실</b><span>SELECTIVE ASSETS · LAZY LOAD</span></div>${cameraPresetButtons()}<div class="al-scene-hint">우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소 · 장비는 한 번에 1개만 표시</div></div><aside class="al-side">
+      <section class="al-section"><div class="al-status" id="al-equipment-status"><b>장비 목록 준비</b><span>LOCAL</span></div><select class="al-equipment-select" id="al-equipment-select" size="14" aria-label="3D 장비 선택"><option>자산 매니페스트 읽는 중…</option></select><dl class="al-equipment-meta"><dt>모델</dt><dd id="al-equipment-root">—</dd><dt>메시</dt><dd id="al-equipment-mesh">—</dd><dt>파일</dt><dd id="al-equipment-file">—</dd><dt>검토 등급</dt><dd>교육용 3D 외형</dd></dl><div class="al-asset-note">이 화면은 실제 3D 외형을 관찰하는 교육용 자산 검사실입니다. 단자 ID·전기 정격·검토 통과 근거는 제조사 매뉴얼 기반 프로필과 SVG 오버레이만 사용합니다.</div></section>
+    </aside></div>`;
+  }
+
+  function injectUi() {
+    A.host = q('#mv-palletizer');
+    const oldRoot = q('#p3-root', A.host);
+    if (!A.host || !oldRoot) return false;
+    A.host.innerHTML = '';
+    A.hub = document.createElement('div');
+    A.hub.id = 'al-hub';
+    A.hub.innerHTML = `<nav id="al-tabs"><b>🏭 자동화 실습실</b>${[
+      ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['equipment3d', '3D 장비 27종']
+    ].map(([key, label]) => `<button class="al-tab" data-lab="${key}">${label}</button>`).join('')}<small>OFFLINE · LOCAL SIMULATION</small></nav><div id="al-content"></div>`;
+    A.host.appendChild(A.hub);
+    A.content = q('#al-content', A.hub);
+    const p3Pane = document.createElement('section'); p3Pane.className = 'al-pane'; p3Pane.dataset.labPane = 'palletizer3d'; p3Pane.appendChild(oldRoot); A.content.appendChild(p3Pane);
+    for (const [key, html] of [['servo2', servoPane()], ['mps', mpsPane()], ['pneumatic', pneumaticPane()], ['equipment3d', equipmentPane()]]) {
+      const pane = document.createElement('section'); pane.className = 'al-pane'; pane.dataset.labPane = key; pane.innerHTML = html; A.content.appendChild(pane);
+    }
+    qa('.al-tab', A.hub).forEach(button => button.onclick = () => setLab(button.dataset.lab));
+    return true;
+  }
+
+  function material(color, metalness = .3, roughness = .6, extra = {}) { return new Three.MeshStandardMaterial({ color, metalness, roughness, ...extra }); }
+  function box(parent, size, position, mat, name) {
+    const mesh = new Three.Mesh(new Three.BoxGeometry(...size), mat); mesh.position.set(...position); mesh.castShadow = true; mesh.receiveShadow = true; if (name) mesh.name = name; parent.add(mesh); return mesh;
+  }
+  function cylinder(parent, radius, length, position, mat, axis = 'y') {
+    const mesh = new Three.Mesh(new Three.CylinderGeometry(radius, radius, length, 20), mat); mesh.position.set(...position); if (axis === 'x') mesh.rotation.z = Math.PI / 2; if (axis === 'z') mesh.rotation.x = Math.PI / 2; mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh;
+  }
+  function led(parent, position, color = 0x35f287) {
+    const mat = material(0x203039, .05, .4, { emissive: 0x000000 }); const mesh = new Three.Mesh(new Three.SphereGeometry(.09, 14, 10), mat); mesh.position.set(...position); mesh.userData.onColor = color; parent.add(mesh); return mesh;
+  }
+  function setLed(mesh, on, color) { if (!mesh) return; const value = color || mesh.userData.onColor || 0x35f287; mesh.material.color.setHex(on ? value : 0x203039); mesh.material.emissive.setHex(on ? value : 0x000000); mesh.material.emissiveIntensity = on ? 1.5 : 0; }
+  function setImportedLamp(node, on, color = 0x35f287) {
+    node?.traverse?.(object => {
+      if (!object.isMesh || !object.material) return;
+      for (const mat of Array.isArray(object.material) ? object.material : [object.material]) {
+        if (mat.emissive?.setHex) mat.emissive.setHex(on ? color : 0x000000);
+        if ('emissiveIntensity' in mat) mat.emissiveIntensity = on ? 2.2 : 0;
+        mat.needsUpdate = true;
+      }
+    });
+  }
+
+  function baseScene(name) {
+    const preset = CAMERA_PRESETS.default;
+    const scene = new Three.Scene(); scene.background = new Three.Color(0x3a4757);
+    const camera = new Three.OrthographicCamera(-3.5, 3.5, 3.5, -3.5, .01, 100);
+    scene.add(new Three.HemisphereLight(0xc6ebff, 0x26342c, 1.35));
+    const sun = new Three.DirectionalLight(0xffffff, 1.35); sun.position.set(-5, 10, 7); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); scene.add(sun);
+    const root = new Three.Group(); root.name = `${name}-lab`; scene.add(root);
+    const proxyRoot = new Three.Group(); proxyRoot.name = `${name}-functional-proxy`; root.add(proxyRoot);
+    const dynamicRoot = new Three.Group(); dynamicRoot.name = `${name}-dynamic`; root.add(dynamicRoot);
+    return { scene, camera, root, proxyRoot, dynamicRoot, parts: {}, orbit: { yaw: preset.yaw, pitch: preset.pitch, scale: preset.scale }, target: new Three.Vector3(...preset.focus), aspect: 1 };
+  }
+
+  function createServoScene() {
+    const data = baseScene('servo2'), root = data.proxyRoot;
+    const frame = material(0x77848b, .72, .3), rail = material(0xc5d0d6, .85, .18), blue = material(0x1b75a7, .4, .35), dark = material(0x1a252c, .5, .45);
+    box(root, [10, .32, 6.2], [0, .3, 0], dark); for (const x of [-4.6, 4.6]) for (const z of [-2.6, 2.6]) box(root, [.25, 1.1, .25], [x, -.25, z], frame);
+    box(root, [8.8, .22, .4], [0, 1.03, 1.2], frame); box(root, [8.5, .1, .2], [0, 1.2, 1.2], rail);
+    const xCarriage = new Three.Group(); root.add(xCarriage); box(xCarriage, [.72, .5, .72], [0, 1.25, 1.2], blue); box(xCarriage, [.34, .22, 5.1], [0, 1.08, -1.05], frame); box(xCarriage, [.16, .12, 4.7], [0, 1.23, -1.05], rail);
+    const yCarriage = new Three.Group(); xCarriage.add(yCarriage); box(yCarriage, [.72, .42, .72], [0, 1.3, 0], blue); box(yCarriage, [.34, 1.3, .34], [0, .48, 0], dark);
+    const marker = cylinder(yCarriage, .23, .08, [0, -.2, 0], material(0xffbd31, .25, .5), 'y');
+    data.parts.xCarriage = xCarriage; data.parts.yCarriage = yCarriage; data.parts.marker = marker;
+    data.parts.leds = { X0: led(root, [-4.1, 1.2, .85]), X1: led(root, [4.1, 1.2, .85], 0xff5348), Y0: led(xCarriage, [.4, 1.25, 1.1]), Y1: led(xCarriage, [.4, 1.25, -3.15], 0xff5348) };
+    for (const x of [-4.2, -3.55]) { box(root, [.5, 1.45, 1.05], [x, 1.08, -2.05], material(0x31434f, .45, .35)); led(root, [x, 1.55, -1.49]); }
+    return data;
+  }
+
+  function createMpsScene() {
+    const data = baseScene('mps'), root = data.proxyRoot;
+    const frame = material(0x66767f, .68, .34), belt = material(0x172129, .2, .75), blue = material(0x2c7197, .35, .45);
+    box(root, [10.2, .28, 3.7], [0, .3, 0], material(0x1a252c, .5, .5));
+    box(root, [8.8, .24, 1.45], [0, 1.2, 0], frame); box(root, [8.4, .1, 1.13], [0, 1.39, 0], belt);
+    for (const x of [-4.15, -2, 0, 2, 4.15]) cylinder(root, .15, 1.05, [x, 1.42, 0], frame, 'z');
+    for (const x of [-4.1, 4.1]) for (const z of [-.55, .55]) box(root, [.2, 1.6, .2], [x, .3, z], frame);
+    data.parts.workpieces = new Three.Group(); data.dynamicRoot.add(data.parts.workpieces); data.parts.workpieceModels = new Map();
+    data.parts.stopper = box(root, [.16, .75, .9], [-.15, 1.78, 0], material(0xe3b542, .25, .45));
+    data.parts.pusher = box(root, [.95, .35, .45], [-.15, 1.58, -1.05], blue); data.parts.pusherHome = data.parts.pusher.position.z;
+    data.parts.picker = box(root, [.75, .7, .75], [.65, 2.35, 0], material(0x7a8b95, .5, .35));
+    data.parts.leds = {};
+    const sensorX = { entrance: -3.45, position: -.32, metal: -.12, exit: 3.42 };
+    for (const [key, x] of Object.entries(sensorX)) { box(root, [.18, .38, .36], [x, 1.68, .78], material(0x222b31, .45, .42)); data.parts.leds[key] = led(root, [x, 1.93, .78], key === 'metal' ? 0xffc83d : 0x43ef88); }
+    return data;
+  }
+
+  function createPneumaticScene() {
+    const data = baseScene('pneumatic'), root = data.proxyRoot;
+    box(root, [10.5, .3, 6], [0, .3, 0], material(0x1a252c, .5, .5));
+    const panel = box(root, [9.4, 3.6, .22], [0, 2.5, 2.15], material(0x52626c, .55, .5)); panel.receiveShadow = true;
+    const service = new Three.Group(); service.position.set(-3.6, 2.55, 1.85); root.add(service); cylinder(service, .45, 1.3, [0, 0, 0], material(0xa9bdc8, .5, .35)); cylinder(service, .28, .6, [0, -.8, 0], material(0x4c8ba6, .25, .45)); data.parts.service = service;
+    const valve = new Three.Group(); valve.position.set(-.7, 2.55, 1.85); root.add(valve); box(valve, [1.55, .72, .55], [0, 0, 0], material(0x303b43, .55, .38)); box(valve, [.38, .56, .6], [-.96, 0, 0], material(0x296e9a, .35, .4)); box(valve, [.38, .56, .6], [.96, 0, 0], material(0x296e9a, .35, .4)); data.parts.valve = valve; data.parts.coilLeds = [led(valve, [-.96, .4, 0]), led(valve, [.96, .4, 0])];
+    const cyl = new Three.Group(); cyl.position.set(2.65, 2.55, 1.85); root.add(cyl); cylinder(cyl, .48, 2.1, [0, 0, 0], material(0xc0cbd0, .78, .22), 'x'); box(cyl, [.18, 1.18, .75], [-1.08, 0, 0], material(0x586871, .65, .32)); data.parts.rod = cylinder(cyl, .15, 1.8, [1.85, 0, 0], material(0xd9e2e6, .9, .15), 'x'); data.parts.rodBaseX = .95; data.parts.cylinder = cyl;
+    data.parts.tubes = [];
+    for (const spec of [[-3, 2.6, -.9, 2.6, 0x3faee1], [.15, 2.7, 1.55, 2.72, 0x3faee1], [.15, 2.38, 1.55, 2.38, 0xf0b73c]]) {
+      const [x1, y1, x2, y2, color] = spec, length = Math.hypot(x2 - x1, y2 - y1); const mesh = cylinder(root, .055, length, [(x1 + x2) / 2, (y1 + y2) / 2, 1.55], material(color, .08, .5, { transparent: true, opacity: .82 }), 'x'); mesh.rotation.z = Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2; data.parts.tubes.push(mesh);
+    }
+    data.parts.gauge = led(root, [-3.6, 3.35, 1.45], 0x4ad7ff); data.parts.vacuum = led(root, [3.9, 1.25, .3], 0x7bf2c3);
+    data.parts.proxyEquipment = [service, valve, cyl];
+    return data;
+  }
+
+  function createEquipmentScene() {
+    const data = baseScene('equipment3d');
+    data.proxyRoot.visible = false;
+    data.orbit = { yaw: 25, pitch: 18, scale: 1.05 };
+    data.target.set(0, .34, 0);
+    const pedestal = box(data.root, [1.15, .035, .78], [0, -.035, 0], material(0x233541, .25, .82));
+    pedestal.receiveShadow = true;
+    data.parts.modelRoot = new Three.Group();
+    data.parts.modelRoot.name = 'equipment3d-selected-model';
+    data.root.add(data.parts.modelRoot);
+    return data;
+  }
+
+  function createEditors() {
+    const engine = window.PLCTrainerSovEditorEngine;
+    if (!engine?.create) return;
+    A.editorMarkers = { servo2: [], mps: [], pneumatic: [] };
+    A.editorModules = { servo2: new Map(), mps: new Map(), pneumatic: new Map() };
+    for (const lab of ['servo2', 'mps', 'pneumatic']) {
+      const editor = engine.create({ three: Three, lab, scene: A.scenes[lab].scene, gridSize: .025, tubeRadius: .003 });
+      editor.on('change', () => { schedule(); persist(); });
+      editor.on('modechange', () => { updateEditorUi(); schedule(); persist(); });
+      A.editors[lab] = editor;
+    }
+  }
+
+  function registerEditorModule(lab, id, object, anchorSpecs, movable = false) {
+    const editor = A.editors[lab];
+    if (!editor || editor.modules.has(id) || !object) return;
+    const markerGeometry = new Three.SphereGeometry(.006, 8, 6);
+    const anchors = anchorSpecs.map((spec, index) => {
+      const marker = new Three.Mesh(markerGeometry, new Three.MeshBasicMaterial({ color: spec.kind === 'air' ? 0xff5252 : 0x4fc7ff, transparent: true, opacity: .92, depthTest: false }));
+      marker.name = `${id}-${spec.tag || index}`; marker.position.fromArray(spec.position); marker.visible = false; marker.renderOrder = 20;
+      marker.userData.sovAnchor = { moduleId: id, anchorId: spec.id || String(index), kind: spec.kind };
+      object.add(marker); A.editorMarkers[lab].push(marker);
+      return { id: spec.id || String(index), kind: spec.kind, object: marker, localPosition: [0, 0, 0], tag: spec.tag || spec.id || String(index) };
+    });
+    object.traverse?.(child => { if (child.isMesh && !child.userData.sovAnchor) child.userData.sovEditorModuleId = id; });
+    editor.registerModule({ id, lab, object, movable, removeObjectOnDelete: movable, anchors });
+    A.editorModules[lab].set(id, object); updateEditorUi();
+    const saved = A.state?.editor?.[lab];
+    if (saved) { try { editor.importState(saved, { strict: false }); } catch (_) { /* retry as later modules register */ } }
+  }
+
+  function rowAnchors(prefix, count, y, z, startX, endX, kind = 'electric') {
+    return Array.from({ length: count }, (_, index) => ({ id: `${prefix}${index}`, tag: `${prefix}${index}`, kind, position: [startX + (endX - startX) * (count === 1 ? 0 : index / (count - 1)), y, z] }));
+  }
+
+  function installEditorControls() {
+    const canvas = A.renderer.domElement, raycaster = new Three.Raycaster(), pointer = new Three.Vector2(); raycaster.params.Line.threshold = .012;
+    const rayFromEvent = event => {
+      const scene = A.scenes[A.activeLab], rect = canvas.getBoundingClientRect();
+      if (!scene || !rect.width || !rect.height) return null;
+      pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1); raycaster.setFromCamera(pointer, scene.camera); return raycaster.ray;
+    };
+    const activeEditor = () => A.editors[A.activeLab];
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || A.activeLab === 'palletizer3d') return;
+      const editor = activeEditor(), ray = rayFromEvent(event); if (!editor || !ray) return;
+      if (editor.mode === 'WIRE' || editor.mode === 'AIR') {
+        const hits = raycaster.intersectObjects(A.editorMarkers[A.activeLab].filter(marker => marker.visible), false), ref = hits[0]?.object?.userData?.sovAnchor;
+        if (!ref) return;
+        event.preventDefault(); if (editor.pendingConnection) editor.completeConnection(ref); else editor.beginConnection(ref); schedule(); updateEditorUi(); persist(); return;
+      }
+      if (editor.mode === 'DELETE_WIRE') {
+        const visuals = [...editor.connections.values()].map(connection => connection.visual), hit = raycaster.intersectObjects(visuals, true)[0];
+        if (hit?.object?.userData?.connectionId) { event.preventDefault(); editor.deleteLink(hit.object.userData.connectionId); schedule(); persist(true); } return;
+      }
+      if (editor.mode === 'MOVE' || editor.mode === 'DELETE_MODULE') {
+        const objects = [...A.editorModules[A.activeLab].values()], hit = raycaster.intersectObjects(objects, true)[0]; let picked = hit?.object;
+        while (picked && !picked.userData?.sovEditorModuleId) picked = picked.parent;
+        const moduleId = picked?.userData?.sovEditorModuleId; if (!moduleId) return;
+        event.preventDefault();
+        if (editor.mode === 'DELETE_MODULE') { editor.deleteModule(moduleId); A.editorModules[A.activeLab].delete(moduleId); updateEditorUi(); schedule(); persist(true); return; }
+        if (editor.beginMove(moduleId, ray, { grid: .025 })) { A.editorDrag = { editor, pointerId: event.pointerId }; canvas.setPointerCapture?.(event.pointerId); }
+      }
+    });
+    canvas.addEventListener('pointermove', event => {
+      const editor = activeEditor(), ray = rayFromEvent(event); if (!editor || !ray) return;
+      if (A.editorDrag?.editor === editor) { editor.updateMove(ray); schedule(); return; }
+      if (editor.pendingConnection) { const plane = new Three.Plane(new Three.Vector3(0, 1, 0), -.9), hit = ray.intersectPlane(plane, new Three.Vector3()); if (hit) { editor.updateConnectionPreview(hit); schedule(); } }
+    });
+    const endMove = event => { if (!A.editorDrag || (event.pointerId != null && event.pointerId !== A.editorDrag.pointerId)) return; A.editorDrag.editor.endMove(); A.editorDrag = null; schedule(); persist(true); };
+    canvas.addEventListener('pointerup', endMove); canvas.addEventListener('pointercancel', endMove); canvas.addEventListener('lostpointercapture', endMove);
+  }
+
+  function updateEditorUi() {
+    for (const lab of ['servo2', 'mps', 'pneumatic']) {
+      const editor = A.editors[lab]; if (!editor) continue;
+      qa(`[data-editor-tools="${lab}"] [data-editor-mode]`, A.hub).forEach(button => button.classList.toggle('active', button.dataset.editorMode === editor.mode));
+      for (const marker of A.editorMarkers[lab] || []) marker.visible = (editor.mode === 'WIRE' && marker.userData.sovAnchor.kind === 'electric') || (editor.mode === 'AIR' && marker.userData.sovAnchor.kind === 'air');
+      editor.connectionRoot.visible = editor.mode !== 'CONTROL';
+    }
+  }
+
+  function createRenderer() {
+    if (!Three) return false;
+    A.renderer = new Three.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    A.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6)); A.renderer.shadowMap.enabled = true; A.renderer.shadowMap.type = Three.PCFSoftShadowMap; A.renderer.outputEncoding = Three.sRGBEncoding;
+    A.renderer.domElement.tabIndex = 0; installCameraControls();
+    A.scenes.servo2 = createServoScene(); A.scenes.mps = createMpsScene(); A.scenes.pneumatic = createPneumaticScene(); A.scenes.equipment3d = createEquipmentScene();
+    createEditors(); installEditorControls();
+    loadImportedAssets();
+    return true;
+  }
+
+  function findImportedNode(model, pattern) {
+    let found = null;
+    model.traverse?.(object => { if (!found && pattern.test(object.name || '')) found = object; });
+    return found;
+  }
+
+  function bindMpsImportedPlant(model) {
+    const byId = id => findImportedNode(model, new RegExp(`__go${id}$`));
+    const bind = (id, axis, start, end) => {
+      const node = byId(id);
+      return node ? { node, axis, start, end, basePosition: node.position.clone(), baseRotation: node.rotation.clone() } : null;
+    };
+    const plant = {
+      supply: bind(2149, 'z', -.0394, -.1063),
+      drill: bind(1733, 'z', .232, .2018),
+      distribution: bind(2147, 'z', -.1492002, -.2666),
+      emission: bind(2041, 'z', -.011, .0553),
+      stopper: bind(1657, 'y', .1475, .1254),
+      liftPneumatic: bind(2045, 'z', .1015, .19942),
+      unloading: bind(2100, 'x', -.035, -.0803),
+      liftServo: bind(1189, 'y', .1188, .3348),
+      drillRotor: bind(1539, null, 0, 0),
+      belt: byId(1560),
+      drillAngle: 0,
+      lastElapsed: 0,
+      lamps: [2033, 2035, 2036, 2031, 2024, 2023, 2032, 2029, 2025, 2026, 2022, 2030, 2069, 214, 1167, 220].map(byId),
+      beltMaps: []
+    };
+    for (const node of plant.lamps) node?.traverse?.(object => {
+      if (!object.isMesh || !object.material) return;
+      object.material = Array.isArray(object.material) ? object.material.map(mat => mat.clone()) : object.material.clone();
+    });
+    plant.belt?.traverse?.(object => {
+      if (!object.isMesh || !object.material) return;
+      const materials = Array.isArray(object.material) ? object.material.map(mat => mat.clone()) : [object.material.clone()];
+      object.material = Array.isArray(object.material) ? materials : materials[0];
+      for (const mat of materials) if (mat.map) { mat.map = mat.map.clone(); mat.map.wrapS = Three.RepeatWrapping; mat.map.needsUpdate = true; plant.beltMaps.push(mat.map); }
+    });
+    return plant;
+  }
+
+  async function addImported(lab, filename, targetSize, position, rotation = [0, 0, 0], opacity = 1, onLoaded = null, options = {}) {
+    try {
+      const loader = window.PLCTrainerImportedModels;
+      if (!loader || A.scenes[lab]?.parts?.[`asset-${filename}`]) return;
+      const model = await loader.loadModel(filename, { name: filename });
+      const wrapper = new Three.Group(); model.rotation.set(...rotation); wrapper.add(model); model.updateMatrixWorld(true);
+      let bounds = new Three.Box3().setFromObject(model), scale = 1, center = new Three.Vector3();
+      if (!options.authoredCoordinates) {
+        const size = new Three.Vector3(); bounds.getSize(size); const max = Math.max(size.x, size.y, size.z) || 1; scale = targetSize / max; model.scale.multiplyScalar(scale); model.updateMatrixWorld(true);
+        bounds = new Three.Box3().setFromObject(model); bounds.getCenter(center); model.position.sub(center);
+      }
+      wrapper.position.set(...position);
+      model.traverse?.(object => { if (!object.isMesh) return; object.castShadow = true; object.receiveShadow = true; if (opacity < 1 && object.material) { for (const mat of Array.isArray(object.material) ? object.material : [object.material]) { mat.transparent = true; mat.opacity = opacity; mat.depthWrite = opacity > .6; } } });
+      A.scenes[lab].root.add(wrapper); A.scenes[lab].parts[`asset-${filename}`] = wrapper; schedule();
+      onLoaded?.({ wrapper, model, scale, center });
+      return wrapper;
+    } catch (error) { console.warn(`Imported model ${filename} could not be loaded`, error); }
+  }
+
+  async function loadWorkpieceTemplates() {
+    try {
+      const loader = window.PLCTrainerImportedModels, parts = A.scenes.mps.parts;
+      const [steel, plastic] = await Promise.all([loader.loadModel('workpiece-steel.glb'), loader.loadModel('workpiece-plastic.glb')]);
+      parts.workpieceTemplates = { steel, plastic };
+      schedule();
+    } catch (error) { console.warn('Imported workpieces could not be loaded', error); }
+  }
+
+  function equipmentGroup(filename) {
+    return EQUIPMENT_GROUPS.find(([, , pattern]) => pattern.test(filename)) || ['other', '기타 장비', /.*/];
+  }
+
+  function updateEquipmentDetails(entry) {
+    if (!entry || !A.hub) return;
+    q('#al-equipment-root', A.hub).textContent = entry.root || '—';
+    q('#al-equipment-mesh', A.hub).textContent = `${Number(entry.nodeCount || 0).toLocaleString()} nodes · ${Number(entry.triangleCount || 0).toLocaleString()} triangles`;
+    q('#al-equipment-file', A.hub).textContent = `${entry.file} · ${(Number(entry.bytes || 0) / 1024).toFixed(1)} KiB`;
+  }
+
+  async function showEquipmentModel(filename) {
+    const entry = A.equipmentCatalog.find(item => item.file === filename);
+    const scene = A.scenes.equipment3d, statusBox = q('#al-equipment-status', A.hub);
+    if (!entry || !scene || !statusBox || !window.PLCTrainerImportedModels) return;
+    const token = ++A.equipmentLoadToken;
+    q('b', statusBox).textContent = '3D 장비 불러오는 중'; q('span', statusBox).textContent = EQUIPMENT_LABELS[filename] || filename; statusBox.classList.remove('fault');
+    try {
+      const model = await window.PLCTrainerImportedModels.loadModel(filename, { name: `equipment-gallery:${filename}` });
+      if (token !== A.equipmentLoadToken) return;
+      const modelRoot = scene.parts.modelRoot;
+      while (modelRoot.children.length) {
+        const previous = modelRoot.children[0]; modelRoot.remove(previous);
+        previous?.traverse?.(object => {
+          if (!object.isMesh || !object.material) return;
+          for (const mat of Array.isArray(object.material) ? object.material : [object.material]) mat.dispose?.();
+        });
+      }
+      model.rotation.set(0, 0, 0); model.scale.setScalar(1); model.position.set(0, 0, 0); model.updateMatrixWorld(true);
+      let bounds = new Three.Box3().setFromObject(model), size = new Three.Vector3(); bounds.getSize(size);
+      const maxDimension = Math.max(size.x, size.y, size.z) || 1;
+      model.scale.multiplyScalar(.76 / maxDimension); model.updateMatrixWorld(true);
+      bounds = new Three.Box3().setFromObject(model); const center = new Three.Vector3(); bounds.getCenter(center); bounds.getSize(size);
+      model.position.set(-center.x, -bounds.min.y, -center.z); model.updateMatrixWorld(true);
+      modelRoot.add(model);
+      scene.parts.selectedModel = model;
+      scene.parts.selectedEntry = entry;
+      scene.target.set(0, Math.max(.18, size.y / 2), 0);
+      scene.orbit.scale = Math.max(.9, Math.max(size.x, size.y, size.z) * 1.24);
+      updateCamera(scene); updateEquipmentDetails(entry);
+      A.state.equipment.selected = filename;
+      const select = q('#al-equipment-select', A.hub); if (select) select.value = filename;
+      q('b', statusBox).textContent = EQUIPMENT_LABELS[filename] || filename; q('span', statusBox).textContent = '교육용 3D 외형';
+      schedule(); persist(true);
+    } catch (error) {
+      if (token !== A.equipmentLoadToken) return;
+      statusBox.classList.add('fault'); q('b', statusBox).textContent = '3D 장비 로드 실패'; q('span', statusBox).textContent = filename;
+      console.warn(`Equipment gallery model ${filename} could not be loaded`, error);
+    }
+  }
+
+  async function loadEquipmentCatalog() {
+    try {
+      const manifest = await window.PLCTrainerImportedModels.loadManifest();
+      A.equipmentCatalog = Array.isArray(manifest.models) ? manifest.models.filter(item => typeof item?.file === 'string') : [];
+      const select = q('#al-equipment-select', A.hub), statusBox = q('#al-equipment-status', A.hub);
+      if (!select || !statusBox || !A.equipmentCatalog.length) throw new Error('선택 가능한 3D 장비가 없습니다.');
+      select.replaceChildren();
+      for (const [groupId, groupLabel] of EQUIPMENT_GROUPS) {
+        const entries = A.equipmentCatalog.filter(item => equipmentGroup(item.file)[0] === groupId);
+        if (!entries.length) continue;
+        const group = document.createElement('optgroup'); group.label = `${groupLabel} (${entries.length})`;
+        for (const entry of entries) group.appendChild(new Option(EQUIPMENT_LABELS[entry.file] || entry.file.replace(/\.glb$/i, ''), entry.file));
+        select.appendChild(group);
+      }
+      const selected = A.equipmentCatalog.some(item => item.file === A.state.equipment.selected)
+        ? A.state.equipment.selected
+        : A.equipmentCatalog[0].file;
+      select.value = selected;
+      q('b', statusBox).textContent = `3D 장비 ${A.equipmentCatalog.length}종 준비`; q('span', statusBox).textContent = '선택 로드';
+      updateEquipmentDetails(A.equipmentCatalog.find(item => item.file === selected));
+      if (A.activeLab === 'equipment3d') await showEquipmentModel(selected);
+    } catch (error) {
+      const statusBox = q('#al-equipment-status', A.hub);
+      if (statusBox) { statusBox.classList.add('fault'); q('b', statusBox).textContent = '3D 자산 목록 실패'; q('span', statusBox).textContent = String(error?.message || error); }
+      console.warn('Equipment gallery manifest could not be loaded', error);
+    }
+  }
+
+  function loadImportedAssets() {
+    if (A.importedLoaded) return;
+    if (!window.PLCTrainerImportedModels) { window.addEventListener('plc-trainer-imported-models-ready', loadImportedAssets, { once: true }); return; }
+    A.importedLoaded = true;
+    void loadEquipmentCatalog();
+    // The imported GLBs contain equipment only.  Their Unity root transform is
+    // restored here so the original orthographic camera presets remain valid,
+    // without packaging the classroom, desks, chairs or other scenery.
+    addImported('servo2', 'servo2-workshop.glb', null, [0, .8, -.1548], [0, 0, 0], 1, ({ model, wrapper }) => {
+      const parts = A.scenes.servo2.parts, axis1 = findImportedNode(model, /Axis1_Move__go608/i), axis2 = findImportedNode(model, /Axis2_Move__go1188/i);
+      parts.importedAxes = { axis1, axis2, axis1Base: axis1?.position.clone(), axis2Base: axis2?.position.clone() };
+      registerEditorModule('servo2', 'servo-motion-kit', wrapper, [
+        ...rowAnchors('INPUT/', 26, .04, .286, -.25, .25),
+        ...rowAnchors('OUTPUT/', 10, .072, .286, -.18, .18),
+        ...rowAnchors('P24/', 2, .104, .286, -.05, -.025),
+        ...rowAnchors('N24/', 2, .104, .286, .025, .05)
+      ], false);
+      A.scenes.servo2.proxyRoot.visible = false;
+    }, { authoredCoordinates: true });
+    addImported('mps', 'mps-complete-station.glb', null, [-.106, .79, -.102], [0, 0, 0], 1, ({ model }) => {
+      A.scenes.mps.parts.importedPlant = bindMpsImportedPlant(model);
+      const wrapper = model.parent;
+      registerEditorModule('mps', 'mps-station', wrapper, [
+        ...rowAnchors('INPUT/', 27, .045, .255, -.30, .30),
+        ...rowAnchors('OUTPUT/', 18, .078, .255, -.25, .25),
+        { id: 'P24', tag: 'P24', kind: 'electric', position: [-.025, .11, .255] },
+        { id: 'N24', tag: 'N24', kind: 'electric', position: [.025, .11, .255] }
+      ], false);
+      A.scenes.mps.proxyRoot.visible = false;
+    }, { authoredCoordinates: true });
+    loadWorkpieceTemplates();
+
+    // PneumaticWorld only contains an empty table and classroom scenery.  The
+    // useful equipment is authored as prefabs, so load those pieces directly.
+    A.scenes.pneumatic.proxyRoot.visible = false;
+    addImported('pneumatic', 'service-unit.glb', null, [-.48, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'service-unit', wrapper, [{ id: 'OUT', tag: 'Out', kind: 'air', position: [.072, .125, 0] }], true), { authoredCoordinates: true });
+    addImported('pneumatic', 'air-distributor.glb', null, [-.26, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'air-distributor', wrapper, [
+      { id: 'IN', tag: 'IN/PP', kind: 'air', position: [-.05, .035, 0] },
+      ...Array.from({ length: 8 }, (_, index) => ({ id: `P${index + 1}`, tag: `OUT/P${index + 1}`, kind: 'air', position: [.05, .015 + (index % 2) * .025, -.035 + Math.floor(index / 2) * .023] }))
+    ], true), { authoredCoordinates: true });
+    addImported('pneumatic', 'valve-5-2-double.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'valve-double', wrapper, [
+      { id: 'PP', tag: 'PP', kind: 'air', position: [0, .085, .033] }, { id: 'PA', tag: 'PA', kind: 'air', position: [-.04, .085, -.033] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.04, .085, -.033] },
+      { id: 'A-P24', tag: 'PA/P24', kind: 'electric', position: [-.073, .05, .02] }, { id: 'A-N24', tag: 'PA/N24', kind: 'electric', position: [-.073, .025, .02] },
+      { id: 'B-P24', tag: 'PB/P24', kind: 'electric', position: [.073, .05, .02] }, { id: 'B-N24', tag: 'PB/N24', kind: 'electric', position: [.073, .025, .02] }
+    ], true), { authoredCoordinates: true });
+    addImported('pneumatic', 'speed-controller.glb', null, [.12, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'speed-controller', wrapper, [{ id: 'IN', tag: 'IN', kind: 'air', position: [-.045, .04, 0] }, { id: 'OUT', tag: 'OUT', kind: 'air', position: [.045, .04, 0] }], true), { authoredCoordinates: true });
+    addImported('pneumatic', 'double-acting-cylinder.glb', null, [.4, .84, .08], [0, 0, 0], 1, ({ model, wrapper }) => {
+      const rod = findImportedNode(model, /(?:Rod|Piston|Shaft).*__go/i);
+      A.scenes.pneumatic.parts.importedCylinder = { wrapper, rod, base: rod?.position.clone() };
+      registerEditorModule('pneumatic', 'double-cylinder', wrapper, [{ id: 'PA', tag: 'PA', kind: 'air', position: [-.14, .045, .035] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.085, .045, .035] }], true);
+    }, { authoredCoordinates: true });
+  }
+
+  function installCameraControls() {
+    const canvas = A.renderer.domElement;
+    const raycaster = new Three.Raycaster(), pointer = new Three.Vector2();
+    const cameraScene = () => A.activeLab === 'palletizer3d' ? null : A.scenes[A.activeLab];
+    const pointerOnPlane = (event, scene, plane) => {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return null;
+      pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
+      raycaster.setFromCamera(pointer, scene.camera);
+      return raycaster.ray.intersectPlane(plane, new Three.Vector3());
+    };
+    canvas.addEventListener('pointerdown', event => {
+      const scene = cameraScene();
+      if (!scene || (event.button !== 2 && event.button !== 1)) return;
+      event.preventDefault();
+      if (event.button === 2) {
+        A.drag = { mode: 'orbit', pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: scene.orbit.yaw, pitch: scene.orbit.pitch };
+      } else {
+        scene.camera.updateMatrixWorld(true);
+        const forward = new Three.Vector3(); scene.camera.getWorldDirection(forward);
+        const planePoint = scene.camera.position.clone().addScaledVector(forward, 20);
+        const plane = new Three.Plane().setFromNormalAndCoplanarPoint(forward.clone().negate(), planePoint);
+        const hit = pointerOnPlane(event, scene, plane);
+        if (!hit) return;
+        A.drag = { mode: 'pan', pointerId: event.pointerId, plane, hit, target: scene.target.clone() };
+      }
+      canvas.setPointerCapture?.(event.pointerId);
+    });
+    canvas.addEventListener('pointermove', event => {
+      const scene = cameraScene();
+      if (!A.drag || !scene || A.drag.pointerId !== event.pointerId) return;
+      if (A.drag.mode === 'orbit') {
+        scene.orbit.yaw = wrapDegrees(A.drag.yaw + (event.clientX - A.drag.x) * .1);
+        scene.orbit.pitch = clamp(A.drag.pitch - (event.clientY - A.drag.y) * .1, -20, 89.999);
+      } else {
+        const hit = pointerOnPlane(event, scene, A.drag.plane);
+        if (!hit) return;
+        scene.target.copy(A.drag.target).add(A.drag.hit).sub(hit);
+      }
+      updateCamera(scene); schedule();
+    });
+    const end = event => { if (!A.drag || event.pointerId === A.drag.pointerId) A.drag = null; };
+    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('lostpointercapture', end);
+    canvas.addEventListener('contextmenu', event => event.preventDefault());
+    canvas.addEventListener('wheel', event => {
+      const scene = cameraScene();
+      if (!scene || isCameraUiTarget(event.target) || event.deltaY === 0) return;
+      event.preventDefault();
+      const step = event.deltaY < 0 ? 1 : -1;
+      const scaleCurve = Math.max(.0339661, .0339661 + (scene.orbit.scale - .450001) * .104327);
+      scene.orbit.scale = clamp(scene.orbit.scale - scaleCurve * step, .1, 7);
+      updateCameraProjection(scene); schedule();
+    }, { passive: false });
+    document.addEventListener('keydown', event => {
+      if (!A.visible || A.activeLab === 'palletizer3d' || isEditableTarget(event.target)) return;
+      const preset = event.code === 'Space' ? 'space' : event.key === 'F1' ? 'f1' : event.key === 'F2' ? 'f2' : null;
+      if (!preset) return;
+      event.preventDefault(); applyCameraPreset(A.scenes[A.activeLab], preset); schedule();
+    });
+  }
+
+  function isEditableTarget(target) { return !!target?.closest?.('input,textarea,select,button,[contenteditable]:not([contenteditable="false"])'); }
+  function isCameraUiTarget(target) { return isEditableTarget(target) || !!target?.closest?.('.al-side,.al-camera-presets'); }
+  function applyCameraPreset(scene, name) {
+    const preset = CAMERA_PRESETS[name];
+    if (!scene || !preset) return;
+    scene.target.set(...preset.focus); scene.orbit.pitch = preset.pitch; scene.orbit.yaw = preset.yaw; scene.orbit.scale = preset.scale;
+    updateCamera(scene);
+  }
+  function updateCameraProjection(scene) {
+    const size = scene.orbit.scale * .5, aspect = scene.aspect || 1, camera = scene.camera;
+    camera.left = -size * aspect; camera.right = size * aspect; camera.top = size; camera.bottom = -size; camera.updateProjectionMatrix();
+  }
+  function updateCamera(scene) {
+    const o = scene.orbit, t = scene.target, pitch = o.pitch * Math.PI / 180, yaw = o.yaw * Math.PI / 180;
+    const sp = Math.sin(pitch), cp = Math.cos(pitch), sy = Math.sin(yaw), cy = Math.cos(yaw);
+    const forward = new Three.Vector3(sy * cp, -sp, cy * cp);
+    scene.camera.position.copy(t).addScaledVector(forward, -CAMERA_DISTANCE);
+    scene.camera.up.set(sy * sp, cp, cy * sp); scene.camera.lookAt(t); updateCameraProjection(scene);
+  }
+
+  function bindUi() {
+    qa('[data-camera-preset]', A.hub).forEach(button => button.onclick = () => { applyCameraPreset(A.scenes[A.activeLab], button.dataset.cameraPreset); schedule(); });
+    qa('[data-editor-mode]', A.hub).forEach(button => button.onclick = () => {
+      const lab = button.closest('[data-editor-tools]')?.dataset.editorTools, editor = A.editors[lab];
+      if (editor?.setMode(button.dataset.editorMode)) { updateEditorUi(); schedule(); persist(true); }
+    });
+    document.addEventListener('keydown', event => {
+      if (!A.visible || A.activeLab === 'palletizer3d') return;
+      const editor = A.editors[A.activeLab]; if (editor?.handleHotkey(event)) { updateEditorUi(); schedule(); persist(true); }
+    });
+    q('#al-servo-profile', A.hub).onchange = event => { Servo.setProfile(A.state.labs.servo2, event.target.value); updateUi(true); persist(true); };
+    qa('[data-servo-action]', A.hub).forEach(button => button.onclick = () => {
+      const state = A.state.labs.servo2, action = button.dataset.servoAction;
+      if (action === 'servo') Servo.setServo(state, !Object.values(state.axes).every(axis => axis.servoOn));
+      if (action === 'home') { Servo.setServo(state, true); Servo.homeAll(state); }
+      if (action === 'stop') Servo.stopAll(state);
+      if (action === 'linear') { Servo.setServo(state, true); Servo.commandLinear(state, { X: q('#al-linear-x', A.hub).value, Y: q('#al-linear-y', A.hub).value }, { speed: q('#al-linear-speed', A.hub).value }); }
+      schedule(); updateUi(true); persist(true);
+    });
+    qa('[data-servo-move]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.servo2, axis = button.dataset.servoMove; Servo.setServo(state, axis, true); Servo.commandAxis(state, axis, q(`[data-servo-target="${axis}"]`, A.hub).value, { speed: 140 }); schedule(); updateUi(true); });
+    qa('[data-servo-jog]', A.hub).forEach(button => {
+      const [axis, direction] = button.dataset.servoJog.split(',');
+      button.addEventListener('pointerdown', event => { event.preventDefault(); const state = A.state.labs.servo2; Servo.setServo(state, axis, true); Servo.jogAxis(state, axis, Number(direction), 90); button.setPointerCapture?.(event.pointerId); schedule(); });
+      const stop = () => { const state = A.state.labs.servo2; if (state.axes[axis].mode === 'jog') Servo.stopAxis(state, axis); updateUi(true); persist(true); };
+      button.addEventListener('pointerup', stop); button.addEventListener('pointercancel', stop); button.addEventListener('lostpointercapture', stop);
+    });
+
+    q('#al-mps-profile', A.hub).onchange = event => { MPS.setProfile(A.state.labs.mps, event.target.value); updateUi(true); persist(true); };
+    qa('[data-mps-action]', A.hub).forEach(button => button.onclick = () => {
+      const state = A.state.labs.mps, action = button.dataset.mpsAction;
+      if (action === 'auto') MPS.startAuto(state);
+      if (action === 'outputs-off') MPS.setOutputs(state, Array(18).fill(false));
+      if (action === 'steel' || action === 'plastic') MPS.addWorkpiece(state, action);
+      if (action === 'reset') MPS.resetCell(state, { clearCounters: false });
+      if (action === 'clear') { for (const item of [...state.workpieces]) MPS.removeWorkpiece(state, item.id); }
+      schedule(); updateUi(true); persist(true);
+    });
+    qa('[data-mps-output-index]', A.hub).forEach(input => input.onchange = () => { MPS.setOutput(A.state.labs.mps, Number(input.dataset.mpsOutputIndex), input.checked); schedule(); updateUi(true); persist(); });
+    q('#al-mps-lift', A.hub).oninput = event => { MPS.setLiftServoTarget(A.state.labs.mps, Number(event.target.value) / 100); schedule(); updateUi(true); };
+
+    q('#al-pneu-profile', A.hub).onchange = event => { Pneumatic.setProfile(A.state.labs.pneumatic, event.target.value); updateUi(true); persist(true); };
+    qa('[data-pneu-action]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.pneumatic, action = button.dataset.pneuAction; if (action === 'supply') Pneumatic.setSupply(state, !state.source.on); if (action === 'auto') Pneumatic.startAuto(state); if (action === 'stop') Pneumatic.stopAuto(state); if (action === 'reset') Pneumatic.resetFaults(state); Pneumatic.tick(state, 0); schedule(); updateUi(true); persist(true); });
+    q('#al-pneu-valve', A.hub).onchange = event => { Pneumatic.setValveType(A.state.labs.pneumatic, event.target.value); updateUi(true); };
+    q('#al-pneu-reg', A.hub).onchange = event => { Pneumatic.setRegulator(A.state.labs.pneumatic, event.target.value); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
+    q('#al-pneu-throttle', A.hub).onchange = event => { Pneumatic.setThrottle(A.state.labs.pneumatic, 'extend', event.target.value); };
+    qa('[data-pneu-coil]', A.hub).forEach(input => input.onchange = () => { Pneumatic.setCoil(A.state.labs.pneumatic, input.dataset.pneuCoil, input.checked); Pneumatic.tick(A.state.labs.pneumatic, 0); schedule(); updateUi(true); });
+    q('#al-pneu-vacuum', A.hub).onchange = event => { Pneumatic.setVacuum(A.state.labs.pneumatic, event.target.checked); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
+    q('#al-pneu-part', A.hub).onchange = event => { A.state.labs.pneumatic.vacuum.partPresent = event.target.checked; Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
+    q('#al-pneu-leak', A.hub).oninput = event => { Pneumatic.setTubeLeak(A.state.labs.pneumatic, 'T03', event.target.value); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); schedule(); };
+    q('#al-equipment-select', A.hub).onchange = event => { void showEquipmentModel(event.target.value); };
+  }
+
+  function setLab(lab) {
+    if (!LABS.includes(lab)) lab = 'servo2';
+    A.activeLab = lab; A.state.activeLab = lab;
+    qa('.al-tab', A.hub).forEach(button => button.classList.toggle('active', button.dataset.lab === lab));
+    qa('.al-pane', A.hub).forEach(pane => pane.classList.toggle('active', pane.dataset.labPane === lab));
+    window.PLCTrainerPalletizer3D?.setVisible?.(A.visible && lab === 'palletizer3d');
+    A.host?.classList.toggle('show', A.visible);
+    if (lab !== 'palletizer3d' && A.renderer) {
+      const host = q(`[data-scene="${lab}"]`, A.hub); if (host && A.renderer.domElement.parentNode !== host) host.insertBefore(A.renderer.domElement, q('.al-scene-hint', host)); A.canvasHost = host; updateCamera(A.scenes[lab]); resize(); schedule();
+    }
+    if (lab === 'equipment3d' && A.equipmentCatalog.length && !A.scenes.equipment3d.parts.selectedModel) void showEquipmentModel(A.state.equipment.selected);
+    updateEditorUi(); updateUi(true); persist(true);
+  }
+
+  function updateServoScene() {
+    const state = A.state.labs.servo2, parts = A.scenes.servo2.parts;
+    parts.xCarriage.position.x = -4.05 + state.axes.X.current / 500 * 8.1; parts.yCarriage.position.z = 2.05 - state.axes.Y.current / 400 * 4.1;
+    const imported = parts.importedAxes;
+    if (imported?.axis1 && imported.axis1Base) {
+      const ratio = (state.axes.X.current - state.axes.X.min) / (state.axes.X.max - state.axes.X.min);
+      imported.axis1.position.x = imported.axis1Base.x - .21 + ratio * .345;
+    }
+    if (imported?.axis2 && imported.axis2Base) {
+      const ratio = (state.axes.Y.current - state.axes.Y.min) / (state.axes.Y.max - state.axes.Y.min);
+      imported.axis2.position.z = imported.axis2Base.z + .055 + ratio * .151;
+    }
+    setLed(parts.leds.X0, state.axes.X.reverseLimit); setLed(parts.leds.X1, state.axes.X.forwardLimit, 0xff5348); setLed(parts.leds.Y0, state.axes.Y.reverseLimit); setLed(parts.leds.Y1, state.axes.Y.forwardLimit, 0xff5348);
+  }
+
+  function clearDynamic(group) { while (group.children.length) { const item = group.children.pop(); item.geometry?.dispose?.(); item.material?.dispose?.(); } }
+  function updateMpsScene() {
+    const state = A.state.labs.mps, parts = A.scenes.mps.parts, group = parts.workpieces;
+    if (parts.workpieceTemplates) {
+      const live = new Set();
+      for (const item of state.workpieces) {
+        live.add(item.id); let model = parts.workpieceModels.get(item.id);
+        if (!model) { model = parts.workpieceTemplates[item.material === 'steel' ? 'steel' : 'plastic'].clone(true); group.add(model); parts.workpieceModels.set(item.id, model); }
+        if (item.heldByVacuum) {
+          model.position.set(-.2807 - state.actuators.unloading.position * .0453, .8874 + state.liftServo.position * .216, -.09);
+        } else {
+          model.position.set(-.055 - item.x / state.config.conveyor.length * .31, .925, -.09);
+        }
+        model.rotation.set(0, Math.PI / 2, 0);
+      }
+      for (const [id, model] of parts.workpieceModels) if (!live.has(id)) { group.remove(model); parts.workpieceModels.delete(id); }
+    } else {
+      clearDynamic(group);
+      for (const item of state.workpieces) { const x = -.055 - item.x / state.config.conveyor.length * .31, mat = material(item.material === 'steel' ? 0x9da9af : 0xf19a3d, item.material === 'steel' ? .75 : .05, .42); const mesh = cylinder(group, .0145, .02, [x, .925, -.09], mat, 'y'); mesh.scale.z = .9; }
+    }
+    const plant = parts.importedPlant;
+    if (plant) {
+      const setStroke = (binding, value) => { if (binding?.node) binding.node.position[binding.axis] = binding.start + (binding.end - binding.start) * value; };
+      setStroke(plant.supply, state.actuators.supply.position);
+      setStroke(plant.drill, state.actuators.drill.position);
+      setStroke(plant.distribution, state.actuators.distribution.position);
+      setStroke(plant.emission, state.actuators.emission.position);
+      setStroke(plant.stopper, state.actuators.stopper.position);
+      setStroke(plant.liftPneumatic, state.actuators.liftPneumatic.position);
+      setStroke(plant.unloading, state.actuators.unloading.position);
+      setStroke(plant.liftServo, state.liftServo.position);
+      const elapsedDelta = Math.max(0, state.elapsed - plant.lastElapsed); plant.lastElapsed = state.elapsed;
+      if (state.outputBits[13] && plant.drillRotor?.node) plant.drillAngle = (plant.drillAngle + elapsedDelta * Math.PI * 2) % (Math.PI * 2);
+      if (plant.drillRotor?.node) plant.drillRotor.node.rotation.z = plant.drillRotor.baseRotation.z - plant.drillAngle;
+      if (state.outputBits[14]) plant.beltOffset = ((plant.beltOffset || 0) + elapsedDelta) % 1;
+      for (const map of plant.beltMaps) map.offset.x = -(plant.beltOffset || 0);
+      for (let index = 0; index < 13; index += 1) setImportedLamp(plant.lamps[index], state.outputBits[index]);
+      setImportedLamp(plant.lamps[13], state.outputBits[15], 0xff382f);
+      setImportedLamp(plant.lamps[14], state.outputBits[16], 0xffc72f);
+      setImportedLamp(plant.lamps[15], state.outputBits[17], 0x36e978);
+    }
+  }
+
+  function updatePneumaticScene() {
+    const state = A.state.labs.pneumatic, parts = A.scenes.pneumatic.parts; parts.rod.position.x = parts.rodBaseX + state.cylinder.position * 1.4; setLed(parts.coilLeds[0], state.valve.coilA); setLed(parts.coilLeds[1], state.valve.coilB, 0xffb637); setLed(parts.gauge, state.service.outputBar >= 3, 0x4ad7ff); setLed(parts.vacuum, state.vacuum.holding, 0x7bf2c3);
+    if (parts.importedCylinder?.rod && parts.importedCylinder.base) parts.importedCylinder.rod.position.x = parts.importedCylinder.base.x + state.cylinder.position * .18;
+    const leak = state.tubes.find(tube => tube.id === 'T03')?.leak || 0; parts.tubes.forEach((tube, index) => { tube.material.opacity = index === 0 ? .82 : .82 * (1 - leak * .7); });
+  }
+
+  function updateScenes() { updateServoScene(); updateMpsScene(); updatePneumaticScene(); }
+
+  function updateUi(force = false) {
+    if (!A.hub) return; const now = performance.now(); if (!force && now - A.lastUi < 90) return; A.lastUi = now;
+    const servo = A.state.labs.servo2, servoBusy = Object.values(servo.axes).some(axis => axis.busy), servoFault = Object.values(servo.axes).some(axis => axis.alarm); const servoStatus = q('#al-servo-status', A.hub); q('b', servoStatus).textContent = servoFault ? '서보 알람' : servoBusy ? '위치결정 운전' : '서보 대기'; q('span', servoStatus).textContent = servo.linear.active ? 'LINEAR' : servoFault ? 'FAULT' : servoBusy ? 'BUSY' : 'READY'; servoStatus.classList.toggle('fault', servoFault); q('#al-servo-profile', A.hub).value = servo.profileId;
+    for (const name of ['X', 'Y']) { const axis = servo.axes[name]; q(`[data-servo-pos="${name}"]`, A.hub).textContent = `${axis.current.toFixed(2)} mm`; q(`[data-servo-flags="${name}"]`, A.hub).textContent = axis.alarm ? axis.alarm.code : [axis.servoOn ? 'SV ON' : 'SV OFF', axis.homed ? 'HOME' : 'NO HOME', axis.busy ? 'BUSY' : 'READY', axis.dog ? 'DOG' : ''].filter(Boolean).join(' · '); }
+    const allServo = Object.values(servo.axes).every(axis => axis.servoOn), servoButton = q('[data-servo-action="servo"]', A.hub); servoButton.textContent = allServo ? 'SERVO OFF' : 'SERVO ON'; servoButton.classList.toggle('on', allServo);
+    const sp = Servo.getProfile(servo), memoryRows = [['ON X', sp.commands.servoOn.X, Servo.readDevice(servo, sp.status.servoReady.X)], ['ON Y', sp.commands.servoOn.Y, Servo.readDevice(servo, sp.status.servoReady.Y)], ['X 목표', sp.data.target.X, Servo.readDevice(servo, sp.data.target.X)], ['Y 목표', sp.data.target.Y, Servo.readDevice(servo, sp.data.target.Y)], ['직선보간', sp.commands.linear, Servo.readDevice(servo, sp.status.linearBusy)]]; q('#al-servo-memory', A.hub).innerHTML = memoryRows.map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] === true ? 'ON' : row[2] === false ? 'OFF' : Number(row[2] || 0).toFixed(1)}</td></tr>`).join('');
+
+    const mps = A.state.labs.mps; MPS.updateInputs(mps); const mpsStatus = q('#al-mps-status', A.hub), activeOutputs = mps.outputBits.filter(Boolean).length, activeInputs = mps.inputBits.filter(Boolean).length; q('b', mpsStatus).textContent = mps.auto.running ? '외부 PLC 출력 제어' : 'PLC 출력 대기'; q('span', mpsStatus).textContent = `${activeOutputs} OUT · ${activeInputs} IN · ${mps.workpieces.length} EA`; mpsStatus.classList.toggle('fault', !!mps.fault); q('#al-mps-profile', A.hub).value = mps.profileId;
+    qa('[data-mps-output-index]', A.hub).forEach(input => { input.checked = !!mps.outputBits[Number(input.dataset.mpsOutputIndex)]; });
+    qa('[data-mps-input-index]', A.hub).forEach(item => item.classList.toggle('on', !!mps.inputBits[Number(item.dataset.mpsInputIndex)]));
+    const liftValue = Math.round(mps.liftServo.target * 100); q('#al-mps-lift', A.hub).value = liftValue; q('#al-mps-lift-value', A.hub).textContent = `${Math.round(mps.liftServo.position * 100)}%`;
+    q('#al-mps-log', A.hub).innerHTML = mps.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
+
+    const pneu = A.state.labs.pneumatic, pneuStatus = q('#al-pneu-status', A.hub); q('b', pneuStatus).textContent = pneu.faults[0]?.message || pneu.auto.message; q('span', pneuStatus).textContent = `${pneu.auto.state} · ${pneu.valve.spool.toUpperCase()}`; pneuStatus.classList.toggle('fault', !!pneu.faults.length); q('#al-pneu-profile', A.hub).value = pneu.profileId; q('#al-pneu-valve', A.hub).value = pneu.valve.type; q('#al-pneu-reg', A.hub).value = pneu.service.regulatorBar; q('#al-pneu-throttle', A.hub).value = pneu.cylinder.throttleExtend;
+    const airButton = q('[data-pneu-action="supply"]', A.hub); airButton.textContent = pneu.source.on ? 'AIR OFF' : 'AIR ON'; airButton.classList.toggle('on', pneu.source.on); qa('[data-pneu-coil]', A.hub).forEach(input => { input.checked = !!pneu.valve[`coil${input.dataset.pneuCoil}`]; }); q('#al-pneu-vacuum', A.hub).checked = pneu.vacuum.command; q('#al-pneu-part', A.hub).checked = pneu.vacuum.partPresent;
+    q('[data-pneu-gauge="input"]', A.hub).textContent = pneu.service.inputBar.toFixed(1); q('[data-pneu-gauge="output"]', A.hub).textContent = pneu.service.outputBar.toFixed(1); q('[data-pneu-gauge="vacuum"]', A.hub).textContent = pneu.vacuum.pressureBar.toFixed(1); q('#al-pneu-stroke', A.hub).style.width = `${pneu.cylinder.position * 100}%`;
+    const leak = pneu.tubes.find(tube => tube.id === 'T03')?.leak || 0; q('#al-pneu-leak', A.hub).value = leak; q('#al-pneu-leak-label', A.hub).textContent = `${Math.round(leak * 100)}%`; const pneuSensors = { retracted: pneu.cylinder.retracted, extended: pneu.cylinder.extended, vacuum: pneu.vacuum.holding, fault: !!pneu.faults.length }; qa('[data-pneu-sensor]', A.hub).forEach(item => item.classList.toggle('on', !!pneuSensors[item.dataset.pneuSensor])); q('#al-pneu-log', A.hub).innerHTML = pneu.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
+  }
+
+  function mpsPlantMoving(mps) {
+    if (mps.outputBits[13] || mps.outputBits[14] || mps.liftServo.moving) return true;
+    return Object.values(mps.actuators).some(axis => (axis.lastDirection > 0 && axis.position < 1) || (axis.lastDirection < 0 && axis.position > 0));
+  }
+  function hasMotion() { const servo = A.state.labs.servo2, mps = A.state.labs.mps, pneu = A.state.labs.pneumatic; return Object.values(servo.axes).some(axis => axis.busy) || servo.linear.active || mpsPlantMoving(mps) || pneu.auto.running || (pneu.source.on && (pneu.valve.coilA || pneu.valve.coilB || !pneu.cylinder.retracted)); }
+  function animate(timestamp) {
+    A.raf = 0; if (!A.initialized) return; if (!A.lastTime) A.lastTime = timestamp; const dt = Math.min(.05, Math.max(0, (timestamp - A.lastTime) / 1000)); A.lastTime = timestamp;
+    const servo = A.state.labs.servo2, mps = A.state.labs.mps, pneu = A.state.labs.pneumatic; if (Object.values(servo.axes).some(axis => axis.busy) || servo.linear.active) Servo.tick(servo, dt); if (mpsPlantMoving(mps) || mps.auto.running) MPS.tick(mps, dt); if (pneu.auto.running || pneu.source.on) Pneumatic.tick(pneu, dt);
+    updateScenes(); updateUi(); persist(); if (A.visible && A.activeLab !== 'palletizer3d' && A.renderer) { const scene = A.scenes[A.activeLab]; A.renderer.render(scene.scene, scene.camera); }
+    if (hasMotion()) schedule();
+  }
+  function schedule() { if (!A.raf) A.raf = requestAnimationFrame(animate); }
+  function resize() { if (!A.renderer || !A.canvasHost) return; const rect = A.canvasHost.getBoundingClientRect(); if (rect.width < 20 || rect.height < 20) return; A.renderer.setSize(rect.width, rect.height, false); const scene = A.scenes[A.activeLab]; if (scene) { scene.aspect = rect.width / rect.height; updateCameraProjection(scene); } }
+  function setVisible(visible) { A.visible = !!visible; if (!A.initialized) return; A.lastTime = 0; A.host?.classList.toggle('show', A.visible); window.PLCTrainerPalletizer3D?.setVisible?.(A.visible && A.activeLab === 'palletizer3d'); if (A.visible) { setLab(A.activeLab); resize(); schedule(); } else persist(true); }
+  function renderActive() { if (!A.initialized) return; updateScenes(); updateUi(true); if (A.visible) schedule(); }
+  function getEditor(lab = A.activeLab) { return A.editors[lab] || null; }
+  function getSceneDiagnostics() {
+    const plant = A.scenes.mps?.parts?.importedPlant;
+    return {
+      activeLab: A.activeLab,
+      editors: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, { mode: editor.mode, modules: editor.modules.size, connections: editor.connections.size }])),
+      mps: plant ? {
+        supplyZ: plant.supply?.node?.position.z,
+        drillZ: plant.drill?.node?.position.z,
+        distributionZ: plant.distribution?.node?.position.z,
+        stopperY: plant.stopper?.node?.position.y,
+        liftY: plant.liftServo?.node?.position.y,
+        unloadingX: plant.unloading?.node?.position.x
+      } : null,
+      equipment3d: {
+        catalogCount: A.equipmentCatalog.length,
+        selected: A.scenes.equipment3d?.parts?.selectedEntry?.file || A.state?.equipment?.selected || null,
+        loaded: A.scenes.equipment3d?.parts?.selectedModel?.name || null
+      }
+    };
+  }
+
+  function importState(saved) {
+    if (!saved || typeof saved !== 'object') return;
+    A.state = { schemaVersion: 1, activeLab: LABS.includes(saved.activeLab) ? saved.activeLab : 'servo2', labs: { servo2: Servo.createState({ saved: saved.labs?.servo2 }), mps: MPS.createState({ saved: saved.labs?.mps }), pneumatic: Pneumatic.createState({ saved: saved.labs?.pneumatic }) }, editor: saved.editor || null, equipment: { selected: typeof saved.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' } };
+    for (const [lab, editor] of Object.entries(A.editors)) if (saved.editor?.[lab]) { try { editor.importState(saved.editor[lab], { strict: false }); } catch (error) { console.warn(`Editor state for ${lab} could not be restored`, error); } }
+    A.activeLab = A.state.activeLab; setLab(A.activeLab); updateScenes(); updateUi(true); if (A.equipmentCatalog.length) void showEquipmentModel(A.state.equipment.selected); persist(true);
+  }
+
+  function init() {
+    injectCss(); A.state = loadSaved(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
+  }
+
+  window.PLCTrainerAutomationLabs = { version: '2.8.0', setVisible, setLab, renderActive, resize, exportState, importState, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
+  init();
+})();
