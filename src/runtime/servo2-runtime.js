@@ -887,11 +887,13 @@
   function setProfile(state, profileName) {
     const profileId = resolveProfile(profileName);
     if (!profileId) return false;
+    if (profileId === state.profileId) return true;
     stopAll(state);
+    setServo(state, false);
     state.profileId = profileId;
     state.profile = profileId;
     initializeMemory(state);
-    addEvent(state, 'profile', `${getProfile(state).vendor} ${getProfile(state).module} 프로필 선택`);
+    addEvent(state, 'profile', `${getProfile(state).vendor} ${getProfile(state).module} 프로필 선택 · 이전 출력 안전 해제`);
     return true;
   }
 
@@ -919,15 +921,15 @@
       const source = saved.axes?.[name];
       if (!source) continue;
       const restored = createAxis(name, source);
-      restored.servoOn = !!source.servoOn;
+      restored.servoOn = false;
       restored.homed = !!source.homed;
       restored.alarm = source.alarm ? clone(source.alarm) : null;
-      restored.target = clamp(finite(source.target, restored.current), restored.min, restored.max);
+      restored.target = restored.current;
       restored.mode = 'idle';
       restored.velocity = 0;
       restored.jog = restored.jogDirection = 0;
       restored.busy = false;
-      restored.inPosition = Math.abs(restored.target - restored.current) <= restored.tolerance;
+      restored.inPosition = false;
       state.axes[name] = restored;
     }
     state.pointTable = {};

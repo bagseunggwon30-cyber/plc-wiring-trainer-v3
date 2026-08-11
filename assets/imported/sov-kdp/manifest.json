@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sourceProduct": "SoV-KDP 1.1.9K",
   "sourceUnityVersion": "2021.3.20f1",
-  "extractedAt": "2026-08-11T11:59:13.666314+00:00",
+  "extractedAt": "2026-08-11T12:39:13.600914+00:00",
   "sourceDirectoryName": "SoV-KDP 1.1.9K",
   "policy": "selective-assets-only",
   "excluded": [
@@ -9063,6 +9063,285 @@
           "source_path_id": 10206,
           "source_game_object_path_id": 1346,
           "material": "[MPS]WhitePP",
+          "texture": null
+        }
+      ]
+    },
+    {
+      "file": "counter-box.glb",
+      "root": "PF_COUNT_BOX",
+      "sourceGameObjectPathId": 1079,
+      "transformNodeCount": 23,
+      "embeddedTextureFormat": "webp",
+      "embeddedTextureTransport": "data-uri",
+      "embeddedTextureMaxSize": 2048,
+      "nodeCount": 22,
+      "triangleCount": 6746,
+      "bounds": [
+        [
+          -0.065,
+          -0.0,
+          -0.0835
+        ],
+        [
+          0.065,
+          0.08886,
+          0.0835
+        ]
+      ],
+      "bytes": 324648,
+      "sha256": "245594d2e3708c2b5a0fd9f99152eea572e0434bb0e0e87b281349ccdc15c8c4",
+      "nodes": [
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "ModuleBox",
+          "texture": null
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "SocketBlue",
+          "texture": "SocketBlue"
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "SocketBlack",
+          "texture": "SocketBlack"
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "SocketRed",
+          "texture": "SocketRed"
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "MetalBase_Material",
+          "texture": null
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "Display_Cover_Material",
+          "texture": null
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "Black_Plastic_Material",
+          "texture": null
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "Digital Counter Unit_Sticker_Material",
+          "texture": "Digital Counter Unit_Sticker"
+        },
+        {
+          "name": "Digital Counter Unit_OP",
+          "mesh_name": "ModuleCaseBase",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 427,
+          "source_game_object_path_id": 1045,
+          "material": "Digital Counter Unit_Material",
+          "texture": "Digital Counter Unit_Texture"
+        },
+        {
+          "name": "Reduce_Include_Switch",
+          "mesh_name": "AST1B81164-DC_Brep",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 685,
+          "source_game_object_path_id": 1111,
+          "material": "MetalBase_Material",
+          "texture": null
+        },
+        {
+          "name": "Signal InputLED",
+          "mesh_name": "Sphere",
+          "source_file": "unity default resources",
+          "source_path_id": 10207,
+          "source_game_object_path_id": 1150,
+          "material": "LedRed",
+          "texture": null
+        },
+        {
+          "name": "Reset Input LED",
+          "mesh_name": "Sphere",
+          "source_file": "unity default resources",
+          "source_path_id": 10207,
+          "source_game_object_path_id": 1078,
+          "material": "LedRed",
+          "texture": null
+        },
+        {
+          "name": "Reduce LED",
+          "mesh_name": "Sphere",
+          "source_file": "unity default resources",
+          "source_path_id": 10207,
+          "source_game_object_path_id": 876,
+          "material": "LedRed",
+          "texture": null
+        },
+        {
+          "name": "Include LED",
+          "mesh_name": "Sphere",
+          "source_file": "unity default resources",
+          "source_path_id": 10207,
+          "source_game_object_path_id": 1009,
+          "material": "LedRed",
+          "texture": null
+        },
+        {
+          "name": "M1000",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1062,
+          "material": "DigitalSwitch_Minus",
+          "texture": "DigitalSwitch_Minus"
+        },
+        {
+          "name": "P1000",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1061,
+          "material": "DigitalSwitch_Plus",
+          "texture": "DigitalSwitch_Plus"
+        },
+        {
+          "name": "M100",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1052,
+          "material": "DigitalSwitch_Minus",
+          "texture": "DigitalSwitch_Minus"
+        },
+        {
+          "name": "P100",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1054,
+          "material": "DigitalSwitch_Plus",
+          "texture": "DigitalSwitch_Plus"
+        },
+        {
+          "name": "M10",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1056,
+          "material": "DigitalSwitch_Minus",
+          "texture": "DigitalSwitch_Minus"
+        },
+        {
+          "name": "P10",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1055,
+          "material": "DigitalSwitch_Plus",
+          "texture": "DigitalSwitch_Plus"
+        },
+        {
+          "name": "M1",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1057,
+          "material": "DigitalSwitch_Minus",
+          "texture": "DigitalSwitch_Minus"
+        },
+        {
+          "name": "P1",
+          "mesh_name": "Cube",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 459,
+          "source_game_object_path_id": 1060,
+          "material": "DigitalSwitch_Plus",
+          "texture": "DigitalSwitch_Plus"
+        }
+      ]
+    },
+    {
+      "file": "sscnetiii-amp-head.glb",
+      "root": "SSCNETIII_AMP_HEAD",
+      "sourceGameObjectPathId": 1076,
+      "transformNodeCount": 4,
+      "embeddedTextureFormat": "webp",
+      "embeddedTextureTransport": "none",
+      "embeddedTextureMaxSize": 2048,
+      "nodeCount": 3,
+      "triangleCount": 772,
+      "bounds": [
+        [
+          -0.01025,
+          -0.009,
+          -0.0055
+        ],
+        [
+          0.01025,
+          0.0502,
+          0.004
+        ]
+      ],
+      "bytes": 23920,
+      "sha256": "6bd2a95b56036dd43072c85755e08c8f359285d0782948de5222c47073b45211",
+      "nodes": [
+        {
+          "name": "SSCNETIII_AMP_HEAD",
+          "mesh_name": "ASTAD7E3020-DC_Brep",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 510,
+          "source_game_object_path_id": 1076,
+          "material": "Black_Plastic_Material",
+          "texture": null
+        },
+        {
+          "name": "IN",
+          "mesh_name": "Optical_Cable_AmpR",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 590,
+          "source_game_object_path_id": 1073,
+          "material": "Black",
+          "texture": null
+        },
+        {
+          "name": "OUT",
+          "mesh_name": "Optical_Cable_AmpL",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 589,
+          "source_game_object_path_id": 1023,
+          "material": "Black",
           "texture": null
         }
       ]

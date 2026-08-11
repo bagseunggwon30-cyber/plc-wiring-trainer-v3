@@ -209,7 +209,8 @@ test('export/import round-trips physical state while leaving the deprecated auto
 
   const restored = Runtime.createState({ saved });
   assert.equal(restored.profileId, 'mitsubishi');
-  assert.deepEqual(restored.outputBits, state.outputBits);
+  assert.equal(restored.outputBits.every(value => value === false), true);
+  assert.equal(Object.values(restored.actuators).every(axis => axis.lastDirection === 0), true);
   close(restored.actuators.supply.position, state.actuators.supply.position);
   close(restored.liftServo.position, 0.5);
   close(restored.workpieces[0].x, state.workpieces[0].x);

@@ -771,6 +771,14 @@
     state.auto.message = reason;
     state.mode = 'manual';
     state.outputBits.fill(false);
+    for (const axis of Object.values(state.actuators)) {
+      axis.direction = 0;
+      axis.lastDirection = 0;
+      axis.moving = false;
+    }
+    state.liftServo.target = state.liftServo.position;
+    state.liftServo.direction = 0;
+    state.liftServo.moving = false;
     syncOutputView(state);
     updateVacuum(state);
     updateInputs(state);
@@ -919,10 +927,12 @@
   function setProfile(state, profileName) {
     const profileId = resolveProfile(profileName);
     if (!profileId) return false;
+    if (profileId === state.profileId) return true;
+    stopAuto(state, 'PLC 제조사 프로필 전환 · 출력 전체 OFF');
     state.profileId = profileId;
     state.profile = profileId;
     initializeMemory(state);
-    addEvent(state, 'profile', `${getProfile(state).vendor} 내부 학습 주소 선택`);
+    addEvent(state, 'profile', `${getProfile(state).vendor} 내부 학습 주소 선택 · 이전 주소 격리`);
     return true;
   }
 
@@ -958,14 +968,6 @@
     state.config = createConfig({ config: saved.config || state.config });
     state.elapsed = Math.max(0, finite(saved.elapsed, 0));
     state.outputBits = Array(OUTPUT_DEFINITIONS.length).fill(false);
-    if (Array.isArray(saved.outputBits)) {
-      for (let index = 0; index < state.outputBits.length; index += 1) state.outputBits[index] = !!saved.outputBits[index];
-    } else if (saved.outputs && typeof saved.outputs === 'object') {
-      for (const definition of OUTPUT_DEFINITIONS) {
-        const source = saved.outputs[definition.address] ?? saved.outputs[definition.key];
-        if (source !== undefined) state.outputBits[definition.index] = !!source;
-      }
-    }
     syncOutputView(state);
 
     for (const [name, definition] of Object.entries(AXIS_DEFINITIONS)) {
@@ -973,8 +975,8 @@
       const axis = state.actuators[name] || createAxis(name, definition);
       axis.position = axis.t = clamp(finite(source?.position ?? source?.t, 0), 0, 1);
       axis.rate = definition.rate;
-      axis.direction = [-1, 0, 1].includes(source?.direction) ? source.direction : 0;
-      axis.lastDirection = [-1, 0, 1].includes(source?.lastDirection) ? source.lastDirection : 0;
+      axis.direction = 0;
+      axis.lastDirection = 0;
       axis.moving = false;
       axis.forwardLimit = axis.position >= 1 - EPS;
       axis.reverseLimit = axis.position <= EPS;
@@ -984,7 +986,7 @@
     state.liftServo = {
       position: servoPosition,
       t: servoPosition,
-      target: clamp(finite(saved.liftServo?.target, servoPosition), 0, 1),
+      target: servoPosition,
       speed: Math.max(0.001, finite(saved.liftServo?.speed, state.config.liftServo.speed)),
       moving: false,
       direction: 0
@@ -1005,9 +1007,9 @@
           position: x,
           travel: x,
           length: clamp(finite(source.length, state.config.workpiece.length), 0.005, 0.15),
-          state: source.state === 'vacuum-held' ? 'vacuum-held' : 'on-conveyor',
+          state: 'on-conveyor',
           blocked: !!source.blocked,
-          heldByVacuum: !!source.heldByVacuum,
+          heldByVacuum: false,
           countedExit: !!source.countedExit,
           createdAt: Math.max(0, finite(source.createdAt, 0))
         });

@@ -50,6 +50,7 @@
       #p3-state b{font-size:12px}#p3-state span{color:#81caee;font:10px Consolas,monospace;text-align:right}
       .p3-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}.p3-actions button,.p3-btn{border:1px solid #476173;border-radius:4px;background:#253846;color:#e8f2f8;padding:7px 5px;cursor:pointer;font-size:10px}
       .p3-actions button:hover,.p3-btn:hover{background:#31546b;border-color:#69a6ca}.p3-actions .run{background:#17613f;border-color:#2c9666}.p3-actions .stop{background:#7a342d;border-color:#b55a4f}
+      .p3-profile{display:grid;grid-template-columns:76px 1fr;gap:7px;align-items:center;margin-bottom:8px;color:#8ba7b7;font-size:9px}.p3-profile select{width:100%;box-sizing:border-box;border:1px solid #38505f;border-radius:3px;background:#071017;color:#dcebf3;padding:5px;font:9px 'Malgun Gothic',sans-serif}
       .p3-axis{display:grid;grid-template-columns:22px 1fr auto;gap:6px;align-items:center;margin:5px 0;padding:6px;border-radius:4px;background:#0d171e}
       .p3-axis>strong{font:700 13px Consolas;color:#69c9f5}.p3-axis-main{min-width:0}.p3-axis-value{font:700 12px Consolas;color:#fff}.p3-axis-flags{margin-top:2px;color:#7793a4;font:8px Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .p3-jog{display:grid;grid-template-columns:28px 28px;gap:3px}.p3-jog button{height:27px;border:1px solid #405968;background:#21313c;color:#fff;border-radius:3px;cursor:pointer;font:bold 12px Consolas}
@@ -67,7 +68,7 @@
     P.host.innerHTML=`<div id="p3-root">
       <div id="p3-scene"><div id="p3-scene-badge"><b>3축 팔레타이징 셀</b><span>OFFLINE DIGITAL TWIN</span></div><div id="p3-camera-hint">Alt+가운데 드래그: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소</div></div>
       <aside id="p3-side">
-        <section class="p3-section"><div id="p3-state"><b>대기</b><span>IDLE</span></div><div class="p3-actions">
+        <section class="p3-section"><div id="p3-state"><b>대기</b><span>IDLE</span></div><label class="p3-profile">PLC 선택<select id="p3-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU / MELSOFT</option></select></label><div class="p3-actions">
           <button class="run" data-action="auto">▶ 자동 시작</button><button class="stop" data-action="stop">■ 정지</button>
           <button data-action="home">⌂ 전축 원점</button><button data-action="alarm-reset">↺ 알람 리셋</button>
           <button data-action="servo">SERVO ON</button><button data-action="clear">팔레트 비우기</button>
@@ -75,7 +76,7 @@
         <section class="p3-section"><h3>축 수동 운전 <small>mm · 누르는 동안 JOG</small></h3>${['X','Y','Z'].map(axis=>`
           <div class="p3-axis" data-axis-card="${axis}"><strong>${axis}</strong><div class="p3-axis-main"><div class="p3-axis-value" data-axis-value="${axis}">0.00</div><div class="p3-axis-flags" data-axis-flags="${axis}">SERVO OFF</div><div class="p3-target"><input data-axis-target="${axis}" type="number" step="1" value="${axis==='Z'?238:axis==='X'?74:62}"><button data-axis-move="${axis}">ABS</button></div></div><div class="p3-jog"><button data-jog="${axis},-1">−</button><button data-jog="${axis},1">＋</button></div></div>`).join('')}</section>
         <section class="p3-section"><h3>팔레트 패턴</h3><div class="p3-grid"><label>행<input id="p3-rows" type="number" min="1" max="8" value="3"></label><label>열<input id="p3-cols" type="number" min="1" max="8" value="3"></label><label>단<input id="p3-layers" type="number" min="1" max="5" value="1"></label></div><button class="p3-btn" data-action="pattern" style="width:100%;margin-top:6px">패턴 적용 · 현재 제품 초기화</button></section>
-        <section class="p3-section"><h3>XG5000 주소 이미지 <small>내부 메모리 시뮬레이션</small></h3><small>실제 PLC에는 쓰지 않습니다. D100/102/104 목표값과 M140/141/142 위치결정 비트로 시험할 수 있습니다.</small><div class="p3-write"><input id="p3-address" value="M100"><input id="p3-value" value="1"><button id="p3-write">쓰기</button></div><table id="p3-memory"><thead><tr><th>주소</th><th>의미</th><th>값</th></tr></thead><tbody></tbody></table><div id="p3-log"></div></section>
+        <section class="p3-section"><h3 id="p3-address-title">선택 PLC 주소 이미지 <small>내부 메모리 시뮬레이션</small></h3><small id="p3-profile-note">실제 PLC에는 쓰지 않습니다. 선택한 한 제조사의 교육용 기본 주소만 활성화됩니다.</small><div class="p3-write"><input id="p3-address" value="M100" aria-label="선택 PLC 주소"><input id="p3-value" value="1" aria-label="쓰기 값"><button id="p3-write">쓰기</button></div><table id="p3-memory"><thead><tr><th>주소</th><th>의미</th><th>값</th></tr></thead><tbody></tbody></table><div id="p3-log"></div></section>
       </aside></div>`;
     P.sceneHost=q('#p3-scene',P.host);return true;
   }
@@ -238,20 +239,24 @@
     rebuildPallet();rebuildPlaced();
   }
 
-  const memoryRows=[
-    ['M100','자동 시작'],['M101','정지'],['M110','원점복귀'],['M130','전축 서보'],
-    ['D100','X 목표 mm'],['D102','Y 목표 mm'],['D104','Z 목표 mm'],['D110','속도 mm/s'],
-    ['M200','자동 운전'],['M201','완료'],['M202','알람'],['M210','X BUSY'],['M211','Y BUSY'],['M212','Z BUSY'],
-    ['M220','X 원점'],['M221','Y 원점'],['M222','Z 원점'],['M240','그리퍼'],['M241','제품 파지'],
-    ['D200','X 현재'],['D202','Y 현재'],['D204','Z 현재'],['D210','적재 수'],['D211','스텝']
-  ];
+  function memoryRows(){
+    const p=Runtime.getProfile(P.state),c=p.commands,d=p.setpoints,s=p.status,a=p.actual;
+    return [
+      [c.autoStart,'자동 시작'],[c.stop,'정지'],[c.home,'원점복귀'],[c.servoOn,'전축 서보'],
+      [d.x,'X 목표 mm'],[d.y,'Y 목표 mm'],[d.z,'Z 목표 mm'],[d.speed,'속도 mm/s'],
+      [s.autoRunning,'자동 운전'],[s.autoComplete,'완료'],[s.fault,'알람'],[s.xBusy,'X BUSY'],[s.yBusy,'Y BUSY'],[s.zBusy,'Z BUSY'],
+      [s.xHomed,'X 원점'],[s.yHomed,'Y 원점'],[s.zHomed,'Z 원점'],[s.gripperClosed,'그리퍼'],[s.holding,'제품 파지'],
+      [a.x,'X 현재'],[a.y,'Y 현재'],[a.z,'Z 현재'],[a.placed,'적재 수'],[a.step,'스텝']
+    ];
+  }
   function buildMemoryTable(){
-    const body=q('#p3-memory tbody',P.host);body.innerHTML=memoryRows.map(([addr,label])=>`<tr><td>${addr}</td><td>${label}</td><td data-memory="${addr}">0</td></tr>`).join('');
+    const body=q('#p3-memory tbody',P.host);body.innerHTML=memoryRows().map(([addr,label])=>`<tr><td>${addr}</td><td>${label}</td><td data-memory="${addr}">0</td></tr>`).join('');
   }
   function updateUi(force=false){
     if(!P.host)return;const now=performance.now();if(!force&&now-P.lastUi<100)return;P.lastUi=now;
-    const state=P.state,auto=state.auto,hasAlarm=auto.state==='FAULT'||Object.values(state.axes).some(a=>a.alarm);
-    const stateBox=q('#p3-state',P.host);q('b',stateBox).textContent=auto.message||'대기';q('span',stateBox).textContent=`${auto.state} · ${state.pallet.placed.length}/${Runtime.palletCapacity(state)}`;stateBox.classList.toggle('p3-alarm',hasAlarm);
+    const state=P.state,auto=state.auto,profile=Runtime.getProfile(state),hasAlarm=auto.state==='FAULT'||Object.values(state.axes).some(a=>a.alarm);
+    const stateBox=q('#p3-state',P.host);q('b',stateBox).textContent=auto.message||'대기';q('span',stateBox).textContent=`${profile.id==='ls'?'LS':'MELSEC'} · ${auto.state} · ${state.pallet.placed.length}/${Runtime.palletCapacity(state)}`;stateBox.classList.toggle('p3-alarm',hasAlarm);
+    q('#p3-profile',P.host).value=profile.id;q('#p3-address-title',P.host).firstChild.textContent=`${profile.vendor} 주소 이미지 `;q('#p3-profile-note',P.host).textContent=`${profile.family} 교육용 기본 맵 · ${profile.addressStyle} · 실제 PLC 전송 없음`;
     for(const name of ['X','Y','Z']){
       const axis=state.axes[name],value=q(`[data-axis-value="${name}"]`,P.host),flags=q(`[data-axis-flags="${name}"]`,P.host);
       value.textContent=`${axis.position.toFixed(2)} mm`;value.classList.toggle('p3-alarm',!!axis.alarm);
@@ -259,26 +264,29 @@
     }
     const servoButton=q('[data-action="servo"]',P.host),allServo=Object.values(state.axes).every(axis=>axis.servoOn);
     servoButton.textContent=allServo?'SERVO OFF':'SERVO ON';servoButton.classList.toggle('p3-on',allServo);
-    for(const [addr] of memoryRows){const cell=q(`[data-memory="${addr}"]`,P.host);if(!cell)continue;const value=Runtime.readDevice(state,addr);cell.textContent=typeof value==='boolean'?(value?'ON':'OFF'):Number(value).toFixed(addr.startsWith('D2')&&addr!=='D210'&&addr!=='D211'?2:0);cell.classList.toggle('p3-on',value===true);cell.classList.toggle('p3-alarm',addr==='M202'&&value===true);}
+    for(const [addr,label] of memoryRows()){const cell=q(`[data-memory="${addr}"]`,P.host);if(!cell)continue;const value=Runtime.readDevice(state,addr);cell.textContent=typeof value==='boolean'?(value?'ON':'OFF'):Number(value).toFixed(/현재/.test(label)?2:0);cell.classList.toggle('p3-on',value===true);cell.classList.toggle('p3-alarm',addr===profile.status.fault&&value===true);}
     const events=state.events.slice(-7).reverse();q('#p3-log',P.host).innerHTML=events.map(event=>`<div class="${event.type==='alarm'?'p3-alarm':''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
   }
 
-  function manualStop(){if(P.state.auto.running)Runtime.stopAll(P.state,'수동 운전 전환');}
+  function activeProfile(){return Runtime.getProfile(P.state);}
+  function manualStop(){if(P.state.auto.running)Runtime.writeDevice(P.state,activeProfile().commands.stop,true);}
   function bindUi(){
-    q('[data-action="auto"]',P.host).onclick=()=>{Runtime.startAuto(P.state);schedule();updateUi(true);persist(true);};
-    q('[data-action="stop"]',P.host).onclick=()=>{Runtime.stopAll(P.state,'운전 정지');updateUi(true);persist(true);};
-    q('[data-action="home"]',P.host).onclick=()=>{manualStop();Runtime.homeAll(P.state);schedule();updateUi(true);};
+    q('#p3-profile',P.host).onchange=event=>{if(Runtime.setProfile(P.state,event.target.value)){buildMemoryTable();q('#p3-address',P.host).value=Runtime.getProfile(P.state).commands.autoStart;}schedule();updateUi(true);persist(true);};
+    q('[data-action="auto"]',P.host).onclick=()=>{Runtime.writeDevice(P.state,activeProfile().commands.autoStart,true);schedule();updateUi(true);persist(true);};
+    q('[data-action="stop"]',P.host).onclick=()=>{Runtime.writeDevice(P.state,activeProfile().commands.stop,true);updateUi(true);persist(true);};
+    q('[data-action="home"]',P.host).onclick=()=>{manualStop();Runtime.writeDevice(P.state,activeProfile().commands.home,true);schedule();updateUi(true);};
     q('[data-action="alarm-reset"]',P.host).onclick=()=>{Runtime.resetAlarms(P.state);updateUi(true);persist(true);};
-    q('[data-action="servo"]',P.host).onclick=()=>{const on=!Object.values(P.state.axes).every(axis=>axis.servoOn);Runtime.setServo(P.state,null,on);updateUi(true);persist(true);};
+    q('[data-action="servo"]',P.host).onclick=()=>{const on=!Object.values(P.state.axes).every(axis=>axis.servoOn);Runtime.writeDevice(P.state,activeProfile().commands.servoOn,on);updateUi(true);persist(true);};
     q('[data-action="clear"]',P.host).onclick=()=>{Runtime.resetCell(P.state,{clearPallet:true});rebuildPlaced(true);updateUi(true);persist(true);};
     q('[data-action="pattern"]',P.host).onclick=()=>{
       Runtime.stopAll(P.state,'패턴 변경');Runtime.configurePallet(P.state,{rows:q('#p3-rows',P.host).value,cols:q('#p3-cols',P.host).value,layers:q('#p3-layers',P.host).value});Runtime.resetCell(P.state,{clearPallet:true});rebuildPallet(true);rebuildPlaced(true);updateUi(true);persist(true);
     };
-    qa('[data-axis-move]',P.host).forEach(button=>button.onclick=()=>{manualStop();const name=button.dataset.axisMove,input=q(`[data-axis-target="${name}"]`,P.host);Runtime.setServo(P.state,name,true);Runtime.commandAxis(P.state,name,input.value,{speed:Runtime.readDevice(P.state,'D110')});schedule();updateUi(true);});
+    qa('[data-axis-move]',P.host).forEach(button=>button.onclick=()=>{manualStop();const name=button.dataset.axisMove,input=q(`[data-axis-target="${name}"]`,P.host),profile=activeProfile(),targetAddress=profile.setpoints[name.toLowerCase()],moveAddress=profile.commands[`move${name}`];Runtime.writeDevice(P.state,profile.commands.servoOn,true);Runtime.writeDevice(P.state,targetAddress,input.value);Runtime.writeDevice(P.state,moveAddress,true);schedule();updateUi(true);});
     qa('[data-jog]',P.host).forEach(button=>{
       const [axis,rawDir]=button.dataset.jog.split(','),dir=Number(rawDir);
-      const start=event=>{event.preventDefault();manualStop();Runtime.setServo(P.state,axis,true);Runtime.jogAxis(P.state,axis,dir,80);button.setPointerCapture?.(event.pointerId);schedule();updateUi(true);};
-      const stop=()=>{if(P.state.axes[axis].mode==='jog')Runtime.stopAxis(P.state,axis);updateUi(true);persist(true);};
+      const jogAddress=()=>activeProfile().commands[`jog${axis}${dir>0?'Plus':'Minus'}`];
+      const start=event=>{event.preventDefault();manualStop();Runtime.writeDevice(P.state,activeProfile().commands.servoOn,true);Runtime.writeDevice(P.state,jogAddress(),true);button.setPointerCapture?.(event.pointerId);schedule();updateUi(true);};
+      const stop=()=>{Runtime.writeDevice(P.state,jogAddress(),false);updateUi(true);persist(true);};
       button.addEventListener('pointerdown',start);button.addEventListener('pointerup',stop);button.addEventListener('pointercancel',stop);button.addEventListener('lostpointercapture',stop);
     });
     q('#p3-write',P.host).onclick=()=>{
@@ -314,7 +322,7 @@
     if(saved&&typeof saved==='object')Runtime.importState(P.state,saved);
     else P.state=Runtime.createState();
     const p=P.state.cell.pallet;q('#p3-rows',P.host).value=p.rows;q('#p3-cols',P.host).value=p.cols;q('#p3-layers',P.host).value=p.layers;
-    rebuildPallet(true);rebuildPlaced(true);updateMachine();updateUi(true);persist(true);schedule();
+    buildMemoryTable();q('#p3-address',P.host).value=Runtime.getProfile(P.state).commands.autoStart;rebuildPallet(true);rebuildPlaced(true);updateMachine();updateUi(true);persist(true);schedule();
   }
   function readDevice(addr){return Runtime.readDevice(P.state,addr);}
   function writeDevice(addr,value){const result=Runtime.writeDevice(P.state,addr,value);schedule();updateUi(true);persist(true);return result;}
@@ -327,7 +335,8 @@
 
   window.PLCTrainerPalletizer3D={
     version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,setCameraNavigationPreset,
-    startAuto:()=>{const ok=Runtime.startAuto(P.state);schedule();return ok;},stop:()=>Runtime.stopAll(P.state),home:()=>{const ok=Runtime.homeAll(P.state);schedule();return ok;},
+    setProfile:profile=>{const ok=Runtime.setProfile(P.state,profile);if(ok){buildMemoryTable();updateUi(true);persist(true);}return ok;},getProfile:()=>Runtime.getProfile(P.state),
+    startAuto:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.autoStart,true);schedule();return result.ok&&result.accepted!==false;},stop:()=>Runtime.writeDevice(P.state,activeProfile().commands.stop,true),home:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.home,true);schedule();return result.ok&&result.accepted!==false;},
     get state(){return P.state;},get visible(){return P.visible;},get cameraNavigationPreset(){return P.cameraNavigationPreset;}
   };
   init();

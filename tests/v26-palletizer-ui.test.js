@@ -40,6 +40,17 @@ test('v3 persistence keeps the 3D state and the bridge stays offline',()=>{
   assert.doesNotMatch(ui,/https?:\/\//);
 });
 
+test('palletizer requires one explicit PLC vendor profile and renders only that address map',()=>{
+  assert.match(ui,/id="p3-profile"/);
+  assert.match(ui,/option value="ls"/);
+  assert.match(ui,/option value="mitsubishi"/);
+  assert.match(ui,/Runtime\.setProfile/);
+  assert.match(ui,/Runtime\.getProfile/);
+  assert.match(ui,/Runtime\.writeDevice/);
+  assert.doesNotMatch(ui,/Runtime\.startAuto/);
+  assert.doesNotMatch(ui,/XG5000 주소 이미지/);
+});
+
 test('new browser scripts parse as classic JavaScript',()=>{
   assert.doesNotThrow(()=>new Function(read('src/runtime/palletizer-runtime.js')));
   assert.doesNotThrow(()=>new Function(multiview));

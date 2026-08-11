@@ -66,6 +66,8 @@ PREFAB_TARGETS = {
     "PF_RELAY": "relay-module.glb",
     "PF_TIMER_BOX": "timer-box.glb",
     "Digital Counter Unit_OP": "counter-unit.glb",
+    "PF_COUNT_BOX": "counter-box.glb",
+    "SSCNETIII_AMP_HEAD": "sscnetiii-amp-head.glb",
     "PF_SMPS": "smps.glb",
     "PF_BUZZER_LAMP": "buzzer-lamp.glb",
     "PF_SWITCH_BOX": "switch-box.glb",

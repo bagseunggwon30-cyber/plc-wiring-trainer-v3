@@ -50,6 +50,15 @@ test('automation hub exposes five labs and delegates the shared 3D view', () => 
   assert.doesNotThrow(() => new Function(multiview));
 });
 
+test('manual lab controls are routed through the currently selected vendor address map', () => {
+  assert.match(ui, /Servo\.writeDevice/);
+  assert.match(ui, /MPS\.writeDevice/);
+  assert.match(ui, /Pneumatic\.writeDevice/);
+  assert.doesNotMatch(ui, /MPS\.setOutput\(/);
+  assert.doesNotMatch(ui, /Pneumatic\.setSupply\(/);
+  assert.doesNotMatch(ui, /Pneumatic\.setCoil\(/);
+});
+
 test('automation lab camera keeps the audited orthographic presets behind shared navigation controls', () => {
   assert.match(ui, /new Three\.OrthographicCamera\(-3\.5, 3\.5, 3\.5, -3\.5, \.01, 100\)/);
   assert.match(ui, /const CAMERA_DISTANCE = 16\.17/);
@@ -96,10 +105,14 @@ test('selected imported assets match their manifest and contain no executable pa
   const base = path.join(root, 'assets', 'imported', 'sov-kdp');
   const manifest = JSON.parse(fs.readFileSync(path.join(base, 'manifest.json'), 'utf8'));
   assert.equal(manifest.policy, 'selective-assets-only');
-  assert.equal(manifest.models.length, 27);
+  assert.equal(manifest.models.length, 29);
   assert.equal(manifest.textures.length, 0);
   assert.equal(fs.existsSync(path.join(base, 'models', 'pneumatic-workshop.glb')), false);
   assert.equal(fs.existsSync(path.join(base, 'ASSET-NOTICE.md')), false);
+  for (const file of ['counter-box.glb', 'sscnetiii-amp-head.glb']) assert.ok(manifest.models.some(entry => entry.file === file), file);
+  const labUi = read('src/ui/automation-labs.js');
+  assert.match(labUi, /'sscnetiii-amp-head\.glb': 'SSCNET III 앰프 헤드'/);
+  assert.match(labUi, /servo-amplifier\|sscnet\|relay/);
   for (const entry of [...manifest.models.map(item => ({ ...item, folder: 'models' })), ...manifest.textures.map(item => ({ ...item, folder: 'textures' }))]) {
     const file = path.join(base, entry.folder, entry.file);
     assert.equal(fs.existsSync(file), true, entry.file);

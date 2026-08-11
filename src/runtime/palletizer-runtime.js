@@ -5,7 +5,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
 
-  const VERSION='2.6.0';
+  const VERSION='3.1.0';
   const EPS=1e-6;
   const AXIS_DEFAULTS={
     X:{min:0,max:600,home:0,homeDirection:-1,maxSpeed:260,accel:700,decel:800,homeSpeed:90,tolerance:.35},
@@ -23,22 +23,44 @@
     MOVE_PLACE_XY:60,LOWER_PLACE:70,RELEASE:80,LIFT_PLACE:90,NEXT:100,
     COMPLETE:110,PAUSED:120,FAULT:900
   };
-  const DEVICE_MAP={
-    commands:{
-      autoStart:'M100',stop:'M101',reset:'M102',home:'M110',grip:'M120',release:'M121',servoOn:'M130',
-      moveX:'M140',moveY:'M141',moveZ:'M142',jogXPlus:'M150',jogXMinus:'M151',jogYPlus:'M152',
-      jogYMinus:'M153',jogZPlus:'M154',jogZMinus:'M155'
+  // 교육용 기본 주소 이미지다. 실제 PLC 전송이나 제조사 프로젝트 신원 증명에는 사용하지 않는다.
+  // 한 상태에는 아래 프로필 중 하나만 활성화되며 프로필을 바꾸면 모든 출력 명령을 안전 해제한다.
+  const PROFILES={
+    ls:{
+      id:'ls',vendor:'LS ELECTRIC',family:'XGB / XG5000',addressStyle:'M / D',aliases:['ls','xgb','xg5000'],simulationOnly:true,transport:null,
+      commands:{
+        autoStart:'M100',stop:'M101',reset:'M102',home:'M110',grip:'M120',release:'M121',servoOn:'M130',
+        moveX:'M140',moveY:'M141',moveZ:'M142',jogXPlus:'M150',jogXMinus:'M151',jogYPlus:'M152',
+        jogYMinus:'M153',jogZPlus:'M154',jogZMinus:'M155'
+      },
+      setpoints:{x:'D100',y:'D102',z:'D104',speed:'D110'},
+      status:{
+        autoRunning:'M200',autoComplete:'M201',fault:'M202',
+        xBusy:'M210',yBusy:'M211',zBusy:'M212',xHomed:'M220',yHomed:'M221',zHomed:'M222',
+        xInPosition:'M230',yInPosition:'M231',zInPosition:'M232',gripperClosed:'M240',holding:'M241',
+        xNegLimit:'M250',xPosLimit:'M251',yNegLimit:'M252',yPosLimit:'M253',zNegLimit:'M254',zPosLimit:'M255'
+      },
+      actual:{x:'D200',y:'D202',z:'D204',placed:'D210',step:'D211',cycle:'D212'}
     },
-    setpoints:{x:'D100',y:'D102',z:'D104',speed:'D110'},
-    status:{
-      autoRunning:'M200',autoComplete:'M201',fault:'M202',
-      xBusy:'M210',yBusy:'M211',zBusy:'M212',xHomed:'M220',yHomed:'M221',zHomed:'M222',
-      xInPosition:'M230',yInPosition:'M231',zInPosition:'M232',gripperClosed:'M240',holding:'M241',
-      xNegLimit:'M250',xPosLimit:'M251',yNegLimit:'M252',yPosLimit:'M253',zNegLimit:'M254',zPosLimit:'M255'
-    },
-    actual:{x:'D200',y:'D202',z:'D204',placed:'D210',step:'D211',cycle:'D212'}
+    mitsubishi:{
+      id:'mitsubishi',vendor:'Mitsubishi Electric',family:'QnU / MELSOFT',addressStyle:'X / Y / M / D',aliases:['mitsubishi','melsec','qnu','q-series','qseries'],simulationOnly:true,transport:null,
+      commands:{
+        autoStart:'M1000',stop:'M1001',reset:'M1002',home:'M1010',grip:'Y100',release:'Y101',servoOn:'Y102',
+        moveX:'M1040',moveY:'M1041',moveZ:'M1042',jogXPlus:'M1050',jogXMinus:'M1051',jogYPlus:'M1052',
+        jogYMinus:'M1053',jogZPlus:'M1054',jogZMinus:'M1055'
+      },
+      setpoints:{x:'D1000',y:'D1002',z:'D1004',speed:'D1010'},
+      status:{
+        autoRunning:'M1200',autoComplete:'M1201',fault:'M1202',
+        xBusy:'X100',yBusy:'X101',zBusy:'X102',xHomed:'X110',yHomed:'X111',zHomed:'X112',
+        xInPosition:'X120',yInPosition:'X121',zInPosition:'X122',gripperClosed:'X130',holding:'X131',
+        xNegLimit:'X140',xPosLimit:'X141',yNegLimit:'X142',yPosLimit:'X143',zNegLimit:'X144',zPosLimit:'X145'
+      },
+      actual:{x:'D1200',y:'D1202',z:'D1204',placed:'D1210',step:'D1211',cycle:'D1212'}
+    }
   };
-  const WRITABLE_D=new Set(Object.values(DEVICE_MAP.setpoints));
+  const DEVICE_MAP=PROFILES.ls;
+  const BIT_BANKS=new Set(['P','M','X','Y']);
 
   function finite(value,fallback=0){const n=Number(value);return Number.isFinite(n)?n:fallback;}
   function clamp(value,min,max){return Math.max(min,Math.min(max,value));}
@@ -46,6 +68,27 @@
   function clone(value){return JSON.parse(JSON.stringify(value));}
   function address(value){return String(value||'').trim().toUpperCase().replace(/\s+/g,'');}
   function bool(value){return value===true||value===1||value==='1'||String(value).toLowerCase()==='true'||String(value).toUpperCase()==='ON';}
+  function resolveProfile(value){
+    if(value&&typeof value==='object')value=value.id;
+    const key=String(value==null?'ls':value).trim().toLowerCase();
+    for(const profile of Object.values(PROFILES))if(profile.id===key||profile.aliases.includes(key))return profile.id;
+    return null;
+  }
+  function getProfile(stateOrId){
+    const raw=stateOrId&&typeof stateOrId==='object'?(stateOrId.profileId||stateOrId.profile):stateOrId;
+    return PROFILES[resolveProfile(raw)||'ls'];
+  }
+  function emptyMemory(){return {P:{},M:{},X:{},Y:{},D:{}};}
+  function bankForAddress(key){const prefix=String(key||'')[0];return prefix==='D'?'D':BIT_BANKS.has(prefix)?prefix:null;}
+  function memorySet(state,raw,value){const key=address(raw),bank=bankForAddress(key);if(bank)state.memory[bank][key]=value;return value;}
+  function memoryGet(state,raw){const key=address(raw),bank=bankForAddress(key);return bank?state.memory[bank][key]:undefined;}
+  function flattenAddresses(value,result=[]){
+    if(typeof value==='string')result.push(address(value));
+    else if(value&&typeof value==='object')Object.values(value).forEach(item=>flattenAddresses(item,result));
+    return result;
+  }
+  function mappedAddresses(profile){return new Set(flattenAddresses({commands:profile.commands,setpoints:profile.setpoints,status:profile.status,actual:profile.actual}));}
+  function roleAt(mapping,raw){const key=address(raw);return Object.entries(mapping).find(([,mapped])=>address(mapped)===key)?.[0]||null;}
 
   function createAxis(name,overrides={}){
     const cfg={...(AXIS_DEFAULTS[name]||AXIS_DEFAULTS.X),...overrides};
@@ -65,8 +108,11 @@
     cell.pallet={...clone(DEFAULT_CELL.pallet),...(options.cell?.pallet||{})};
     cell.pallet.origin={...DEFAULT_CELL.pallet.origin,...(options.cell?.pallet?.origin||{})};
     cell.dwell={...DEFAULT_CELL.dwell,...(options.cell?.dwell||{})};
+    const requestedProfile=options.profileId||options.profile||options.saved?.profileId||options.saved?.profile;
+    const profileId=resolveProfile(requestedProfile)||'ls';
     const state={
       version:VERSION,elapsed:0,
+      profileId,profile:profileId,
       axes:{
         X:createAxis('X',options.axes?.X),Y:createAxis('Y',options.axes?.Y),Z:createAxis('Z',options.axes?.Z)
       },
@@ -74,10 +120,10 @@
       gripper:{closed:false,holding:false,workpieceId:null},
       pallet:{placed:[],nextIndex:0},
       auto:{running:false,state:'IDLE',previous:'IDLE',timer:0,cycle:0,message:'대기',fault:null},
-      memory:{M:{},D:{D100:cell.pick.x,D102:cell.pick.y,D104:cell.safeZ,D110:140}},
+      memory:emptyMemory(),
       events:[]
     };
-    refreshMemory(state);
+    initializeMemory(state);
     if(options.saved)importState(state,options.saved);
     return state;
   }
@@ -307,48 +353,60 @@
   }
 
   function refreshMemory(state){
-    const M=state.memory.M,D=state.memory.D,a=state.axes;
-    M.M200=!!state.auto.running;M.M201=state.auto.state==='COMPLETE';M.M202=state.auto.state==='FAULT'||!!state.auto.fault||Object.values(a).some(x=>x.alarm);
-    M.M210=a.X.busy;M.M211=a.Y.busy;M.M212=a.Z.busy;
-    M.M220=a.X.homed;M.M221=a.Y.homed;M.M222=a.Z.homed;
-    M.M230=a.X.inPosition;M.M231=a.Y.inPosition;M.M232=a.Z.inPosition;
-    M.M240=state.gripper.closed;M.M241=state.gripper.holding;
-    M.M250=a.X.negLimit;M.M251=a.X.posLimit;M.M252=a.Y.negLimit;M.M253=a.Y.posLimit;M.M254=a.Z.negLimit;M.M255=a.Z.posLimit;
-    D.D200=Number(a.X.position.toFixed(2));D.D202=Number(a.Y.position.toFixed(2));D.D204=Number(a.Z.position.toFixed(2));
-    D.D210=state.pallet.placed.length;D.D211=AUTO_STEPS[state.auto.state]??-1;D.D212=state.auto.cycle;
+    const p=getProfile(state),s=p.status,d=p.actual,a=state.axes;
+    memorySet(state,s.autoRunning,!!state.auto.running);memorySet(state,s.autoComplete,state.auto.state==='COMPLETE');memorySet(state,s.fault,state.auto.state==='FAULT'||!!state.auto.fault||Object.values(a).some(x=>x.alarm));
+    memorySet(state,s.xBusy,a.X.busy);memorySet(state,s.yBusy,a.Y.busy);memorySet(state,s.zBusy,a.Z.busy);
+    memorySet(state,s.xHomed,a.X.homed);memorySet(state,s.yHomed,a.Y.homed);memorySet(state,s.zHomed,a.Z.homed);
+    memorySet(state,s.xInPosition,a.X.inPosition);memorySet(state,s.yInPosition,a.Y.inPosition);memorySet(state,s.zInPosition,a.Z.inPosition);
+    memorySet(state,s.gripperClosed,state.gripper.closed);memorySet(state,s.holding,state.gripper.holding);
+    memorySet(state,s.xNegLimit,a.X.negLimit);memorySet(state,s.xPosLimit,a.X.posLimit);memorySet(state,s.yNegLimit,a.Y.negLimit);memorySet(state,s.yPosLimit,a.Y.posLimit);memorySet(state,s.zNegLimit,a.Z.negLimit);memorySet(state,s.zPosLimit,a.Z.posLimit);
+    memorySet(state,d.x,Number(a.X.position.toFixed(2)));memorySet(state,d.y,Number(a.Y.position.toFixed(2)));memorySet(state,d.z,Number(a.Z.position.toFixed(2)));
+    memorySet(state,d.placed,state.pallet.placed.length);memorySet(state,d.step,AUTO_STEPS[state.auto.state]??-1);memorySet(state,d.cycle,state.auto.cycle);
+  }
+  function initializeMemory(state){
+    state.memory=emptyMemory();const p=getProfile(state);
+    for(const mapped of Object.values(p.commands))memorySet(state,mapped,false);
+    memorySet(state,p.setpoints.x,state.cell.pick.x);memorySet(state,p.setpoints.y,state.cell.pick.y);memorySet(state,p.setpoints.z,state.cell.safeZ);memorySet(state,p.setpoints.speed,140);
+    refreshMemory(state);return state.memory;
   }
   function readDevice(state,rawAddress){
-    const key=address(rawAddress);refreshMemory(state);
-    if(/^M\d+$/.test(key))return !!state.memory.M[key];
-    if(/^D\d+$/.test(key))return finite(state.memory.D[key],0);
-    return undefined;
+    const key=address(rawAddress),profile=getProfile(state);if(!mappedAddresses(profile).has(key))return undefined;refreshMemory(state);
+    const value=memoryGet(state,key);return key.startsWith('D')?finite(value,0):!!value;
   }
   function writeDevice(state,rawAddress,value){
-    const key=address(rawAddress);
-    if(/^D\d+$/.test(key)){
-      if(!WRITABLE_D.has(key))return {ok:false,error:`${key}는 읽기 전용 또는 미정의 주소입니다`};
+    const key=address(rawAddress),profile=getProfile(state),setpoint=roleAt(profile.setpoints,key);
+    if(setpoint){
       const n=finite(value,NaN);if(!Number.isFinite(n))return {ok:false,error:'숫자 설정값이 필요합니다'};
-      state.memory.D[key]=n;refreshMemory(state);return {ok:true,address:key,value:n};
+      memorySet(state,key,n);refreshMemory(state);return {ok:true,address:key,value:n};
     }
-    if(!/^M\d+$/.test(key))return {ok:false,error:'M 또는 D 주소 형식이 필요합니다'};
-    const on=bool(value);state.memory.M[key]=on;
-    if(key==='M100'&&on)startAuto(state);
-    else if(key==='M101'&&on)stopAll(state,'PLC 정지 지령');
-    else if(key==='M102'&&on)resetCell(state,{clearPallet:false});
-    else if(key==='M110'&&on)homeAll(state);
-    else if(key==='M120'&&on)setGripper(state,true);
-    else if(key==='M121'&&on)setGripper(state,false);
-    else if(key==='M130')setServo(state,null,on);
-    else if(['M140','M141','M142'].includes(key)&&on){
-      const index={'M140':['X','D100'],'M141':['Y','D102'],'M142':['Z','D104']}[key];
-      commandAxis(state,index[0],state.memory.D[index[1]],{speed:state.memory.D.D110});
-    }else if(['M150','M151','M152','M153','M154','M155'].includes(key)){
-      const map={M150:['X',1],M151:['X',-1],M152:['Y',1],M153:['Y',-1],M154:['Z',1],M155:['Z',-1]};
-      const [axis,dir]=map[key];if(on)jogAxis(state,axis,dir,state.memory.D.D110);else if(state.axes[axis].mode==='jog'&&state.axes[axis].jogDirection===dir)stopAxis(state,axis);
-    }else if(!Object.values(DEVICE_MAP.commands).includes(key)){
-      return {ok:false,error:`${key}는 정의되지 않은 명령 주소입니다`};
+    const command=roleAt(profile.commands,key);
+    if(!command){
+      if(mappedAddresses(profile).has(key))return {ok:false,error:`${key}는 읽기 전용 상태 주소입니다`};
+      return {ok:false,error:`${key||'(빈 주소)'}는 선택한 ${profile.vendor} 프로필에 정의되지 않았습니다`};
     }
-    refreshMemory(state);return {ok:true,address:key,value:on};
+    const on=bool(value);memorySet(state,key,on);let accepted=true;
+    if(command==='autoStart'&&on)accepted=startAuto(state);
+    else if(command==='stop'&&on)stopAll(state,'PLC 정지 지령');
+    else if(command==='reset'&&on)accepted=resetCell(state,{clearPallet:false});
+    else if(command==='home'&&on)accepted=homeAll(state);
+    else if(command==='grip'&&on)setGripper(state,true);
+    else if(command==='release'&&on)setGripper(state,false);
+    else if(command==='servoOn')accepted=setServo(state,null,on);
+    else if(['moveX','moveY','moveZ'].includes(command)&&on){
+      const axis={moveX:'X',moveY:'Y',moveZ:'Z'}[command],targetKey={X:'x',Y:'y',Z:'z'}[axis];
+      accepted=commandAxis(state,axis,memoryGet(state,profile.setpoints[targetKey]),{speed:memoryGet(state,profile.setpoints.speed)});
+    }else if(/^jog[XYZ](Plus|Minus)$/.test(command)){
+      const axis=command[3],dir=command.endsWith('Plus')?1:-1;
+      accepted=on?jogAxis(state,axis,dir,memoryGet(state,profile.setpoints.speed)):(state.axes[axis].mode==='jog'&&state.axes[axis].jogDirection===dir?stopAxis(state,axis):true);
+    }
+    refreshMemory(state);return {ok:true,address:key,value:on,...(accepted===false?{accepted:false}:{})};
+  }
+
+  function setProfile(state,profileName){
+    const profileId=resolveProfile(profileName);if(!profileId)return false;if(profileId===state.profileId)return true;
+    stopAll(state,'PLC 제조사 프로필 전환');setServo(state,null,false);setGripper(state,false);
+    state.profileId=profileId;state.profile=profileId;initializeMemory(state);
+    addEvent(state,'profile',`${getProfile(state).vendor} 주소 프로필 선택 · 이전 출력 안전 해제`);return true;
   }
 
   function tick(state,dt){
@@ -370,12 +428,13 @@
   }
   function exportState(state){
     return clone({
-      version:VERSION,elapsed:state.elapsed,axes:state.axes,cell:state.cell,gripper:state.gripper,
-      pallet:state.pallet,auto:state.auto,memory:{D:state.memory.D},events:state.events
+      version:VERSION,elapsed:state.elapsed,profileId:state.profileId,profile:state.profileId,axes:state.axes,cell:state.cell,gripper:state.gripper,
+      pallet:state.pallet,auto:state.auto,memory:state.memory,events:state.events
     });
   }
   function importState(state,saved={}){
     if(!saved||typeof saved!=='object')return state;
+    state.profileId=resolveProfile(saved.profileId||saved.profile)||state.profileId||'ls';state.profile=state.profileId;
     if(saved.cell){
       state.cell={...state.cell,...clone(saved.cell)};
       state.cell.pick={...DEFAULT_CELL.pick,...(saved.cell.pick||{})};
@@ -385,21 +444,22 @@
     }
     for(const name of ['X','Y','Z'])if(saved.axes?.[name]){
       const base=createAxis(name),src=saved.axes[name];Object.assign(base,src);
-      base.position=clamp(finite(src.position,base.home),base.min,base.max);base.target=clamp(finite(src.target,base.position),base.min,base.max);
-      base.velocity=finite(src.velocity,0);state.axes[name]=base;updateLimits(base);
+      base.position=clamp(finite(src.position,base.home),base.min,base.max);base.target=base.position;
+      base.servoOn=false;base.mode='idle';base.velocity=0;base.jogDirection=0;base.busy=false;base.inPosition=false;state.axes[name]=base;updateLimits(base);
     }
-    if(saved.gripper)state.gripper={...state.gripper,...clone(saved.gripper)};
+    if(saved.gripper)state.gripper={...state.gripper,...clone(saved.gripper),closed:false,holding:false,workpieceId:null};
     if(saved.pallet){state.pallet={placed:Array.isArray(saved.pallet.placed)?clone(saved.pallet.placed):[],nextIndex:Math.max(0,Math.trunc(finite(saved.pallet.nextIndex,0)))};}
-    if(saved.auto)state.auto={...state.auto,...clone(saved.auto),running:false,state:saved.auto.state==='FAULT'?'FAULT':'IDLE',timer:0};
-    if(saved.memory?.D)for(const key of WRITABLE_D)if(saved.memory.D[key]!=null)state.memory.D[key]=finite(saved.memory.D[key],state.memory.D[key]);
+    if(saved.auto){const faulted=saved.auto.state==='FAULT';state.auto={...state.auto,...clone(saved.auto),running:false,state:faulted?'FAULT':'IDLE',timer:0,message:faulted?saved.auto.message:'복원 후 안전 정지'};}
     state.elapsed=Math.max(0,finite(saved.elapsed,0));state.events=Array.isArray(saved.events)?clone(saved.events).slice(-80):[];
+    initializeMemory(state);const profile=getProfile(state);
+    for(const mapped of Object.values(profile.setpoints))if(saved.memory?.D?.[mapped]!=null)memorySet(state,mapped,finite(saved.memory.D[mapped],memoryGet(state,mapped)));
     refreshMemory(state);return state;
   }
 
   return {
-    version:VERSION,AXIS_DEFAULTS:clone(AXIS_DEFAULTS),DEFAULT_CELL:clone(DEFAULT_CELL),AUTO_STEPS:{...AUTO_STEPS},DEVICE_MAP:clone(DEVICE_MAP),
+    version:VERSION,AXIS_DEFAULTS:clone(AXIS_DEFAULTS),DEFAULT_CELL:clone(DEFAULT_CELL),AUTO_STEPS:{...AUTO_STEPS},DEVICE_MAP:clone(DEVICE_MAP),PROFILES:clone(PROFILES),
     createAxis,createState,create:createState,tick,commandAxis,homeAxis,homeAll,jogAxis,stopAxis,stopAll,setServo,resetAlarms,
-    startAuto,resetCell,setGripper,configurePallet,palletCapacity,palletSlot,allHomed,readDevice,writeDevice,refreshMemory,
+    startAuto,resetCell,setGripper,configurePallet,palletCapacity,palletSlot,allHomed,getProfile,setProfile,readDevice,writeDevice,refreshMemory,
     exportState,importState
   };
 });

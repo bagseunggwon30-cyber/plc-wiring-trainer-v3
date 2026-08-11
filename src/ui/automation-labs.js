@@ -18,6 +18,8 @@
     'relay-module.glb': '8핀 릴레이 모듈',
     'timer-box.glb': '디지털 타이머 박스',
     'counter-unit.glb': '디지털 카운터',
+    'counter-box.glb': '디지털 카운터 전체 박스',
+    'sscnetiii-amp-head.glb': 'SSCNET III 앰프 헤드',
     'smps.glb': 'DC 전원공급기(SMPS)',
     'switch-box.glb': '3버튼 스위치 박스',
     'buzzer-lamp.glb': '버저·표시등 박스',
@@ -42,7 +44,7 @@
     'workpiece-plastic.glb': '수지 워크'
   });
   const EQUIPMENT_GROUPS = Object.freeze([
-    ['control', '제어·전원', /(?:plc|servo-amplifier|relay|timer|counter|smps|switch-box|buzzer|tower)/],
+    ['control', '제어·전원', /(?:plc|servo-amplifier|sscnet|relay|timer|counter|smps|switch-box|buzzer|tower)/],
     ['sensor', '센서·스위치', /(?:sensor|limit-switch)/],
     ['pneumatic', '공압 장비', /(?:cylinder|valve|service-unit|air-distributor|speed-controller)/],
     ['plant', '설비·워크', /(?:mps|servo2-workshop|workpiece)/]
@@ -182,9 +184,9 @@
   function mpsPane() {
     return `<div class="al-pane-grid"><div class="al-scene" data-scene="mps"><div class="al-scene-title"><b>MPS 제어 실습실</b><span>CONVEYOR · PROCESSING · TRANSFER</span></div>${cameraPresetButtons()}${editorToolbar('mps')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-mps-status"><b>PLC 출력 대기</b><span>18 OUT · 27 IN</span></div><label class="al-profile">PLC 주소 프로필<select id="al-mps-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><div class="al-actions"><button class="al-btn run" data-mps-action="auto">▶ PLC 제어</button><button class="al-btn stop" data-mps-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-mps-action="steel">＋ 강재 워크</button><button class="al-btn" data-mps-action="plastic">＋ PP 워크</button><button class="al-btn" data-mps-action="reset">↺ 설비 리셋</button><button class="al-btn" data-mps-action="clear">워크 비우기</button></div></section>
-      <section class="al-section"><h3>리프트 서보 <small>I24 RLS · I25 DOG · I26 FLS</small></h3><label class="al-servo-slide"><span>위치 명령</span><input id="al-mps-lift" type="range" min="0" max="100" value="0"><output id="al-mps-lift-value">0%</output></label></section>
-      <section class="al-section"><h3>PLC 출력 O0–O17 <small>원본 MPS 물리 플랜트</small></h3><div class="al-output-grid">${MPS_OUTPUT_LABELS.map((label, index) => `<label class="al-output" title="O${index} ${label}"><input type="checkbox" data-mps-output-index="${index}"><span>O${index} ${label}</span></label>`).join('')}</div></section>
-      <section class="al-section"><h3>설비 입력 I0–I26</h3><div class="al-io-grid">${MPS_INPUT_LABELS.map((label, index) => `<div class="al-io${index >= 20 && index <= 23 ? ' reserved' : ''}" data-mps-input-index="${index}" title="I${index} ${label}">I${index} ${label}</div>`).join('')}</div></section>
+      <section class="al-section"><h3>리프트 서보 <small id="al-mps-lift-addresses">선택 PLC RLS · DOG · FLS</small></h3><label class="al-servo-slide"><span>위치 명령</span><input id="al-mps-lift" type="range" min="0" max="100" value="0"><output id="al-mps-lift-value">0%</output></label></section>
+      <section class="al-section"><h3>선택 PLC 출력 18점 <small>한 제조사 주소만 활성</small></h3><div class="al-output-grid">${MPS_OUTPUT_LABELS.map((label, index) => `<label class="al-output" title="O${index} ${label}"><input type="checkbox" data-mps-output-index="${index}"><span data-mps-output-label="${index}">O${index} ${label}</span></label>`).join('')}</div></section>
+      <section class="al-section"><h3>선택 PLC 입력 27점</h3><div class="al-io-grid">${MPS_INPUT_LABELS.map((label, index) => `<div class="al-io${index >= 20 && index <= 23 ? ' reserved' : ''}" data-mps-input-index="${index}" title="I${index} ${label}"><span data-mps-input-label="${index}">I${index} ${label}</span></div>`).join('')}</div></section>
       <section class="al-section"><h3>이벤트</h3><div class="al-log" id="al-mps-log"></div><div class="al-asset-note">강재/PP 분류 순서는 내장하지 않습니다. XG5000 또는 수동 O0–O17 출력으로 원본 설비를 직접 구동합니다.</div></section>
     </aside></div>`;
   }
@@ -195,6 +197,7 @@
       <section class="al-section"><h3>압력·스트로크</h3><div class="al-pressure"><div class="al-gauge"><b data-pneu-gauge="input">0.0</b><span>IN bar</span></div><div class="al-gauge"><b data-pneu-gauge="output">0.0</b><span>REG bar</span></div><div class="al-gauge"><b data-pneu-gauge="vacuum">0.0</b><span>VAC bar</span></div></div><div class="al-stroke" style="margin-top:7px"><i id="al-pneu-stroke"></i></div></section>
       <section class="al-section"><h3>밸브·유량 설정</h3><div class="al-fields"><label class="al-field">밸브<select id="al-pneu-valve"><option value="single">5/2 단솔</option><option value="double">5/2 복솔</option></select></label><label class="al-field">설정압 bar<input id="al-pneu-reg" type="number" min="0" max="8" step=".5" value="5"></label><label class="al-field">전진 유량<input id="al-pneu-throttle" type="number" min=".05" max="1" step=".05" value="1"></label></div><div class="al-checks" style="margin-top:6px"><label class="al-check"><input type="checkbox" data-pneu-coil="A">SOL A 전진</label><label class="al-check"><input type="checkbox" data-pneu-coil="B">SOL B 후진</label><label class="al-check"><input type="checkbox" id="al-pneu-vacuum">진공 흡착</label><label class="al-check"><input type="checkbox" id="al-pneu-part" checked>제품 감지</label></div></section>
       <section class="al-section"><h3>고장 삽입</h3><label class="al-field">T03 공급호스 누설 <span id="al-pneu-leak-label">0%</span><input id="al-pneu-leak" type="range" min="0" max="1" step=".05" value="0"></label><div class="al-grid4" style="margin-top:7px"><div class="al-indicator" data-pneu-sensor="retracted">RET</div><div class="al-indicator" data-pneu-sensor="extended">EXT</div><div class="al-indicator" data-pneu-sensor="vacuum">VAC</div><div class="al-indicator" data-pneu-sensor="fault">FAULT</div></div></section>
+      <section class="al-section"><h3>선택 PLC 주소 이미지 <small>실제 PLC 전송 없음</small></h3><table class="al-memory" id="al-pneu-memory"></table></section>
       <section class="al-section"><h3>이벤트</h3><div class="al-log" id="al-pneu-log"></div><div class="al-asset-note">압축성·힘 해석이 아닌 교육용 기능 모델입니다. 실제 안전밸브·잔압배기·압력정격을 대신하지 않습니다.</div></section>
     </aside></div>`;
   }
@@ -213,7 +216,7 @@
     A.hub = document.createElement('div');
     A.hub.id = 'al-hub';
     A.hub.innerHTML = `<nav id="al-tabs"><b>🏭 자동화 실습실</b>${[
-      ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['equipment3d', '3D 장비 27종']
+      ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['equipment3d', '3D 장비 29종']
     ].map(([key, label]) => `<button class="al-tab" data-lab="${key}">${label}</button>`).join('')}<label class="al-camera-navigation"><span>카메라</span><select id="al-camera-navigation" aria-label="3D 카메라 조작 방식"><option value="3ds-max">3ds Max</option><option value="legacy">기존 조작</option></select></label><small>OFFLINE</small></nav><div id="al-content"></div>`;
     A.host.appendChild(A.hub);
     A.content = q('#al-content', A.hub);
@@ -724,43 +727,43 @@
       if (!A.visible || A.activeLab === 'palletizer3d') return;
       const editor = A.editors[A.activeLab]; if (editor?.handleHotkey(event)) { updateEditorUi(); schedule(); persist(true); }
     });
-    q('#al-servo-profile', A.hub).onchange = event => { Servo.setProfile(A.state.labs.servo2, event.target.value); updateUi(true); persist(true); };
+    q('#al-servo-profile', A.hub).onchange = event => { Servo.setProfile(A.state.labs.servo2, event.target.value); schedule(); updateUi(true); persist(true); };
     qa('[data-servo-action]', A.hub).forEach(button => button.onclick = () => {
-      const state = A.state.labs.servo2, action = button.dataset.servoAction;
-      if (action === 'servo') Servo.setServo(state, !Object.values(state.axes).every(axis => axis.servoOn));
-      if (action === 'home') { Servo.setServo(state, true); Servo.homeAll(state); }
-      if (action === 'stop') Servo.stopAll(state);
-      if (action === 'linear') { Servo.setServo(state, true); Servo.commandLinear(state, { X: q('#al-linear-x', A.hub).value, Y: q('#al-linear-y', A.hub).value }, { speed: q('#al-linear-speed', A.hub).value }); }
+      const state = A.state.labs.servo2, profile = Servo.getProfile(state), action = button.dataset.servoAction;
+      if (action === 'servo') { const on = !Object.values(state.axes).every(axis => axis.servoOn); for (const axis of ['X', 'Y']) Servo.writeDevice(state, profile.commands.servoOn[axis], on); }
+      if (action === 'home') { for (const axis of ['X', 'Y']) { Servo.writeDevice(state, profile.commands.servoOn[axis], true); Servo.writeDevice(state, profile.commands.home[axis], true); } }
+      if (action === 'stop') Servo.writeDevice(state, profile.commands.stopAll, true);
+      if (action === 'linear') { Servo.writeDevice(state, profile.commands.servoOn.X, true); Servo.writeDevice(state, profile.commands.servoOn.Y, true); Servo.writeDevice(state, profile.data.target.X, q('#al-linear-x', A.hub).value); Servo.writeDevice(state, profile.data.target.Y, q('#al-linear-y', A.hub).value); Servo.writeDevice(state, profile.data.speed, q('#al-linear-speed', A.hub).value); Servo.writeDevice(state, profile.commands.linear, true); }
       schedule(); updateUi(true); persist(true);
     });
-    qa('[data-servo-move]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.servo2, axis = button.dataset.servoMove; Servo.setServo(state, axis, true); Servo.commandAxis(state, axis, q(`[data-servo-target="${axis}"]`, A.hub).value, { speed: 140 }); schedule(); updateUi(true); });
+    qa('[data-servo-move]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.servo2, profile = Servo.getProfile(state), axis = button.dataset.servoMove; Servo.writeDevice(state, profile.commands.servoOn[axis], true); Servo.writeDevice(state, profile.data.target[axis], q(`[data-servo-target="${axis}"]`, A.hub).value); Servo.writeDevice(state, profile.data.speed, 140); Servo.writeDevice(state, profile.commands.move[axis], true); schedule(); updateUi(true); });
     qa('[data-servo-jog]', A.hub).forEach(button => {
       const [axis, direction] = button.dataset.servoJog.split(',');
-      button.addEventListener('pointerdown', event => { event.preventDefault(); const state = A.state.labs.servo2; Servo.setServo(state, axis, true); Servo.jogAxis(state, axis, Number(direction), 90); button.setPointerCapture?.(event.pointerId); schedule(); });
-      const stop = () => { const state = A.state.labs.servo2; if (state.axes[axis].mode === 'jog') Servo.stopAxis(state, axis); updateUi(true); persist(true); };
+      button.addEventListener('pointerdown', event => { event.preventDefault(); const state = A.state.labs.servo2, profile = Servo.getProfile(state), command = Number(direction) > 0 ? profile.commands.jogForward[axis] : profile.commands.jogReverse[axis]; Servo.writeDevice(state, profile.commands.servoOn[axis], true); Servo.writeDevice(state, profile.data.speed, 90); Servo.writeDevice(state, command, true); button.setPointerCapture?.(event.pointerId); schedule(); });
+      const stop = () => { const state = A.state.labs.servo2, profile = Servo.getProfile(state), command = Number(direction) > 0 ? profile.commands.jogForward[axis] : profile.commands.jogReverse[axis]; Servo.writeDevice(state, command, false); updateUi(true); persist(true); };
       button.addEventListener('pointerup', stop); button.addEventListener('pointercancel', stop); button.addEventListener('lostpointercapture', stop);
     });
 
-    q('#al-mps-profile', A.hub).onchange = event => { MPS.setProfile(A.state.labs.mps, event.target.value); updateUi(true); persist(true); };
+    q('#al-mps-profile', A.hub).onchange = event => { MPS.setProfile(A.state.labs.mps, event.target.value); schedule(); updateUi(true); persist(true); };
     qa('[data-mps-action]', A.hub).forEach(button => button.onclick = () => {
-      const state = A.state.labs.mps, action = button.dataset.mpsAction;
-      if (action === 'auto') MPS.startAuto(state);
-      if (action === 'outputs-off') MPS.setOutputs(state, Array(18).fill(false));
+      const state = A.state.labs.mps, profile = MPS.getProfile(state), action = button.dataset.mpsAction;
+      if (action === 'auto') MPS.writeDevice(state, profile.commands.autoStart, true);
+      if (action === 'outputs-off') MPS.writeDevice(state, profile.commands.autoStop, true);
       if (action === 'steel' || action === 'plastic') MPS.addWorkpiece(state, action);
       if (action === 'reset') MPS.resetCell(state, { clearCounters: false });
       if (action === 'clear') { for (const item of [...state.workpieces]) MPS.removeWorkpiece(state, item.id); }
       schedule(); updateUi(true); persist(true);
     });
-    qa('[data-mps-output-index]', A.hub).forEach(input => input.onchange = () => { MPS.setOutput(A.state.labs.mps, Number(input.dataset.mpsOutputIndex), input.checked); schedule(); updateUi(true); persist(); });
+    qa('[data-mps-output-index]', A.hub).forEach(input => input.onchange = () => { const state = A.state.labs.mps, definition = MPS.OUTPUT_DEFINITIONS[Number(input.dataset.mpsOutputIndex)], mapped = MPS.getProfile(state).outputs[definition.key]; MPS.writeDevice(state, mapped, input.checked); schedule(); updateUi(true); persist(); });
     q('#al-mps-lift', A.hub).oninput = event => { MPS.setLiftServoTarget(A.state.labs.mps, Number(event.target.value) / 100); schedule(); updateUi(true); };
 
-    q('#al-pneu-profile', A.hub).onchange = event => { Pneumatic.setProfile(A.state.labs.pneumatic, event.target.value); updateUi(true); persist(true); };
-    qa('[data-pneu-action]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.pneumatic, action = button.dataset.pneuAction; if (action === 'supply') Pneumatic.setSupply(state, !state.source.on); if (action === 'auto') Pneumatic.startAuto(state); if (action === 'stop') Pneumatic.stopAuto(state); if (action === 'reset') Pneumatic.resetFaults(state); Pneumatic.tick(state, 0); schedule(); updateUi(true); persist(true); });
+    q('#al-pneu-profile', A.hub).onchange = event => { Pneumatic.setProfile(A.state.labs.pneumatic, event.target.value); schedule(); updateUi(true); persist(true); };
+    qa('[data-pneu-action]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.pneumatic, profile = Pneumatic.getProfile(state), action = button.dataset.pneuAction; if (action === 'supply') Pneumatic.writeDevice(state, profile.commands.supply, !state.source.on); if (action === 'auto') Pneumatic.writeDevice(state, profile.commands.auto, true); if (action === 'stop') Pneumatic.writeDevice(state, profile.commands.stop, true); if (action === 'reset') Pneumatic.writeDevice(state, profile.commands.reset, true); Pneumatic.tick(state, 0); schedule(); updateUi(true); persist(true); });
     q('#al-pneu-valve', A.hub).onchange = event => { Pneumatic.setValveType(A.state.labs.pneumatic, event.target.value); updateUi(true); };
     q('#al-pneu-reg', A.hub).onchange = event => { Pneumatic.setRegulator(A.state.labs.pneumatic, event.target.value); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
     q('#al-pneu-throttle', A.hub).onchange = event => { Pneumatic.setThrottle(A.state.labs.pneumatic, 'extend', event.target.value); };
-    qa('[data-pneu-coil]', A.hub).forEach(input => input.onchange = () => { Pneumatic.setCoil(A.state.labs.pneumatic, input.dataset.pneuCoil, input.checked); Pneumatic.tick(A.state.labs.pneumatic, 0); schedule(); updateUi(true); });
-    q('#al-pneu-vacuum', A.hub).onchange = event => { Pneumatic.setVacuum(A.state.labs.pneumatic, event.target.checked); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
+    qa('[data-pneu-coil]', A.hub).forEach(input => input.onchange = () => { const state = A.state.labs.pneumatic, profile = Pneumatic.getProfile(state), command = input.dataset.pneuCoil === 'B' ? profile.commands.coilB : profile.commands.coilA; Pneumatic.writeDevice(state, command, input.checked); Pneumatic.tick(state, 0); schedule(); updateUi(true); });
+    q('#al-pneu-vacuum', A.hub).onchange = event => { const state = A.state.labs.pneumatic; Pneumatic.writeDevice(state, Pneumatic.getProfile(state).commands.vacuum, event.target.checked); Pneumatic.tick(state, 0); updateUi(true); };
     q('#al-pneu-part', A.hub).onchange = event => { A.state.labs.pneumatic.vacuum.partPresent = event.target.checked; Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
     q('#al-pneu-leak', A.hub).oninput = event => { Pneumatic.setTubeLeak(A.state.labs.pneumatic, 'T03', event.target.value); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); schedule(); };
     q('#al-equipment-select', A.hub).onchange = event => { void showEquipmentModel(event.target.value); };
@@ -853,13 +856,15 @@
     const allServo = Object.values(servo.axes).every(axis => axis.servoOn), servoButton = q('[data-servo-action="servo"]', A.hub); servoButton.textContent = allServo ? 'SERVO OFF' : 'SERVO ON'; servoButton.classList.toggle('on', allServo);
     const sp = Servo.getProfile(servo), memoryRows = [['ON X', sp.commands.servoOn.X, Servo.readDevice(servo, sp.status.servoReady.X)], ['ON Y', sp.commands.servoOn.Y, Servo.readDevice(servo, sp.status.servoReady.Y)], ['X 목표', sp.data.target.X, Servo.readDevice(servo, sp.data.target.X)], ['Y 목표', sp.data.target.Y, Servo.readDevice(servo, sp.data.target.Y)], ['직선보간', sp.commands.linear, Servo.readDevice(servo, sp.status.linearBusy)]]; q('#al-servo-memory', A.hub).innerHTML = memoryRows.map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] === true ? 'ON' : row[2] === false ? 'OFF' : Number(row[2] || 0).toFixed(1)}</td></tr>`).join('');
 
-    const mps = A.state.labs.mps; MPS.updateInputs(mps); const mpsStatus = q('#al-mps-status', A.hub), activeOutputs = mps.outputBits.filter(Boolean).length, activeInputs = mps.inputBits.filter(Boolean).length; q('b', mpsStatus).textContent = mps.auto.running ? '외부 PLC 출력 제어' : 'PLC 출력 대기'; q('span', mpsStatus).textContent = `${activeOutputs} OUT · ${activeInputs} IN · ${mps.workpieces.length} EA`; mpsStatus.classList.toggle('fault', !!mps.fault); q('#al-mps-profile', A.hub).value = mps.profileId;
-    qa('[data-mps-output-index]', A.hub).forEach(input => { input.checked = !!mps.outputBits[Number(input.dataset.mpsOutputIndex)]; });
-    qa('[data-mps-input-index]', A.hub).forEach(item => item.classList.toggle('on', !!mps.inputBits[Number(item.dataset.mpsInputIndex)]));
+    const mps = A.state.labs.mps; MPS.updateInputs(mps); const mp = MPS.getProfile(mps), mpsStatus = q('#al-mps-status', A.hub), activeOutputs = mps.outputBits.filter(Boolean).length, activeInputs = mps.inputBits.filter(Boolean).length; q('b', mpsStatus).textContent = mps.auto.running ? '외부 PLC 출력 제어' : 'PLC 출력 대기'; q('span', mpsStatus).textContent = `${mp.id === 'ls' ? 'LS' : 'MELSEC'} · ${activeOutputs} OUT · ${activeInputs} IN · ${mps.workpieces.length} EA`; mpsStatus.classList.toggle('fault', !!mps.fault); q('#al-mps-profile', A.hub).value = mps.profileId;
+    qa('[data-mps-output-index]', A.hub).forEach(input => { const index = Number(input.dataset.mpsOutputIndex), definition = MPS.OUTPUT_DEFINITIONS[index], mapped = mp.outputs[definition.key], label = q(`[data-mps-output-label="${index}"]`, A.hub); input.checked = !!mps.outputBits[index]; if (label) label.textContent = `${mapped} ${MPS_OUTPUT_LABELS[index]}`; input.parentElement.title = `${mp.vendor} ${mapped} · 물리 O${index} ${MPS_OUTPUT_LABELS[index]}`; });
+    qa('[data-mps-input-index]', A.hub).forEach(item => { const index = Number(item.dataset.mpsInputIndex), definition = MPS.INPUT_DEFINITIONS[index], mapped = mp.inputs[definition.key], label = q(`[data-mps-input-label="${index}"]`, item); item.classList.toggle('on', !!mps.inputBits[index]); if (label) label.textContent = `${mapped} ${MPS_INPUT_LABELS[index]}`; item.title = `${mp.vendor} ${mapped} · 물리 I${index} ${MPS_INPUT_LABELS[index]}`; });
+    q('#al-mps-lift-addresses', A.hub).textContent = `${mp.inputs[MPS.INPUT_DEFINITIONS[24].key]} RLS · ${mp.inputs[MPS.INPUT_DEFINITIONS[25].key]} DOG · ${mp.inputs[MPS.INPUT_DEFINITIONS[26].key]} FLS`;
     const liftValue = Math.round(mps.liftServo.target * 100); q('#al-mps-lift', A.hub).value = liftValue; q('#al-mps-lift-value', A.hub).textContent = `${Math.round(mps.liftServo.position * 100)}%`;
     q('#al-mps-log', A.hub).innerHTML = mps.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
 
-    const pneu = A.state.labs.pneumatic, pneuStatus = q('#al-pneu-status', A.hub); q('b', pneuStatus).textContent = pneu.faults[0]?.message || pneu.auto.message; q('span', pneuStatus).textContent = `${pneu.auto.state} · ${pneu.valve.spool.toUpperCase()}`; pneuStatus.classList.toggle('fault', !!pneu.faults.length); q('#al-pneu-profile', A.hub).value = pneu.profileId; q('#al-pneu-valve', A.hub).value = pneu.valve.type; q('#al-pneu-reg', A.hub).value = pneu.service.regulatorBar; q('#al-pneu-throttle', A.hub).value = pneu.cylinder.throttleExtend;
+    const pneu = A.state.labs.pneumatic, pp = Pneumatic.getProfile(pneu), pneuStatus = q('#al-pneu-status', A.hub); q('b', pneuStatus).textContent = pneu.faults[0]?.message || pneu.auto.message; q('span', pneuStatus).textContent = `${pp.id === 'ls' ? 'LS' : 'MELSEC'} · ${pneu.auto.state} · ${pneu.valve.spool.toUpperCase()}`; pneuStatus.classList.toggle('fault', !!pneu.faults.length); q('#al-pneu-profile', A.hub).value = pneu.profileId; q('#al-pneu-valve', A.hub).value = pneu.valve.type; q('#al-pneu-reg', A.hub).value = pneu.service.regulatorBar; q('#al-pneu-throttle', A.hub).value = pneu.cylinder.throttleExtend;
+    q('#al-pneu-memory', A.hub).innerHTML = [['AIR', pp.commands.supply, pneu.source.on], ['SOL A', pp.commands.coilA, pneu.valve.coilA], ['SOL B', pp.commands.coilB, pneu.valve.coilB], ['READY', pp.status.ready, Pneumatic.readDevice(pneu, pp.status.ready)], ['EXT', pp.status.extended, pneu.cylinder.extended], ['RET', pp.status.retracted, pneu.cylinder.retracted]].map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] ? 'ON' : 'OFF'}</td></tr>`).join('');
     const airButton = q('[data-pneu-action="supply"]', A.hub); airButton.textContent = pneu.source.on ? 'AIR OFF' : 'AIR ON'; airButton.classList.toggle('on', pneu.source.on); qa('[data-pneu-coil]', A.hub).forEach(input => { input.checked = !!pneu.valve[`coil${input.dataset.pneuCoil}`]; }); q('#al-pneu-vacuum', A.hub).checked = pneu.vacuum.command; q('#al-pneu-part', A.hub).checked = pneu.vacuum.partPresent;
     q('[data-pneu-gauge="input"]', A.hub).textContent = pneu.service.inputBar.toFixed(1); q('[data-pneu-gauge="output"]', A.hub).textContent = pneu.service.outputBar.toFixed(1); q('[data-pneu-gauge="vacuum"]', A.hub).textContent = pneu.vacuum.pressureBar.toFixed(1); q('#al-pneu-stroke', A.hub).style.width = `${pneu.cylinder.position * 100}%`;
     const leak = pneu.tubes.find(tube => tube.id === 'T03')?.leak || 0; q('#al-pneu-leak', A.hub).value = leak; q('#al-pneu-leak-label', A.hub).textContent = `${Math.round(leak * 100)}%`; const pneuSensors = { retracted: pneu.cylinder.retracted, extended: pneu.cylinder.extended, vacuum: pneu.vacuum.holding, fault: !!pneu.faults.length }; qa('[data-pneu-sensor]', A.hub).forEach(item => item.classList.toggle('on', !!pneuSensors[item.dataset.pneuSensor])); q('#al-pneu-log', A.hub).innerHTML = pneu.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');

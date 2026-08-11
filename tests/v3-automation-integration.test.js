@@ -78,7 +78,7 @@ test('WebP model textures use the DOM texture loader when ImageBitmap decoding i
 
 test('3D equipment gallery exposes every selective model and lazy-loads only the selected asset', () => {
   const manifest = JSON.parse(read('assets/imported/sov-kdp/manifest.json'));
-  assert.equal(manifest.models.length, 27);
+  assert.equal(manifest.models.length, 29);
   assert.match(automationLabs, /\['palletizer3d', 'servo2', 'mps', 'pneumatic', 'equipment3d'\]/);
   assert.match(automationLabs, /await window\.PLCTrainerImportedModels\.loadManifest\(\)/);
   assert.match(automationLabs, /await window\.PLCTrainerImportedModels\.loadModel\(filename/);

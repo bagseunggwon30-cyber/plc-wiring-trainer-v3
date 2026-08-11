@@ -286,7 +286,15 @@
   }
 
   function getProfile(stateOrId) { return PROFILES[profileId(typeof stateOrId === 'object' ? stateOrId.profileId : stateOrId)]; }
-  function setProfile(state, id) { state.profileId = profileId(id); state.memory = {}; refreshMemory(state); return state.profileId; }
+  function setProfile(state, id) {
+    const next = profileId(id);
+    if (next === state.profileId) return next;
+    stopAuto(state, 'PLC 제조사 프로필 전환');
+    setCoil(state, 'A', false); setCoil(state, 'B', false); setVacuum(state, false); setSupply(state, false);
+    state.profileId = next; state.memory = {}; evaluate(state, 0);
+    addEvent(state, 'profile', `${getProfile(state).vendor} 주소 프로필 선택 · 이전 출력 안전 해제`);
+    return state.profileId;
+  }
 
   function refreshMemory(state) {
     const p = getProfile(state), m = state.memory;
