@@ -97,6 +97,7 @@
       if (options.scene && this.connectionRoot.parent !== options.scene) options.scene.add(this.connectionRoot);
       this.colors = {
         electric: options.electricColor ?? 0x31b7ff,
+        optical: options.opticalColor ?? 0xd86cff,
         air: options.airColor ?? 0x50d4ef,
         preview: options.previewColor ?? 0xffd15a
       };
@@ -169,6 +170,7 @@
       if (Array.isArray(anchors)) return anchors.map(item => ({ ...item, kind: item.kind || item.type }));
       return [
         ...(anchors.electric || descriptor.electricAnchors || []).map(item => ({ ...item, kind: 'electric' })),
+        ...(anchors.optical || descriptor.opticalAnchors || []).map(item => ({ ...item, kind: 'optical' })),
         ...(anchors.air || descriptor.airAnchors || []).map(item => ({ ...item, kind: 'air' }))
       ];
     }
@@ -185,7 +187,7 @@
       };
       for (const item of this._anchorDescriptors(descriptor)) {
         const anchorId = normalizeId(item.id, `anchor id for ${id}`), kind = String(item.kind || '').toLowerCase();
-        if (kind !== 'electric' && kind !== 'air') throw new RangeError(`Anchor ${id}:${anchorId} must be electric or air`);
+        if (!['electric', 'optical', 'air'].includes(kind)) throw new RangeError(`Anchor ${id}:${anchorId} must be electric, optical, or air`);
         if (module.anchors.has(anchorId)) throw new Error(`Duplicate anchor: ${id}:${anchorId}`);
         const anchorObject = item.object || object;
         if (!anchorObject?.isObject3D || !anchorObject.localToWorld) throw new TypeError(`Anchor ${id}:${anchorId} object must be a THREE.Object3D`);
@@ -223,7 +225,7 @@
 
     _createVisual(kind, preview = false, options = {}) {
       const color = options.color ?? (preview ? this.colors.preview : this.colors[kind]);
-      if (kind === 'electric') {
+      if (kind === 'electric' || kind === 'optical') {
         const geometry = new this.THREE.BufferGeometry().setFromPoints(Array.from({ length: 6 }, () => new this.THREE.Vector3()));
         const material = new this.THREE.LineBasicMaterial({ color, transparent: preview, opacity: preview ? .72 : 1 });
         const line = new this.THREE.Line(geometry, material); line.userData.sovEditorVisual = 'line'; return line;
@@ -251,12 +253,12 @@
     _connect(fromReference, toReference, options = {}) {
       const from = this._resolveAnchor(fromReference), to = this._resolveAnchor(toReference);
       if (from === to) throw new Error('A socket cannot connect to itself');
-      if (from.kind !== to.kind) throw new Error('Electric and air sockets cannot be connected together');
+      if (from.kind !== to.kind) throw new Error('Sockets must use the same connection medium');
       if (from.connectionId || to.connectionId) throw new Error('Each socket accepts only one direct connection');
       const fromModule = this.modules.get(from.moduleId), toModule = this.modules.get(to.moduleId);
       if (fromModule.lab !== toModule.lab) throw new Error('Connections cannot cross labs');
       if (options.enforceMode !== false) {
-        const required = from.kind === 'electric' ? MODES.WIRE : MODES.AIR;
+        const required = from.kind === 'air' ? MODES.AIR : MODES.WIRE;
         if (this.lab !== fromModule.lab || this.mode !== required) throw new Error(`${from.kind} connection requires ${required} mode in ${fromModule.lab}`);
       }
       if (this.canConnect && this.canConnect({ from, to, kind: from.kind, editor: this }) === false) throw new Error('Connection rejected by compatibility callback');
@@ -277,10 +279,13 @@
     }
 
     beginConnection(reference) {
-      const kind = this.mode === MODES.WIRE ? 'electric' : this.mode === MODES.AIR ? 'air' : null;
-      if (!kind) { this._emit('actionrejected', { action: 'connection-start', mode: this.mode }); return false; }
       const anchor = this._resolveAnchor(reference), module = this.modules.get(anchor.moduleId);
-      if (module.lab !== this.lab || anchor.kind !== kind || anchor.connectionId) { this._emit('actionrejected', { action: 'connection-start', moduleId: anchor.moduleId, anchorId: anchor.id }); return false; }
+      const modeAcceptsKind = this.mode === MODES.WIRE
+        ? anchor.kind === 'electric' || anchor.kind === 'optical'
+        : this.mode === MODES.AIR && anchor.kind === 'air';
+      if (!modeAcceptsKind) { this._emit('actionrejected', { action: 'connection-start', mode: this.mode }); return false; }
+      const kind = anchor.kind;
+      if (module.lab !== this.lab || anchor.connectionId) { this._emit('actionrejected', { action: 'connection-start', moduleId: anchor.moduleId, anchorId: anchor.id }); return false; }
       this.cancel('connection-restart');
       const visual = this._createVisual(kind, true); this.previewRoot.add(visual);
       const point = this.anchorWorldPosition(anchor); this._updateVisual(visual, point, point);

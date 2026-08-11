@@ -199,11 +199,12 @@
   }
 
   function servoPane() {
-    return `<div class="al-pane-grid"><div class="al-scene" data-scene="servo2"><div class="al-scene-title"><b>2축 서보 제어 실습실</b><span>XBF-PD02A / QD75D2N</span></div>${cameraPresetButtons()}${editorToolbar('servo2')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
-      <section class="al-section"><div class="al-status" id="al-servo-status"><b>대기</b><span>IDLE</span></div><label class="al-profile">장비 프로필<select id="al-servo-profile"><option value="ls">LS XBF-PD02A + L7S</option><option value="mitsubishi">Mitsubishi QD75 + MR-J4</option></select></label><div class="al-actions three"><button class="al-btn run" data-servo-action="servo">SERVO ON</button><button class="al-btn" data-servo-action="home">전축 원점</button><button class="al-btn stop" data-servo-action="stop">전축 정지</button></div></section>
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="servo2"><div class="al-scene-title"><b>2축 서보 제어 실습실</b><span>선택형 LS / Mitsubishi</span></div>${cameraPresetButtons()}${editorToolbar('servo2')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
+      <section class="al-section"><div class="al-status" id="al-servo-status"><b>대기</b><span>IDLE</span></div><label class="al-profile">장비 프로필<select id="al-servo-profile"><option value="ls">LS XBF-PD02A + L7S</option><option value="mitsubishi">Mitsubishi QD75D2N + MR-J4-A</option><option value="mitsubishi-sscnet">Mitsubishi QD77MS2 + MR-J4-B (SSCNET III/H)</option></select></label><div class="al-actions three"><button class="al-btn run" data-servo-action="servo">SERVO ON</button><button class="al-btn" data-servo-action="home">전축 원점</button><button class="al-btn stop" data-servo-action="stop">전축 정지</button></div></section>
       <section class="al-section"><h3>축 수동 운전 <small>누르는 동안 JOG</small></h3>${['X', 'Y'].map(axis => `<div class="al-axis"><strong>${axis}</strong><div><div class="al-axis-value" data-servo-pos="${axis}">0.00 mm</div><div class="al-axis-flags" data-servo-flags="${axis}">SERVO OFF</div><div class="al-axis-target"><input data-servo-target="${axis}" type="number" step="1" value="${axis === 'X' ? 320 : 240}"><button data-servo-move="${axis}">ABS</button></div></div><div class="al-jog"><button data-servo-jog="${axis},-1">−</button><button data-servo-jog="${axis},1">＋</button></div></div>`).join('')}</section>
       <section class="al-section"><h3>2축 직선 보간</h3><div class="al-fields"><label class="al-field">X 목표<input id="al-linear-x" type="number" value="380"></label><label class="al-field">Y 목표<input id="al-linear-y" type="number" value="300"></label><label class="al-field">속도<input id="al-linear-speed" type="number" value="140"></label></div><button class="al-btn" data-servo-action="linear" style="width:100%;margin-top:6px">X/Y 동시 직선 보간</button></section>
-      <section class="al-section"><h3>내부 PLC 주소 이미지 <small>실제 PLC 전송 없음</small></h3><table class="al-memory" id="al-servo-memory"></table><div class="al-asset-note">LS L7S/XML 및 Mitsubishi Q/MR-J4 공개 단자 의미를 분리했습니다. 모듈 오류와 서보 ALM은 서로 다른 상태입니다.</div></section>
+      <section class="al-section" id="al-servo-sscnet" hidden><h3>SSCNET III/H 광 토폴로지 <small>MR-J4-B 전용</small></h3><div class="al-status" id="al-servo-sscnet-status"><b>광링크 미완성</b><span>FAIL</span></div><div class="al-actions"><button class="al-btn" data-servo-sscnet="reference">매뉴얼 기준 예시 연결</button><button class="al-btn stop" data-servo-sscnet="clear">광링크 제거</button></div><div class="al-log" id="al-servo-sscnet-issues"></div><div class="al-asset-note">Controller → 1축 CN1A, 1축 CN1B → 2축 CN1A, 마지막 CN1B → PROTECTIVE_CAP. 캡은 종단저항이 아니라 광커넥터 보호용입니다. ASSET_MODEL_UNVERIFIED 상태이므로 실기 검토 판정은 BLOCKED입니다.</div></section>
+      <section class="al-section"><h3>선택 프로필 주소 이미지 <small>실제 PLC 전송 없음</small></h3><table class="al-memory" id="al-servo-memory"></table><div class="al-asset-note">LS 펄스열, Mitsubishi QD75D2N + MR-J4-A 펄스열, Mitsubishi QD77MS2 + MR-J4-B SSCNET III/H를 각각 독립 선택합니다. 다른 프로필 주소와 출력은 섞이지 않습니다.</div></section>
     </aside></div>`;
   }
 
@@ -397,7 +398,11 @@
     A.editorModules = { servo2: new Map(), mps: new Map(), pneumatic: new Map(), discrete: new Map() };
     for (const lab of ['servo2', 'mps', 'pneumatic', 'discrete']) {
       const editor = engine.create({ three: Three, lab, scene: A.scenes[lab].scene, gridSize: .025, tubeRadius: .003 });
-      editor.on('change', () => { if (lab === 'discrete') syncDiscreteTopology(); schedule(); persist(); });
+      editor.on('change', () => {
+        if (lab === 'servo2') syncServoTopology();
+        if (lab === 'discrete') syncDiscreteTopology();
+        schedule(); persist();
+      });
       editor.on('modechange', () => { updateEditorUi(); schedule(); persist(); });
       A.editors[lab] = editor;
     }
@@ -408,7 +413,8 @@
     if (!editor || editor.modules.has(id) || !object) return;
     const markerGeometry = new Three.SphereGeometry(.006, 8, 6);
     const anchors = anchorSpecs.map((spec, index) => {
-      const marker = new Three.Mesh(markerGeometry, new Three.MeshBasicMaterial({ color: spec.kind === 'air' ? 0xff5252 : 0x4fc7ff, transparent: true, opacity: .92, depthTest: false }));
+      const markerColor = spec.kind === 'air' ? 0xff5252 : spec.kind === 'optical' ? 0xd86cff : 0x4fc7ff;
+      const marker = new Three.Mesh(markerGeometry, new Three.MeshBasicMaterial({ color: markerColor, transparent: true, opacity: .92, depthTest: false }));
       marker.name = `${id}-${spec.tag || index}`; marker.position.fromArray(spec.position); marker.visible = false; marker.renderOrder = 20;
       marker.userData.sovAnchor = { moduleId: id, anchorId: spec.id || String(index), kind: spec.kind };
       object.add(marker); A.editorMarkers[lab].push(marker);
@@ -430,6 +436,30 @@
     if (!editor || !state) return null;
     Discrete.setConnections(state, editor.serialize().connections);
     return Discrete.evaluateTopology(state);
+  }
+
+  function syncServoTopology() {
+    const editor = A.editors.servo2, state = A.state?.labs?.servo2;
+    if (!editor || !state) return null;
+    const optical = editor.serialize().connections.filter(connection => connection.kind === 'optical');
+    return Servo.setSscnetConnections(state, optical);
+  }
+
+  function applyServoSscnetConnections(opticalConnections) {
+    const editor = A.editors.servo2; if (!editor) return false;
+    const retained = editor.serialize().connections.filter(connection => connection.kind !== 'optical');
+    editor.cancel('replace-sscnet-topology'); editor.clearConnections({ emit: false });
+    try {
+      for (const item of [...retained, ...(opticalConnections || [])]) editor.connect(item.from, item.to, { id: item.id, enforceMode: false, emit: false });
+      editor.updateConnections(); syncServoTopology(); syncServoNetworkVisual(); updateEditorUi(); schedule(); persist(true); return true;
+    } catch (error) {
+      editor.clearConnections({ emit: false });
+      for (const item of retained) {
+        try { editor.connect(item.from, item.to, { id: item.id, enforceMode: false, emit: false }); } catch (_) { /* retain only valid existing links */ }
+      }
+      syncServoTopology();
+      console.warn('SSCNET topology could not be applied', error); return false;
+    }
   }
 
   function applyDiscreteConnections(connections) {
@@ -589,6 +619,47 @@
       };
       schedule();
     } catch (error) { console.warn('Imported workpieces could not be loaded', error); }
+  }
+
+  async function loadServoNetworkAssets() {
+    const loader = window.PLCTrainerImportedModels, scene = A.scenes.servo2, parts = scene?.parts;
+    if (!loader || !parts || parts.sscnetNetworkRoot) return;
+    try {
+      const [amplifier1, amplifier2, head1, head2] = await Promise.all([
+        loader.loadModel('servo-amplifier.glb', { name: 'sscnet-axis1-amplifier' }),
+        loader.loadModel('servo-amplifier.glb', { name: 'sscnet-axis2-amplifier' }),
+        loader.loadModel('sscnetiii-amp-head.glb', { name: 'sscnet-axis1-head' }),
+        loader.loadModel('sscnetiii-amp-head.glb', { name: 'sscnet-axis2-head' })
+      ]);
+      const networkRoot = new Three.Group(); networkRoot.name = 'mitsubishi-sscnet-teaching-topology'; networkRoot.position.set(0, 1.08, .19); scene.root.add(networkRoot);
+      const controller = new Three.Group(); controller.name = 'QD77MS2-teaching-controller'; controller.position.set(-.32, 0, 0); networkRoot.add(controller);
+      box(controller, [.10, .14, .05], [0, .07, 0], material(0x6d4937, .42, .35));
+      const controllerIndicator = new Three.Mesh(
+        new Three.SphereGeometry(.006, 12, 8),
+        material(0x66ddff, .08, .28, { emissive: 0x226688, emissiveIntensity: .8 })
+      );
+      controllerIndicator.name = 'SSCNET-status-indicator'; controllerIndicator.position.set(0, .12, .028); controller.add(controllerIndicator);
+      const axis1 = new Three.Group(); axis1.name = 'MR-J4-B-axis1-educational-geometry'; axis1.position.set(-.11, 0, 0); axis1.add(amplifier1); networkRoot.add(axis1);
+      const axis2 = new Three.Group(); axis2.name = 'MR-J4-B-axis2-educational-geometry'; axis2.position.set(.12, 0, 0); axis2.add(amplifier2); networkRoot.add(axis2);
+      head1.position.set(0, .035, .026); head2.position.set(0, .035, .026); axis1.add(head1); axis2.add(head2);
+      const cap = new Three.Group(); cap.name = 'SSCNET-CN1B-PROTECTIVE-CAP'; cap.position.set(.32, 0, 0); networkRoot.add(cap);
+      box(cap, [.035, .07, .025], [0, .035, 0], material(0x20262b, .7, .18));
+      for (const model of [amplifier1, amplifier2, head1, head2]) model.traverse?.(object => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true; } });
+      registerEditorModule('servo2', 'sscnet-controller', controller, [{ id: 'SSCNET', tag: 'SSCNET III/H OUT', kind: 'optical', position: [.052, .055, .035] }], false);
+      registerEditorModule('servo2', 'sscnet-axis1', axis1, [
+        { id: 'CN1A', tag: 'CN1A PREVIOUS/CONTROLLER', kind: 'optical', position: [-.025, .025, .035] },
+        { id: 'CN1B', tag: 'CN1B NEXT', kind: 'optical', position: [.025, .025, .035] }
+      ], false);
+      registerEditorModule('servo2', 'sscnet-axis2', axis2, [
+        { id: 'CN1A', tag: 'CN1A PREVIOUS', kind: 'optical', position: [-.025, .025, .035] },
+        { id: 'CN1B', tag: 'CN1B FINAL', kind: 'optical', position: [.025, .025, .035] }
+      ], false);
+      registerEditorModule('servo2', 'sscnet-cap', cap, [{ id: 'PROTECTIVE_CAP', tag: 'PROTECTIVE_CAP', kind: 'optical', position: [-.02, .035, .02] }], false);
+      parts.sscnetNetworkRoot = networkRoot;
+      const saved = A.state?.editor?.servo2;
+      if (saved) { try { A.editors.servo2.importState(saved, { strict: false }); } catch (error) { console.warn('Servo editor state could not be restored', error); } }
+      syncServoTopology(); syncServoNetworkVisual(); updateUi(true); schedule();
+    } catch (error) { console.warn('SSCNET teaching assets could not be loaded', error); }
   }
 
   function equipmentGroup(filename) {
@@ -767,6 +838,7 @@
       ], false);
       A.scenes.servo2.proxyRoot.visible = false;
     }, { authoredCoordinates: true });
+    void loadServoNetworkAssets();
     addImported('mps', 'mps-complete-station.glb', null, [-.106, .79, -.102], [0, 0, 0], 1, ({ model }) => {
       A.scenes.mps.parts.importedPlant = bindMpsImportedPlant(model);
       const wrapper = model.parent;
@@ -924,7 +996,16 @@
       if (!A.visible || A.activeLab === 'palletizer3d') return;
       const editor = A.editors[A.activeLab]; if (editor?.handleHotkey(event)) { updateEditorUi(); schedule(); persist(true); }
     });
-    q('#al-servo-profile', A.hub).onchange = event => { Servo.setProfile(A.state.labs.servo2, event.target.value); schedule(); updateUi(true); persist(true); };
+    q('#al-servo-profile', A.hub).onchange = event => {
+      syncServoTopology();
+      Servo.setProfile(A.state.labs.servo2, event.target.value);
+      syncServoTopology(); syncServoNetworkVisual(); schedule(); updateUi(true); persist(true);
+    };
+    qa('[data-servo-sscnet]', A.hub).forEach(button => button.onclick = () => {
+      if (Servo.getProfile(A.state.labs.servo2).commandInterface !== 'sscnet-iii-h') return;
+      applyServoSscnetConnections(button.dataset.servoSscnet === 'reference' ? Servo.referenceSscnetConnections() : []);
+      updateUi(true);
+    });
     qa('[data-servo-action]', A.hub).forEach(button => button.onclick = () => {
       const state = A.state.labs.servo2, profile = Servo.getProfile(state), action = button.dataset.servoAction;
       if (action === 'servo') { const on = !Object.values(state.axes).every(axis => axis.servoOn); for (const axis of ['X', 'Y']) Servo.writeDevice(state, profile.commands.servoOn[axis], on); }
@@ -1028,6 +1109,15 @@
       imported.axis2.position.z = imported.axis2Base.z + .055 + ratio * .151;
     }
     setLed(parts.leds.X0, state.axes.X.reverseLimit); setLed(parts.leds.X1, state.axes.X.forwardLimit, 0xff5348); setLed(parts.leds.Y0, state.axes.Y.reverseLimit); setLed(parts.leds.Y1, state.axes.Y.forwardLimit, 0xff5348);
+    syncServoNetworkVisual();
+  }
+
+  function syncServoNetworkVisual() {
+    const state = A.state?.labs?.servo2, parts = A.scenes?.servo2?.parts, editor = A.editors?.servo2;
+    if (!state || !parts) return;
+    const enabled = Servo.getProfile(state).commandInterface === 'sscnet-iii-h';
+    if (parts.sscnetNetworkRoot) parts.sscnetNetworkRoot.visible = enabled;
+    if (editor) for (const connection of editor.connections.values()) if (connection.kind === 'optical') connection.visual.visible = enabled;
   }
 
   function clearDynamic(group) { while (group.children.length) { const item = group.children.pop(); item.geometry?.dispose?.(); item.material?.dispose?.(); } }
@@ -1143,6 +1233,13 @@
     for (const name of ['X', 'Y']) { const axis = servo.axes[name]; q(`[data-servo-pos="${name}"]`, A.hub).textContent = `${axis.current.toFixed(2)} mm`; q(`[data-servo-flags="${name}"]`, A.hub).textContent = axis.alarm ? axis.alarm.code : [axis.servoOn ? 'SV ON' : 'SV OFF', axis.homed ? 'HOME' : 'NO HOME', axis.busy ? 'BUSY' : 'READY', axis.dog ? 'DOG' : ''].filter(Boolean).join(' · '); }
     const allServo = Object.values(servo.axes).every(axis => axis.servoOn), servoButton = q('[data-servo-action="servo"]', A.hub); servoButton.textContent = allServo ? 'SERVO OFF' : 'SERVO ON'; servoButton.classList.toggle('on', allServo);
     const sp = Servo.getProfile(servo), memoryRows = [['ON X', sp.commands.servoOn.X, Servo.readDevice(servo, sp.status.servoReady.X)], ['ON Y', sp.commands.servoOn.Y, Servo.readDevice(servo, sp.status.servoReady.Y)], ['X 목표', sp.data.target.X, Servo.readDevice(servo, sp.data.target.X)], ['Y 목표', sp.data.target.Y, Servo.readDevice(servo, sp.data.target.Y)], ['직선보간', sp.commands.linear, Servo.readDevice(servo, sp.status.linearBusy)]]; q('#al-servo-memory', A.hub).innerHTML = memoryRows.map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] === true ? 'ON' : row[2] === false ? 'OFF' : Number(row[2] || 0).toFixed(1)}</td></tr>`).join('');
+    const sscnetSection = q('#al-servo-sscnet', A.hub), sscnetEnabled = sp.commandInterface === 'sscnet-iii-h'; sscnetSection.hidden = !sscnetEnabled;
+    if (sscnetEnabled) {
+      const sscnet = Servo.evaluateSscnetTopology(servo), sscnetStatus = q('#al-servo-sscnet-status', A.hub), wiringErrors = sscnet.issues.filter(issue => issue.severity === 'error');
+      q('b', sscnetStatus).textContent = wiringErrors.length ? `광링크 ${wiringErrors.length}곳 미완성` : '광 토폴로지 정상 · 자산 근거 차단';
+      q('span', sscnetStatus).textContent = `${sscnet.topologyStatus} · ${sscnet.reviewStatus}`; sscnetStatus.classList.toggle('fault', sscnet.issues.length > 0);
+      q('#al-servo-sscnet-issues', A.hub).innerHTML = sscnet.issues.map(issue => `<div class="${issue.severity === 'error' ? 'fault' : ''}"><b>${esc(issue.code)}</b> · ${esc(issue.message)}</div>`).join('') || '<div>공식 매뉴얼의 광 데이지체인과 마지막 보호캡 조건을 충족했습니다.</div>';
+    }
 
     const mps = A.state.labs.mps; MPS.updateInputs(mps); const mp = MPS.getProfile(mps), mpsStatus = q('#al-mps-status', A.hub), activeOutputs = mps.outputBits.filter(Boolean).length, activeInputs = mps.inputBits.filter(Boolean).length; q('b', mpsStatus).textContent = mps.auto.running ? '외부 PLC 출력 제어' : 'PLC 출력 대기'; q('span', mpsStatus).textContent = `${mp.id === 'ls' ? 'LS' : 'MELSEC'} · ${activeOutputs} OUT · ${activeInputs} IN · ${mps.workpieces.length} EA`; mpsStatus.classList.toggle('fault', !!mps.fault); q('#al-mps-profile', A.hub).value = mps.profileId; const workpieceStyle = q('#al-mps-workpiece-style', A.hub); workpieceStyle.value = normalizeMpsWorkpieceStyle(A.state.appearance?.mpsWorkpieceStyle); workpieceStyle.disabled = mps.workpieces.length > 0; workpieceStyle.title = workpieceStyle.disabled ? '워크를 비운 뒤 형상을 변경하세요' : '3D 형상과 센서 판정 길이를 함께 변경합니다';
     qa('[data-mps-output-index]', A.hub).forEach(input => { const index = Number(input.dataset.mpsOutputIndex), definition = MPS.OUTPUT_DEFINITIONS[index], mapped = mp.outputs[definition.key], label = q(`[data-mps-output-label="${index}"]`, A.hub); input.checked = !!mps.outputBits[index]; if (label) label.textContent = `${mapped} ${MPS_OUTPUT_LABELS[index]}`; input.parentElement.title = `${mp.vendor} ${mapped} · 물리 O${index} ${MPS_OUTPUT_LABELS[index]}`; });

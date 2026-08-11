@@ -99,6 +99,33 @@ test('registered electric lines and air tubes use live object-local anchors and 
   engine.dispose();
 });
 
+test('servo WIRE mode keeps SSCNET optical links distinct from copper conductors', () => {
+  const scene = new THREE.Scene();
+  const engine = Editor.create({ three: THREE, scene, lab: 'servo2' });
+  for (const [id, x] of [['controller', 0], ['axis1', 1]]) {
+    const object = new THREE.Group(); object.position.x = x; scene.add(object);
+    engine.registerModule({
+      id, lab: 'servo2', object,
+      anchors: [{ id: id === 'controller' ? 'SSCNET' : 'CN1A', kind: 'optical', position: [0, .1, 0] }]
+    });
+  }
+  const copper = new THREE.Group(); scene.add(copper);
+  engine.registerModule({ id: 'copper', lab: 'servo2', object: copper, anchors: [{ id: 'E', kind: 'electric', position: [0, 0, 0] }] });
+
+  engine.setMode(Editor.MODES.WIRE);
+  assert.equal(engine.beginConnection({ moduleId: 'controller', anchorId: 'SSCNET' }), true);
+  assert.equal(engine.pendingConnection.kind, 'optical');
+  const link = engine.completeConnection({ moduleId: 'axis1', anchorId: 'CN1A' });
+  assert.equal(link.kind, 'optical');
+  assert.equal(link.visual.isLine, true);
+  assert.equal(engine.serialize().connections[0].kind, 'optical');
+  assert.throws(
+    () => engine.connect({ moduleId: 'axis1', anchorId: 'CN1A' }, { moduleId: 'copper', anchorId: 'E' }),
+    /same connection medium/
+  );
+  engine.dispose();
+});
+
 test('pneumatic MOVE snaps on a horizontal grid and immediately updates connected endpoints', () => {
   const scene = new THREE.Scene();
   const engine = Editor.create({ three: THREE, scene, lab: 'pneumatic', gridSize: .1 });

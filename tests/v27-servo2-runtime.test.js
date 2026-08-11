@@ -118,6 +118,54 @@ test('LS and Mitsubishi profiles expose and execute their teaching-only address 
   assert.equal(Runtime.writeDevice(state, 'D9999', 1).ok, false);
 });
 
+test('pulse-train and SSCNET Mitsubishi servo profiles are separate selectable sessions', () => {
+  const pulse = Runtime.getProfile('mitsubishi');
+  assert.equal(pulse.module, 'QD75D2N + MR-J4-A');
+  assert.equal(pulse.commandInterface, 'differential-pulse');
+  assert.equal(pulse.sscnet, undefined);
+
+  const state = Runtime.createState({ profile: 'mitsubishi-sscnet' });
+  const sscnet = Runtime.getProfile(state);
+  assert.equal(sscnet.id, 'mitsubishi-sscnet');
+  assert.equal(sscnet.module, 'QD77MS2 + MR-J4-B');
+  assert.equal(sscnet.commandInterface, 'sscnet-iii-h');
+  assert.equal(sscnet.reviewStatus, 'BLOCKED');
+  assert.ok(sscnet.blockers.includes('ASSET_MODEL_UNVERIFIED'));
+
+  const initial = Runtime.evaluateSscnetTopology(state);
+  assert.equal(initial.topologyStatus, 'FAIL');
+  assert.equal(initial.reviewStatus, 'BLOCKED');
+  assert.deepEqual(
+    initial.issues.filter(issue => issue.severity === 'error').map(issue => issue.code).sort(),
+    ['SSCNET_AXIS_CHAIN_OPEN', 'SSCNET_CONTROLLER_PATH_OPEN', 'SSCNET_FINAL_CAP_MISSING']
+  );
+
+  Runtime.setSscnetConnections(state, Runtime.referenceSscnetConnections());
+  const connected = Runtime.evaluateSscnetTopology(state);
+  assert.equal(connected.topologyStatus, 'PASS');
+  assert.equal(connected.reviewStatus, 'BLOCKED');
+  assert.deepEqual(connected.issues.map(issue => issue.code), ['ASSET_MODEL_UNVERIFIED']);
+
+  const sscnetServoAddress = sscnet.commands.servoOn.X;
+  assert.equal(Runtime.writeDevice(state, sscnetServoAddress, true).ok, true);
+  assert.equal(Runtime.setProfile(state, 'ls'), true);
+  assert.equal(Runtime.writeDevice(state, sscnetServoAddress, true).ok, false);
+  assert.equal(Object.values(state.axes).every(axis => !axis.servoOn), true);
+});
+
+test('SSCNET profile persists its own optical topology and detects a missing protective cap', () => {
+  const state = Runtime.createState({ profile: 'mitsubishi-sscnet' });
+  const withoutCap = Runtime.referenceSscnetConnections().filter(connection => connection.id !== 'sscnet-final-cap');
+  Runtime.setSscnetConnections(state, withoutCap);
+  assert.equal(Runtime.evaluateSscnetTopology(state).issues.some(issue => issue.code === 'SSCNET_FINAL_CAP_MISSING'), true);
+
+  const restored = Runtime.createState({ saved: Runtime.exportState(state) });
+  assert.equal(restored.profileId, 'mitsubishi-sscnet');
+  assert.equal(restored.sscnet.connections.length, 2);
+  assert.equal(Runtime.evaluateSscnetTopology(restored).issues.some(issue => issue.code === 'SSCNET_FINAL_CAP_MISSING'), true);
+  assert.equal(Object.values(restored.axes).every(axis => !axis.servoOn), true);
+});
+
 test('export/import preserves profile, points, axis data, and setpoints without resuming motion', () => {
   const state = Runtime.createState({ profile: 'mitsubishi', axes: { X: { current: 15 }, Y: { current: 30 } } });
   Runtime.setServo(state, true);

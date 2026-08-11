@@ -8,7 +8,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.7.0';
+  const VERSION = '2.8.0';
   const EPS = 1e-9;
   const MAX_TICK_STEP = 0.02;
   const AXIS_NAMES = Object.freeze(['X', 'Y']);
@@ -34,6 +34,7 @@
       vendor: 'LS Electric',
       family: 'XGB',
       module: 'XBF-PD02A',
+      commandInterface: 'differential-pulse',
       addressStyle: 'P / M / D',
       aliases: ['ls', 'xgb', 'xbf-pd02a', 'xbf_pd02a'],
       addresses: {
@@ -71,7 +72,8 @@
       id: 'mitsubishi',
       vendor: 'Mitsubishi Electric',
       family: 'QnU',
-      module: 'QD75 / MR-J4',
+      module: 'QD75D2N + MR-J4-A',
+      commandInterface: 'differential-pulse',
       addressStyle: 'X / Y / M / D',
       aliases: ['mitsubishi', 'qnu', 'qd75', 'mr-j4', 'mrj4'],
       addresses: {
@@ -107,6 +109,37 @@
     })
   };
 
+  PROFILES['mitsubishi-sscnet'] = makeProfile({
+    id: 'mitsubishi-sscnet',
+    vendor: 'Mitsubishi Electric',
+    family: 'MELSEC-Q Simple Motion',
+    module: 'QD77MS2 + MR-J4-B',
+    commandInterface: 'sscnet-iii-h',
+    addressStyle: 'X / Y / M / D (teaching map)',
+    aliases: ['mitsubishi-sscnet', 'sscnet', 'sscnet-iii-h', 'qd77ms2', 'mr-j4-b', 'mrj4b'],
+    reviewStatus: 'BLOCKED',
+    blockers: ['ASSET_MODEL_UNVERIFIED'],
+    sscnet: {
+      protocol: 'SSCNET III/H',
+      controller: 'QD77MS2',
+      amplifier: 'MR-J4-B',
+      firstPort: 'CN1A',
+      downstreamPort: 'CN1B',
+      finalPortRequirement: 'PROTECTIVE_CAP',
+      manualId: 'SH030106-T',
+      manualPages: ['1-24', '3-15', '3-39']
+    },
+    // The simulated address map is intentionally scoped to this selected
+    // profile. It does not claim to be a QD77 buffer-memory/PLC driver map.
+    addresses: JSON.parse(JSON.stringify(PROFILES.mitsubishi.addresses))
+  });
+
+  const SSCNET_REFERENCE_CONNECTIONS = Object.freeze([
+    Object.freeze({ id: 'sscnet-controller-axis1', kind: 'optical', from: Object.freeze({ moduleId: 'sscnet-controller', anchorId: 'SSCNET' }), to: Object.freeze({ moduleId: 'sscnet-axis1', anchorId: 'CN1A' }) }),
+    Object.freeze({ id: 'sscnet-axis1-axis2', kind: 'optical', from: Object.freeze({ moduleId: 'sscnet-axis1', anchorId: 'CN1B' }), to: Object.freeze({ moduleId: 'sscnet-axis2', anchorId: 'CN1A' }) }),
+    Object.freeze({ id: 'sscnet-final-cap', kind: 'optical', from: Object.freeze({ moduleId: 'sscnet-axis2', anchorId: 'CN1B' }), to: Object.freeze({ moduleId: 'sscnet-cap', anchorId: 'PROTECTIVE_CAP' }) })
+  ]);
+
   function finite(value, fallback = 0) {
     const number = Number(value);
     return Number.isFinite(number) ? number : fallback;
@@ -122,6 +155,92 @@
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function referenceSscnetConnections() {
+    return clone(SSCNET_REFERENCE_CONNECTIONS);
+  }
+
+  function normalizeSscnetConnections(connections) {
+    if (!Array.isArray(connections)) return [];
+    const normalized = [];
+    const ids = new Set();
+    for (const item of connections.slice(0, 32)) {
+      if (!item || typeof item !== 'object' || String(item.kind || '').toLowerCase() !== 'optical') continue;
+      const from = item.from || {}, to = item.to || {};
+      const fromModule = String(from.moduleId || '').trim(), fromAnchor = String(from.anchorId || '').trim();
+      const toModule = String(to.moduleId || '').trim(), toAnchor = String(to.anchorId || '').trim();
+      if (!fromModule || !fromAnchor || !toModule || !toAnchor) continue;
+      const id = String(item.id || `sscnet-link-${normalized.length + 1}`).trim();
+      if (!id || ids.has(id)) continue;
+      ids.add(id);
+      normalized.push({ id, kind: 'optical', from: { moduleId: fromModule, anchorId: fromAnchor }, to: { moduleId: toModule, anchorId: toAnchor } });
+    }
+    return normalized;
+  }
+
+  function endpointMatches(endpoint, expected) {
+    return endpoint?.moduleId === expected.moduleId && endpoint?.anchorId === expected.anchorId;
+  }
+
+  function hasSscnetLink(connections, expected) {
+    return connections.some(connection =>
+      (endpointMatches(connection.from, expected.from) && endpointMatches(connection.to, expected.to))
+      || (endpointMatches(connection.from, expected.to) && endpointMatches(connection.to, expected.from))
+    );
+  }
+
+  function evaluateSscnetTopology(state) {
+    const profile = getProfile(state);
+    if (!profile.sscnet) {
+      return { profileId: profile.id, protocol: null, topologyStatus: 'NOT_APPLICABLE', reviewStatus: 'NOT_APPLICABLE', issues: [], paths: [] };
+    }
+    state.sscnet ||= { connections: [], solution: null };
+    const connections = normalizeSscnetConnections(state.sscnet.connections);
+    state.sscnet.connections = connections;
+    const issues = [];
+    const required = [
+      ['SSCNET_CONTROLLER_PATH_OPEN', '컨트롤러 SSCNET 출력과 1축 CN1A를 광케이블로 연결해야 합니다', SSCNET_REFERENCE_CONNECTIONS[0]],
+      ['SSCNET_AXIS_CHAIN_OPEN', '1축 CN1B와 2축 CN1A를 광케이블로 연결해야 합니다', SSCNET_REFERENCE_CONNECTIONS[1]],
+      ['SSCNET_FINAL_CAP_MISSING', '마지막 축 CN1B에 동봉 보호캡을 장착해야 합니다', SSCNET_REFERENCE_CONNECTIONS[2]]
+    ];
+    for (const [code, message, expected] of required) {
+      if (hasSscnetLink(connections, expected)) continue;
+      issues.push({
+        code,
+        severity: 'error',
+        category: code === 'SSCNET_FINAL_CAP_MISSING' ? 'physical' : 'protocol',
+        message,
+        related: [clone(expected.from), clone(expected.to)],
+        manual: { id: profile.sscnet.manualId, page: code === 'SSCNET_FINAL_CAP_MISSING' ? '3-39' : '3-15' }
+      });
+    }
+    for (const code of profile.blockers || []) {
+      issues.push({
+        code,
+        severity: 'blocker',
+        category: 'evidence',
+        message: '가져온 3D 형상의 정확한 제조사 품번이 확인되지 않아 실기 검토 근거로 사용할 수 없습니다',
+        related: [{ assetId: 'servo-amplifier.glb' }, { assetId: 'sscnetiii-amp-head.glb' }]
+      });
+    }
+    const paths = required.filter(([, , expected]) => hasSscnetLink(connections, expected)).map(([, , expected]) => clone(expected));
+    const solution = {
+      profileId: profile.id,
+      protocol: profile.sscnet.protocol,
+      topologyStatus: issues.some(issue => issue.severity === 'error') ? 'FAIL' : 'PASS',
+      reviewStatus: issues.some(issue => issue.severity === 'blocker') ? 'BLOCKED' : 'PASS',
+      issues,
+      paths
+    };
+    state.sscnet.solution = clone(solution);
+    return solution;
+  }
+
+  function setSscnetConnections(state, connections) {
+    state.sscnet ||= { connections: [], solution: null };
+    state.sscnet.connections = normalizeSscnetConnections(connections);
+    return evaluateSscnetTopology(state);
   }
 
   function asBool(value) {
@@ -236,6 +355,7 @@
       },
       pointTable: {},
       linear: emptyLinear(),
+      sscnet: { connections: [], solution: null },
       memory: emptyMemory(),
       events: []
     };
@@ -246,6 +366,7 @@
       for (const [number, point] of Object.entries(options.pointTable)) setPoint(state, number, point);
     }
     if (options.saved) importState(state, options.saved);
+    else evaluateSscnetTopology(state);
     return state;
   }
 
@@ -893,6 +1014,7 @@
     state.profileId = profileId;
     state.profile = profileId;
     initializeMemory(state);
+    evaluateSscnetTopology(state);
     addEvent(state, 'profile', `${getProfile(state).vendor} ${getProfile(state).module} 프로필 선택 · 이전 출력 안전 해제`);
     return true;
   }
@@ -907,6 +1029,7 @@
       axes: state.axes,
       pointTable: state.pointTable,
       linear: state.linear,
+      sscnet: { connections: normalizeSscnetConnections(state.sscnet?.connections) },
       memory: state.memory,
       events: state.events
     });
@@ -945,6 +1068,8 @@
       state.linear.pointNumber = saved.linear.pointNumber ?? null;
       state.linear.reason = 'restored-stopped';
     }
+    state.sscnet = { connections: normalizeSscnetConnections(saved.sscnet?.connections), solution: null };
+    evaluateSscnetTopology(state);
     state.elapsed = Math.max(0, finite(saved.elapsed, 0));
     state.events = Array.isArray(saved.events) ? clone(saved.events).slice(-100) : [];
     initializeMemory(state);
@@ -1000,6 +1125,9 @@
     setProfile,
     switchProfile: setProfile,
     resolveProfile,
+    referenceSscnetConnections,
+    setSscnetConnections,
+    evaluateSscnetTopology,
     readDevice,
     writeDevice,
     readMemory: readDevice,

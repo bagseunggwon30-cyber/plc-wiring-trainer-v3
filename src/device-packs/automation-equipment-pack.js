@@ -16,7 +16,9 @@
   };
   const MELSEC_SOURCES = {
     qd75: 'https://dl.mitsubishielectric.com/dl/fa/document/manual/plc/sh080058/sh080058v.pdf',
+    qd77ms: 'https://www.mitsubishielectric.com/fa/products/faspec/download.page?category=ex&formNm=SSC_DG_SMM_3_QD77MS4_16&id=spec&kisyu=%2Fssc&lang=2&popup=1&sub=manual',
     mrj4: 'https://dl.mitsubishielectric.com/dl/fa/document/manual/servo/sh030107/sh030107v.pdf',
+    mrj4b: 'https://dl.mitsubishielectric.com/dl/fa/document/manual/servo/sh030106/sh030106t.pdf',
     motor: 'https://www.mitsubishielectric.com/fa/products/faspec/detail.page?category=ex&formNm=HG-KR3_HG-KR43_6577&id=spec&kisyu=%2Fservo&lang=2'
   };
 
@@ -112,6 +114,41 @@
       servoAmplifier: { vendor: 'Mitsubishi Electric', family: 'MR-J4-A', model: 'MR-J4-40A', ratedPowerKw: 0.4, axes: 1, command: 'differential-pulse', maxPulsePps: 4000000 },
       manualSource: MELSEC_SOURCES.mrj4, manualVerified: true,
       notes: 'INP를 포함한 일부 CN1 기능은 파라미터 할당에 따라 핀이 달라질 수 있어 assignable 메타데이터로 표시한다.'
+    },
+    'MELSEC-QD77MS2-RACK': {
+      cat: 'plc', label: 'Q03UDVCPU + QD77MS2', sub: '2축 Simple Motion · SSCNET III/H',
+      w: 330, h: 450, color: '#75533f', icon: 'plc', overlayLabel: true,
+      modelAsset: 'mitsubishi-q-plc-module.glb',
+      terminals: [
+        terminal('L', 14, 55, 'L', 'Q61P L', 'AC-L'), terminal('N', 14, 88, 'L', 'Q61P N', 'AC-N'), terminal('FG', 14, 121, 'L', 'Q61P FG', 'PE'),
+        terminal('SSCNET', 316, 178, 'R', 'SSCNET III/H', 'COMM', { protocol: 'SSCNET III/H', medium: 'optical', direction: 'controller-out' })
+      ],
+      motionNetwork: { vendor: 'Mitsubishi Electric', controller: 'QD77MS2', axes: 2, protocol: 'SSCNET III/H', topology: 'controller-to-CN1A-daisy-chain' },
+      manualSource: MELSEC_SOURCES.qd77ms, manualVerified: true,
+      assetEvidence: { status: 'BLOCKED', code: 'ASSET_MODEL_UNVERIFIED', reason: '가져온 Q PLC GLB가 QD77MS2의 정확한 외형·커넥터를 증명하지 않음' },
+      notes: 'QD75D2N 펄스열 프로필과 분리된 SSCNET III/H 교육 프로필이다. 선택한 프로필 밖의 주소와 광링크는 활성화하지 않는다.'
+    },
+    'MR-J4-40B': {
+      cat: 'motion', label: 'Mitsubishi MR-J4-40B', sub: '200V · 400W · SSCNET III/H 서보 앰프',
+      w: 250, h: 405, color: '#49372e', icon: 'drive', modelAsset: 'servo-amplifier.glb',
+      terminals: [
+        ...sideRows([
+          { id: 'L1', label: 'L1', pol: 'AC-L', side: 'L' }, { id: 'L2', label: 'L2', pol: 'AC-G', side: 'L' }, { id: 'L3', label: 'L3', pol: 'AC-L', side: 'L' },
+          { id: 'L11', label: 'L11 CONTROL', pol: 'AC-L', side: 'L' }, { id: 'L21', label: 'L21 CONTROL', pol: 'AC-N', side: 'L' }, { id: 'PE', label: 'PE', pol: 'PE', side: 'L' },
+          { id: 'CN1A', label: 'CN1A PREVIOUS/CONTROLLER', pol: 'COMM', side: 'L', extra: { protocol: 'SSCNET III/H', medium: 'optical', direction: 'in' } },
+          { id: 'CN1B', label: 'CN1B NEXT/CAP', pol: 'COMM', side: 'L', extra: { protocol: 'SSCNET III/H', medium: 'optical', direction: 'out', finalRequirement: 'PROTECTIVE_CAP' } }
+        ], 250, 54, 32),
+        ...sideRows([
+          { id: 'U', label: 'U MOTOR', pol: 'AC-G', side: 'R' }, { id: 'V', label: 'V MOTOR', pol: 'AC-G', side: 'R' }, { id: 'W', label: 'W MOTOR', pol: 'AC-G', side: 'R' },
+          { id: 'CN2', label: 'CN2 MOTOR ENCODER', pol: 'COMM', side: 'R' }, { id: 'CN8', label: 'CN8 STO', pol: 'DI', side: 'R', extra: { safety: true } },
+          { id: 'DICOM', label: 'CN3-5/10 DICOM', pol: 'IO-COM', side: 'R' }, { id: 'EM2', label: 'CN3-20 EM2', pol: 'DI', side: 'R', extra: { safety: true } },
+          { id: 'ALM', label: 'CN3-15 ALM', pol: 'DO', side: 'R' }, { id: 'DOCOM', label: 'CN3-3 DOCOM', pol: 'IO-COM', side: 'R' }
+        ], 250, 54, 32)
+      ],
+      servoAmplifier: { vendor: 'Mitsubishi Electric', family: 'MR-J4-B', model: 'MR-J4-40B', ratedPowerKw: 0.4, axes: 1, command: 'SSCNET III/H' },
+      manualSource: MELSEC_SOURCES.mrj4b, manualVerified: true,
+      assetEvidence: { status: 'BLOCKED', code: 'ASSET_MODEL_UNVERIFIED', reason: '가져온 서보 앰프·SSCNET 헤드 GLB의 정확 품번과 커넥터 치수가 확인되지 않음' },
+      notes: '컨트롤러에서 첫 축 CN1A, 이전 축 CN1B에서 다음 축 CN1A로 연결한다. 마지막 CN1B에는 종단저항이 아니라 먼지 보호용 캡을 장착한다.'
     },
     'HG-KR43': {
       cat: 'motion', label: 'Mitsubishi HG-KR43', sub: '400W · 3000rpm · 22-bit 엔코더',
