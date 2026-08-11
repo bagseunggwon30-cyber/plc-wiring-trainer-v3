@@ -1,19 +1,24 @@
 {
   "name": "wiring-trainer",
-  "version": "1.0.0",
-  "description": "박승권의 결선 작업장 - PLC/HMI/인버터 결선 연습 데스크톱 앱",
+  "version": "2.7.0",
+  "description": "박승권의 결선 작업장 - 결선 실습과 3축/2축 서보, MPS, 공압 자동화 디지털 트윈을 제공하는 Electron 시뮬레이터",
   "main": "main.js",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "start": "electron .",
     "build": "electron-builder --win portable --x64",
-    "build:installer": "electron-builder --win nsis --x64"
+    "build:installer": "electron-builder --win nsis --x64",
+    "test:v24": "node --test tests/v24-modular-runtime.test.js",
+    "test:v25": "node --test tests/v25-multiview.test.js",
+    "test:v26": "node --test tests/v26-palletizer*.test.js",
+    "test:v27": "node --test tests/v27-*.test.js"
   },
   "author": "bark",
   "license": "MIT",
   "devDependencies": {
     "electron": "^32.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "three": "^0.149.0"
   },
   "build": {
     "appId": "com.bark.wiring-trainer",
@@ -23,17 +28,30 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "index.html",
-      "assets/**/*"
+      "src/**/*",
+      "assets/**/*",
+      "pdf/**/*",
+      "docs/**/*",
+      "examples/**/*",
+      "README.md"
     ],
     "win": {
+      "signAndEditExecutable": false,
       "target": [
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "icon.ico"
     },
     "portable": {
       "artifactName": "결선작업장-${version}-portable.exe"
-    }
+    },
+    "asar": true
   }
 }
