@@ -65,6 +65,17 @@ test('automation hub exposes six labs and delegates the shared 3D view', () => {
   assert.doesNotThrow(() => new Function(multiview));
 });
 
+test('3D wiring targets terminal holes directly without persistent floating socket markers', () => {
+  assert.match(ui, /createAnchorHitTarget/);
+  assert.match(ui, /sovPickEnabled/);
+  assert.match(ui, /filter\(target => target\.userData\.sovPickEnabled\)/);
+  assert.doesNotMatch(ui, /marker\.visible = selectedServoEquipment/);
+  assert.match(ui, /hitObject: terminalSurface/);
+  assert.match(ui, /routing: \{ style: 'terminal-panel' \}/);
+  assert.match(ui, /editor\.anchorWorldPosition\(ref\)/);
+  assert.match(ui, /editor\.anchorWorldPosition\(editor\.pendingConnection\.anchor\)/);
+});
+
 test('manual lab controls are routed through the currently selected vendor address map', () => {
   assert.match(ui, /Servo\.writeDevice/);
   assert.match(ui, /MPS\.writeDevice/);

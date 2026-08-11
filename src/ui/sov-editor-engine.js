@@ -73,6 +73,32 @@
 
   function connectionKey(moduleId, anchorId) { return `${moduleId}::${anchorId}`; }
 
+  function normalizeRouting(value) {
+    const style = typeof value === 'string' ? value : value?.style;
+    if (style == null || style === '' || style === 'auto') return Object.freeze({ style: 'auto' });
+    if (style === 'terminal-panel') return Object.freeze({ style: 'terminal-panel' });
+    throw new RangeError(`Unsupported connection routing style: ${style}`);
+  }
+
+  function createAnchorHitTarget(options = {}) {
+    const Three = options.three || root?.THREE;
+    if (!Three?.Mesh || !Three?.SphereGeometry || !Three?.MeshBasicMaterial) throw new Error('A compatible THREE namespace is required');
+    const radius = Math.max(.001, finiteNumber(options.radius ?? .012, 'anchor hit radius'));
+    const target = new Three.Mesh(
+      new Three.SphereGeometry(radius, 12, 8),
+      new Three.MeshBasicMaterial({
+        color: options.color ?? 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false
+      })
+    );
+    target.name = options.name || 'sov-terminal-hole-hit-target';
+    target.userData.sovAnchorHitTarget = true;
+    return target;
+  }
+
   class EditorEngine {
     constructor(options = {}) {
       this.THREE = options.three || root?.THREE;
@@ -228,7 +254,7 @@
       if (kind === 'electric' || kind === 'optical') {
         const geometry = new this.THREE.BufferGeometry().setFromPoints(Array.from({ length: 6 }, () => new this.THREE.Vector3()));
         const material = new this.THREE.LineBasicMaterial({ color, transparent: preview, opacity: preview ? .72 : 1 });
-        const line = new this.THREE.Line(geometry, material); line.userData.sovEditorVisual = 'line'; return line;
+        const line = new this.THREE.Line(geometry, material); line.userData.sovEditorVisual = 'line'; line.userData.sovEditorRouting = normalizeRouting(options.routing); return line;
       }
       const geometry = new this.THREE.CylinderGeometry(options.radius || this.tubeRadius, options.radius || this.tubeRadius, 1, 6, 1, true);
       const material = new this.THREE.MeshBasicMaterial({ color, transparent: preview, opacity: preview ? .66 : .9 });
@@ -239,7 +265,10 @@
       const a = this._connectionLocal(worldA), b = this._connectionLocal(worldB);
       if (visual.userData.sovEditorVisual === 'line') {
         const id = String(visual.userData.connectionId || 'preview'); let hash = 0; for (let index = 0; index < id.length; index += 1) hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
-        const lane = hash % 9, routeY = Math.max(a.y, b.y) + .12 + lane * .018, routeZ = Math.max(a.z, b.z) + .10 + lane * .024;
+        const terminalPanel = visual.userData.sovEditorRouting?.style === 'terminal-panel';
+        const lane = terminalPanel ? hash % 8 : hash % 9;
+        const routeY = Math.max(a.y, b.y) + (terminalPanel ? .018 + lane * .002 : .12 + lane * .018);
+        const routeZ = Math.max(a.z, b.z) + (terminalPanel ? .010 + lane * .003 : .10 + lane * .024);
         const points = [a, new this.THREE.Vector3(a.x, routeY, a.z), new this.THREE.Vector3(a.x, routeY, routeZ), new this.THREE.Vector3(b.x, routeY, routeZ), new this.THREE.Vector3(b.x, routeY, b.z), b];
         const position = visual.geometry.getAttribute('position'); points.forEach((point, index) => position.setXYZ(index, point.x, point.y, point.z)); position.needsUpdate = true; visual.geometry.computeBoundingSphere(); visual.visible = true; return;
       }
@@ -264,7 +293,8 @@
       if (this.canConnect && this.canConnect({ from, to, kind: from.kind, editor: this }) === false) throw new Error('Connection rejected by compatibility callback');
       const id = options.id == null ? this._nextConnectionId() : normalizeId(options.id, 'connection id');
       if (this.connections.has(id)) throw new Error(`Connection already exists: ${id}`);
-      const visual = this._createVisual(from.kind, false, options), connection = { id, kind: from.kind, from, to, visual, metadata: options.metadata };
+      const routing = normalizeRouting(options.routing ?? from.metadata?.routing ?? to.metadata?.routing);
+      const visual = this._createVisual(from.kind, false, { ...options, routing }), connection = { id, kind: from.kind, from, to, visual, metadata: options.metadata };
       visual.name = `sov-${from.kind}-${id}`; visual.userData.connectionId = id; this.connectionRoot.add(visual);
       this.connections.set(id, connection); from.connectionId = id; to.connectionId = id; this._updateConnection(connection);
       if (options.emit !== false) { this._emit('connectioncreated', { connection: this.connectionInfo(id) }); this._change('connection-create', { connectionId: id }); }
@@ -287,7 +317,8 @@
       const kind = anchor.kind;
       if (module.lab !== this.lab || anchor.connectionId) { this._emit('actionrejected', { action: 'connection-start', moduleId: anchor.moduleId, anchorId: anchor.id }); return false; }
       this.cancel('connection-restart');
-      const visual = this._createVisual(kind, true); this.previewRoot.add(visual);
+      const routing = normalizeRouting(anchor.metadata?.routing);
+      const visual = this._createVisual(kind, true, { routing }); this.previewRoot.add(visual);
       const point = this.anchorWorldPosition(anchor); this._updateVisual(visual, point, point);
       this.pendingConnection = { anchor, kind, visual, point: point.clone() };
       this._emit('connectionstart', { kind, from: { moduleId: anchor.moduleId, anchorId: anchor.id } }); return true;
@@ -470,5 +501,5 @@
 
   function create(options) { return new EditorEngine(options); }
 
-  return Object.freeze({ version: '1.0.0', SCHEMA_VERSION, MODES, LABS, MODE_ALLOWANCES, hotkeyAction, editableTarget, EditorEngine, create });
+  return Object.freeze({ version: '1.1.0', SCHEMA_VERSION, MODES, LABS, MODE_ALLOWANCES, hotkeyAction, editableTarget, normalizeRouting, createAnchorHitTarget, EditorEngine, create });
 });

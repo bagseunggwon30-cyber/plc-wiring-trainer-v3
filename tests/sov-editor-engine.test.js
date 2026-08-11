@@ -99,6 +99,71 @@ test('registered electric lines and air tubes use live object-local anchors and 
   engine.dispose();
 });
 
+test('terminal-panel wires stay close to their terminal holes without changing the default route', () => {
+  const scene = new THREE.Scene();
+  const engine = Editor.create({ three: THREE, scene, lab: 'servo2' });
+  const addPanel = (id, x, routing = null) => {
+    const object = new THREE.Group(); object.position.x = x; scene.add(object);
+    engine.registerModule({
+      id, lab: 'servo2', object,
+      anchors: [{
+        id: 'T', kind: 'electric', position: [0, .2, 0],
+        metadata: routing ? { routing } : undefined
+      }]
+    });
+  };
+  addPanel('panel-left', 0, { style: 'terminal-panel' });
+  addPanel('panel-right', 1, { style: 'terminal-panel' });
+  addPanel('default-left', 2);
+  addPanel('default-right', 3);
+  scene.updateMatrixWorld(true);
+
+  engine.setMode(Editor.MODES.WIRE);
+  assert.equal(engine.beginConnection({ moduleId: 'panel-left', anchorId: 'T' }), true);
+  assert.equal(engine.updateConnectionPreview([1, .2, 0]), true);
+  const previewRoute = engine.pendingConnection.visual.geometry.getAttribute('position');
+  assert.equal(engine.pendingConnection.visual.userData.sovEditorRouting.style, 'terminal-panel');
+  assert.ok(Math.max(...Array.from({ length: previewRoute.count }, (_, index) => previewRoute.getY(index))) <= .235);
+  engine.cancel('preview-test');
+
+  const compact = engine.connect(
+    { moduleId: 'panel-left', anchorId: 'T' },
+    { moduleId: 'panel-right', anchorId: 'T' },
+    { id: 'axis-x-primary-positive' }
+  );
+  const compactRoute = compact.visual.geometry.getAttribute('position');
+  const compactYs = Array.from({ length: compactRoute.count }, (_, index) => compactRoute.getY(index));
+  const compactZs = Array.from({ length: compactRoute.count }, (_, index) => compactRoute.getZ(index));
+  assert.equal(compact.visual.userData.sovEditorRouting.style, 'terminal-panel');
+  assert.ok(Math.max(...compactYs) <= .235, `terminal route rose to ${Math.max(...compactYs)}`);
+  assert.ok(Math.max(...compactZs) <= .035, `terminal route projected to ${Math.max(...compactZs)}`);
+  assert.ok(new THREE.Vector3(compactRoute.getX(0), compactRoute.getY(0), compactRoute.getZ(0)).distanceTo(new THREE.Vector3(0, .2, 0)) < 1e-6);
+  assert.ok(new THREE.Vector3(compactRoute.getX(5), compactRoute.getY(5), compactRoute.getZ(5)).distanceTo(new THREE.Vector3(1, .2, 0)) < 1e-6);
+
+  const defaultWire = engine.connect(
+    { moduleId: 'default-left', anchorId: 'T' },
+    { moduleId: 'default-right', anchorId: 'T' },
+    { id: 'ordinary-wire' }
+  );
+  const defaultRoute = defaultWire.visual.geometry.getAttribute('position');
+  assert.ok(defaultRoute.getY(1) >= .319);
+  assert.equal(defaultWire.visual.userData.sovEditorRouting.style, 'auto');
+  engine.dispose();
+});
+
+test('transparent terminal-hole hit targets remain raycastable without drawing floating markers', () => {
+  const target = Editor.createAnchorHitTarget({ three: THREE, radius: .02 });
+  const scene = new THREE.Scene(); scene.add(target); scene.updateMatrixWorld(true);
+  const raycaster = new THREE.Raycaster(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1));
+
+  assert.equal(target.visible, true);
+  assert.equal(target.material.transparent, true);
+  assert.equal(target.material.opacity, 0);
+  assert.equal(target.material.depthWrite, false);
+  assert.equal(target.userData.sovAnchorHitTarget, true);
+  assert.ok(raycaster.intersectObject(target, false).length > 0);
+});
+
 test('servo WIRE mode keeps SSCNET optical links distinct from copper conductors', () => {
   const scene = new THREE.Scene();
   const engine = Editor.create({ three: THREE, scene, lab: 'servo2' });

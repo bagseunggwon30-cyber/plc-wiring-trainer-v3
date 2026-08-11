@@ -205,7 +205,7 @@
       <section class="al-section" id="al-servo-guide"><h3><span id="al-servo-guide-title">선택 장비 결선·시운전 순서</span> <small id="al-servo-guide-evidence">매뉴얼 근거</small></h3><div class="al-status" id="al-servo-guide-status"><b>교육 시나리오 준비</b><span>PASS · BLOCKED</span></div><div class="al-guide-steps" id="al-servo-guide-steps" aria-label="선택 서보 프로필 작업 단계"></div><div class="al-training-controls"><select id="al-servo-training-fault" aria-label="선택 프로필 고장 시나리오"><option value="NONE">정상 예시</option></select><div class="al-actions three"><button class="al-btn stop" data-servo-training-action="fault">오결선 적용</button><button class="al-btn" data-servo-training-action="restore">정상 복원</button><button class="al-btn" data-servo-training-action="reset-progress">단계 초기화</button></div></div><div class="al-log" id="al-servo-guide-issues"></div><div class="al-asset-note">현재 선택한 장비 프로필의 상태·주소·결선 세션만 사용합니다. LS 펄스, Mitsubishi 펄스, Mitsubishi SSCNET은 서로 독립이며 선택하지 않은 장비의 단자와 선은 연결할 수 없습니다. 자산 근거가 완성될 때까지 검토 판정은 BLOCKED입니다.</div></section>
       <section class="al-section"><h3>축 수동 운전 <small>누르는 동안 JOG</small></h3>${['X', 'Y'].map(axis => `<div class="al-axis"><strong>${axis}</strong><div><div class="al-axis-value" data-servo-pos="${axis}">0.00 mm</div><div class="al-axis-flags" data-servo-flags="${axis}">SERVO OFF</div><div class="al-axis-target"><input data-servo-target="${axis}" type="number" step="1" value="${axis === 'X' ? 320 : 240}"><button data-servo-move="${axis}">ABS</button></div></div><div class="al-jog"><button data-servo-jog="${axis},-1">−</button><button data-servo-jog="${axis},1">＋</button></div></div>`).join('')}</section>
       <section class="al-section"><h3>2축 직선 보간</h3><div class="al-fields"><label class="al-field">X 목표<input id="al-linear-x" type="number" value="380"></label><label class="al-field">Y 목표<input id="al-linear-y" type="number" value="300"></label><label class="al-field">속도<input id="al-linear-speed" type="number" value="140"></label></div><button class="al-btn" data-servo-action="linear" style="width:100%;margin-top:6px">X/Y 동시 직선 보간</button></section>
-      <section class="al-section" id="al-servo-pulse"><h3>차동 펄스 단자 결선 <small id="al-servo-pulse-model">선택 장비 전용</small></h3><div class="al-status" id="al-servo-pulse-status"><b>결선 확인 중</b><span>BLOCKED</span></div><div class="al-actions"><button class="al-btn" data-servo-pulse="reference">매뉴얼 기준 결선</button><button class="al-btn stop" data-servo-pulse="clear">펄스선 전체 제거</button></div><div class="al-fields" style="margin-top:7px"><label class="al-field">컨트롤러 방식<select id="al-servo-pulse-source-format"></select></label><label class="al-field">앰프 방식<select id="al-servo-pulse-amplifier-format"></select></label><label class="al-field">컨트롤러 논리<select id="al-servo-pulse-source-logic"><option value="positive">정논리</option><option value="negative">부논리</option></select></label><label class="al-field">앰프 논리<select id="al-servo-pulse-amplifier-logic"><option value="positive">정논리</option><option value="negative">부논리</option></select></label><label class="al-field">명령 속도 pps<input id="al-servo-pulse-rate" type="number" min="1" step="1000"></label><label class="al-field">케이블 길이 m<input id="al-servo-pulse-cable-length" type="number" min="0" step="0.1"></label></div><div class="al-checks" style="margin-top:6px"><label class="al-check"><input id="al-servo-pulse-twisted" type="checkbox">트위스트 페어</label><label class="al-check"><input id="al-servo-pulse-shielded" type="checkbox">실드 적용</label></div><button class="al-btn" id="al-servo-pulse-restart" data-servo-pulse-restart style="width:100%;margin-top:6px">PA13 적용 후 전원 재인가 확인</button><div class="al-log" id="al-servo-pulse-issues"></div><div class="al-asset-note">결선 모드(4)에서 선택한 제조사의 단자만 클릭할 수 있습니다. 한 가닥 단선, +/− 반전, X/Y축 교차, 1차/2차 쌍 교차를 별도로 판정합니다. LS 경로 한계는 L7S 수신 사양 때문에 1 Mpps, Mitsubishi 경로는 4 Mpps입니다. 단자 ID는 매뉴얼 기반이지만 3D 오버레이 실물 치수 승인은 미완료입니다.</div></section>
+      <section class="al-section" id="al-servo-pulse"><h3>차동 펄스 단자 결선 <small id="al-servo-pulse-model">선택 장비 전용</small></h3><div class="al-status" id="al-servo-pulse-status"><b>결선 확인 중</b><span>BLOCKED</span></div><div class="al-actions"><button class="al-btn" data-servo-pulse="reference">매뉴얼 기준 결선</button><button class="al-btn stop" data-servo-pulse="clear">펄스선 전체 제거</button></div><div class="al-fields" style="margin-top:7px"><label class="al-field">컨트롤러 방식<select id="al-servo-pulse-source-format"></select></label><label class="al-field">앰프 방식<select id="al-servo-pulse-amplifier-format"></select></label><label class="al-field">컨트롤러 논리<select id="al-servo-pulse-source-logic"><option value="positive">정논리</option><option value="negative">부논리</option></select></label><label class="al-field">앰프 논리<select id="al-servo-pulse-amplifier-logic"><option value="positive">정논리</option><option value="negative">부논리</option></select></label><label class="al-field">명령 속도 pps<input id="al-servo-pulse-rate" type="number" min="1" step="1000"></label><label class="al-field">케이블 길이 m<input id="al-servo-pulse-cable-length" type="number" min="0" step="0.1"></label></div><div class="al-checks" style="margin-top:6px"><label class="al-check"><input id="al-servo-pulse-twisted" type="checkbox">트위스트 페어</label><label class="al-check"><input id="al-servo-pulse-shielded" type="checkbox">실드 적용</label></div><button class="al-btn" id="al-servo-pulse-restart" data-servo-pulse-restart style="width:100%;margin-top:6px">PA13 적용 후 전원 재인가 확인</button><div class="al-log" id="al-servo-pulse-issues"></div><div class="al-asset-note">결선 모드(4)에서 공중 마커가 아니라 선택 장비의 단자 구멍을 직접 클릭합니다. 첫 구멍을 누른 뒤 두 번째 구멍을 누르면 한 가닥이 완성됩니다. 한 가닥 단선, +/− 반전, X/Y축 교차, 1차/2차 쌍 교차를 별도로 판정합니다. LS 경로 한계는 L7S 수신 사양 때문에 1 Mpps, Mitsubishi 경로는 4 Mpps입니다. 단자 ID는 매뉴얼 기반이지만 3D 오버레이 실물 치수 승인은 미완료입니다.</div></section>
       <section class="al-section" id="al-servo-sscnet" hidden><h3>SSCNET III/H 광 토폴로지 <small>MR-J4-B 전용</small></h3><div class="al-status" id="al-servo-sscnet-status"><b>광링크 미완성</b><span>FAIL</span></div><div class="al-actions"><button class="al-btn" data-servo-sscnet="reference">매뉴얼 기준 예시 연결</button><button class="al-btn stop" data-servo-sscnet="clear">광링크 제거</button></div><div class="al-log" id="al-servo-sscnet-issues"></div><div class="al-asset-note">Controller → 1축 CN1A, 1축 CN1B → 2축 CN1A, 마지막 CN1B → PROTECTIVE_CAP. 캡은 종단저항이 아니라 광커넥터 보호용입니다. ASSET_MODEL_UNVERIFIED 상태이므로 실기 검토 판정은 BLOCKED입니다.</div></section>
       <section class="al-section"><h3>선택 프로필 주소 이미지 <small>실제 PLC 전송 없음</small></h3><table class="al-memory" id="al-servo-memory"></table><div class="al-asset-note">LS 펄스열, Mitsubishi QD75D2N + MR-J4-A 펄스열, Mitsubishi QD77MS2 + MR-J4-B SSCNET III/H를 각각 독립 선택합니다. 다른 프로필 주소와 출력은 섞이지 않습니다.</div></section>
     </aside></div>`;
@@ -414,14 +414,25 @@
   function registerEditorModule(lab, id, object, anchorSpecs, movable = false) {
     const editor = A.editors[lab];
     if (!editor || editor.modules.has(id) || !object) return;
-    const markerGeometry = new Three.SphereGeometry(.006, 8, 6);
     const anchors = anchorSpecs.map((spec, index) => {
-      const markerColor = spec.kind === 'air' ? 0xff5252 : spec.kind === 'optical' ? 0xd86cff : 0x4fc7ff;
-      const marker = new Three.Mesh(markerGeometry, new Three.MeshBasicMaterial({ color: markerColor, transparent: true, opacity: .92, depthTest: false }));
-      marker.name = `${id}-${spec.tag || index}`; marker.position.fromArray(spec.position); marker.visible = false; marker.renderOrder = 20;
-      marker.userData.sovAnchor = { moduleId: id, anchorId: spec.id || String(index), kind: spec.kind };
-      object.add(marker); A.editorMarkers[lab].push(marker);
-      return { id: spec.id || String(index), kind: spec.kind, object: marker, localPosition: [0, 0, 0], tag: spec.tag || spec.id || String(index) };
+      const anchorId = spec.id || String(index), terminalTarget = spec.hitObject || window.PLCTrainerSovEditorEngine.createAnchorHitTarget({
+        three: Three,
+        radius: spec.hitRadius || .012,
+        name: `${id}-${spec.tag || index}-terminal-hole`
+      });
+      if (!spec.hitObject) { terminalTarget.position.fromArray(spec.position); object.add(terminalTarget); }
+      terminalTarget.userData.sovAnchor = { moduleId: id, anchorId, kind: spec.kind };
+      terminalTarget.userData.sovPickEnabled = false;
+      terminalTarget.userData.sovTerminalSurface = !!spec.hitObject;
+      A.editorMarkers[lab].push(terminalTarget);
+      return {
+        id: anchorId,
+        kind: spec.kind,
+        object,
+        localPosition: spec.position,
+        tag: spec.tag || anchorId,
+        metadata: spec.metadata
+      };
     });
     object.traverse?.(child => { if (child.isMesh && !child.userData.sovAnchor) child.userData.sovEditorModuleId = id; });
     editor.registerModule({ id, lab, object, movable, removeObjectOnDelete: movable, anchors });
@@ -543,11 +554,15 @@
       pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1); raycaster.setFromCamera(pointer, scene.camera); return raycaster.ray;
     };
     const activeEditor = () => A.editors[A.activeLab];
+    const pickAnchorTarget = () => raycaster.intersectObjects(
+      (A.editorMarkers[A.activeLab] || []).filter(target => target.userData.sovPickEnabled),
+      false
+    )[0]?.object || null;
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0 || A.activeLab === 'palletizer3d') return;
       const editor = activeEditor(), ray = rayFromEvent(event); if (!editor || !ray) return;
       if (editor.mode === 'WIRE' || editor.mode === 'AIR') {
-        const hits = raycaster.intersectObjects(A.editorMarkers[A.activeLab].filter(marker => marker.visible), false), ref = hits[0]?.object?.userData?.sovAnchor;
+        const ref = pickAnchorTarget()?.userData?.sovAnchor;
         if (!ref) return;
         event.preventDefault(); if (editor.pendingConnection) editor.completeConnection(ref); else editor.beginConnection(ref); schedule(); updateEditorUi(); persist(); return;
       }
@@ -567,8 +582,25 @@
     canvas.addEventListener('pointermove', event => {
       const editor = activeEditor(), ray = rayFromEvent(event); if (!editor || !ray) return;
       if (A.editorDrag?.editor === editor) { editor.updateMove(ray); schedule(); return; }
-      if (editor.pendingConnection) { const plane = new Three.Plane(new Three.Vector3(0, 1, 0), -.9), hit = ray.intersectPlane(plane, new Three.Vector3()); if (hit) { editor.updateConnectionPreview(hit); schedule(); } }
+      let anchorTarget = null;
+      if (editor.mode === 'WIRE' || editor.mode === 'AIR') {
+        anchorTarget = pickAnchorTarget(); const ref = anchorTarget?.userData?.sovAnchor;
+        canvas.style.cursor = ref ? 'crosshair' : 'default';
+        canvas.title = ref ? `${ref.moduleId} · ${ref.anchorId}` : '';
+      } else { canvas.style.cursor = 'default'; canvas.title = ''; }
+      if (editor.pendingConnection) {
+        const ref = anchorTarget?.userData?.sovAnchor;
+        let hit = ref ? editor.anchorWorldPosition(ref) : null;
+        if (!hit) {
+          const scene = A.scenes[A.activeLab], start = editor.anchorWorldPosition(editor.pendingConnection.anchor), normal = new Three.Vector3();
+          scene.camera.updateMatrixWorld(true); scene.camera.getWorldDirection(normal);
+          const plane = new Three.Plane().setFromNormalAndCoplanarPoint(normal.negate(), start);
+          hit = ray.intersectPlane(plane, new Three.Vector3());
+        }
+        if (hit) { editor.updateConnectionPreview(hit); schedule(); }
+      }
     });
+    canvas.addEventListener('pointerleave', () => { canvas.style.cursor = 'default'; canvas.title = ''; });
     const endMove = event => { if (!A.editorDrag || (event.pointerId != null && event.pointerId !== A.editorDrag.pointerId)) return; A.editorDrag.editor.endMove(); A.editorDrag = null; schedule(); persist(true); };
     canvas.addEventListener('pointerup', endMove); canvas.addEventListener('pointercancel', endMove); canvas.addEventListener('lostpointercapture', endMove);
   }
@@ -577,12 +609,12 @@
     for (const lab of ['servo2', 'mps', 'pneumatic', 'discrete']) {
       const editor = A.editors[lab]; if (!editor) continue;
       qa(`[data-editor-tools="${lab}"] [data-editor-mode]`, A.hub).forEach(button => button.classList.toggle('active', button.dataset.editorMode === editor.mode));
-      for (const marker of A.editorMarkers[lab] || []) {
-        const anchor = marker.userData.sovAnchor, profile = lab === 'servo2' ? Servo.getProfile(A.state.labs.servo2) : null;
+      for (const target of A.editorMarkers[lab] || []) {
+        const anchor = target.userData.sovAnchor, profile = lab === 'servo2' ? Servo.getProfile(A.state.labs.servo2) : null;
         const selectedServoEquipment = !profile || (!isLegacyServoPlaceholder(anchor.moduleId) && !isManagedServoConnection({ from: { moduleId: anchor.moduleId } }))
           || (anchor.moduleId.startsWith(`pulse-${profile.id}-`) && profile.commandInterface === 'differential-pulse')
           || (anchor.moduleId.startsWith('sscnet-') && profile.commandInterface === 'sscnet-iii-h');
-        marker.visible = selectedServoEquipment && ((editor.mode === 'WIRE' && ['electric', 'optical'].includes(anchor.kind)) || (editor.mode === 'AIR' && anchor.kind === 'air'));
+        target.userData.sovPickEnabled = selectedServoEquipment && ((editor.mode === 'WIRE' && ['electric', 'optical'].includes(anchor.kind)) || (editor.mode === 'AIR' && anchor.kind === 'air'));
       }
       if (lab === 'servo2') {
         for (const connection of editor.connections.values()) connection.visual.visible = !isLegacyServoPlaceholder(connection);
@@ -701,10 +733,17 @@
       const x = columns === 1 ? 0 : -width * .35 + width * .70 * column / (columns - 1);
       const y = height - .065 - row * (rows > 1 ? .055 : 0);
       const plus = terminal.polarity === '+';
-      cylinder(group, .011, .012, [x, y, .022], material(plus ? 0xb94939 : 0x315c92, .72, .25), 'z');
+      const terminalSurface = cylinder(group, .011, .012, [x, y, .022], material(plus ? 0xb94939 : 0x315c92, .72, .25), 'z');
       const label = createPanelLabel(`${terminal.terminal} ${terminal.signal}`, width / Math.max(columns, 3) * .92, .022, { color: plus ? '#ffb3a6' : '#a9d0ff', border: plus ? '#9a4237' : '#355f90', font: 'bold 28px Consolas, monospace' });
       label.position.set(x, y - .024, .021); group.add(label);
-      anchors.push({ id: terminal.anchorId, tag: `${terminal.terminal} ${terminal.signal}`, kind: 'electric', position: [x, y, .032] });
+      anchors.push({
+        id: terminal.anchorId,
+        tag: `${terminal.terminal} ${terminal.signal}`,
+        kind: 'electric',
+        position: [x, y, .028],
+        hitObject: terminalSurface,
+        metadata: { routing: { style: 'terminal-panel' } }
+      });
     });
     registerEditorModule('servo2', id, group, anchors, false);
     return group;
@@ -1512,6 +1551,21 @@
     return MPS.setWorkpieceLength(A.state.labs.mps, style === 'block' ? 0.06 : 0.028, { updateExisting: true, emit: false });
   }
   function getEditor(lab = A.activeLab) { return A.editors[lab] || null; }
+  function terminalTargetDiagnostics(lab, targets) {
+    const scene = A.scenes[lab], canvas = A.renderer?.domElement, rect = canvas?.getBoundingClientRect?.();
+    if (!scene?.camera || !rect?.width || !rect?.height) return [];
+    return targets.filter(target => target.userData.sovPickEnabled).map(target => {
+      const world = new Three.Vector3(); target.updateWorldMatrix(true, false); target.getWorldPosition(world);
+      const projected = world.clone().project(scene.camera), anchor = target.userData.sovAnchor;
+      return {
+        moduleId: anchor.moduleId,
+        anchorId: anchor.anchorId,
+        x: Math.round((rect.left + (projected.x + 1) * rect.width / 2) * 10) / 10,
+        y: Math.round((rect.top + (1 - projected.y) * rect.height / 2) * 10) / 10,
+        physicalSurface: !!target.userData.sovTerminalSurface
+      };
+    });
+  }
   function getSceneDiagnostics() {
     const plant = A.scenes.mps?.parts?.importedPlant;
     const servo = A.state?.labs?.servo2, commissioning = servo ? Servo.evaluateCommissioning(servo) : null;
@@ -1519,6 +1573,13 @@
       activeLab: A.activeLab,
       cameraNavigationPreset: A.state?.cameraNavigationPreset || '3ds-max',
       editors: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, { mode: editor.mode, modules: editor.modules.size, connections: editor.connections.size }])),
+      terminalTargets: Object.fromEntries(Object.entries(A.editorMarkers).map(([lab, targets]) => [lab, {
+        total: targets.length,
+        enabled: targets.filter(target => target.userData.sovPickEnabled).length,
+        physicalSurfaces: targets.filter(target => target.userData.sovTerminalSurface).length,
+        visibleFloatingMarkers: targets.filter(target => target.userData.sovAnchorHitTarget && Number(target.material?.opacity || 0) > 0).length,
+        screenTargets: terminalTargetDiagnostics(lab, targets)
+      }])),
       servo2: servo ? {
         profileId: servo.profileId,
         commandInterface: Servo.getProfile(servo).commandInterface,
