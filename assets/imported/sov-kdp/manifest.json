@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sourceProduct": "SoV-KDP 1.1.9K",
   "sourceUnityVersion": "2021.3.20f1",
-  "extractedAt": "2026-08-11T12:39:13.600914+00:00",
+  "extractedAt": "2026-08-11T13:01:29.256539+00:00",
   "sourceDirectoryName": "SoV-KDP 1.1.9K",
   "policy": "selective-assets-only",
   "excluded": [
@@ -9345,7 +9345,216 @@
           "texture": null
         }
       ]
+    },
+    {
+      "file": "ruler.glb",
+      "root": "PF_RULER",
+      "sourceGameObjectPathId": 1139,
+      "rootTransformMode": "identity",
+      "transformNodeCount": 2,
+      "embeddedTextureFormat": "webp",
+      "embeddedTextureTransport": "data-uri",
+      "embeddedTextureMaxSize": 2048,
+      "nodeCount": 2,
+      "triangleCount": 14,
+      "bounds": [
+        [
+          -0.01,
+          5e-05,
+          -0.075
+        ],
+        [
+          0.01,
+          0.0102,
+          0.075
+        ]
+      ],
+      "bytes": 8632,
+      "sha256": "1b0125177cbb7f2b2b85332849a8927d31005df2dc9079736421286cbd4167a3",
+      "nodes": [
+        {
+          "name": "PF_RULER",
+          "mesh_name": "Ruler",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 592,
+          "source_game_object_path_id": 1139,
+          "material": "RulerMat",
+          "texture": null
+        },
+        {
+          "name": "Sticker",
+          "mesh_name": "StickerMesh",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 587,
+          "source_game_object_path_id": 997,
+          "material": "RulerSticker",
+          "texture": "RulerImage"
+        }
+      ]
+    },
+    {
+      "file": "banana-plug-black.glb",
+      "root": "BPlugBlack",
+      "sourceGameObjectPathId": 1152,
+      "rootTransformMode": "identity",
+      "transformNodeCount": 2,
+      "embeddedTextureFormat": "webp",
+      "embeddedTextureTransport": "data-uri",
+      "embeddedTextureMaxSize": 2048,
+      "nodeCount": 1,
+      "triangleCount": 148,
+      "bounds": [
+        [
+          -0.00375,
+          -0.007,
+          -0.00425
+        ],
+        [
+          0.00375,
+          0.021,
+          0.008226
+        ]
+      ],
+      "bytes": 15824,
+      "sha256": "9b74471276d7d174b9540d308072e8acab0bbc826e40877d3cceda528c2a76fe",
+      "nodes": [
+        {
+          "name": "BPlugBlack",
+          "mesh_name": "BPlugMesh",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 582,
+          "source_game_object_path_id": 1152,
+          "material": "PlugBlue",
+          "texture": "PlugBlue"
+        }
+      ]
+    },
+    {
+      "file": "workblock-steel-blue.glb",
+      "root": "PF_BLUE_STEEL",
+      "sourceGameObjectPathId": 1000,
+      "rootTransformMode": "scale-only",
+      "transformNodeCount": 2,
+      "embeddedTextureFormat": "webp",
+      "embeddedTextureTransport": "none",
+      "embeddedTextureMaxSize": 2048,
+      "nodeCount": 1,
+      "triangleCount": 12,
+      "bounds": [
+        [
+          -0.03,
+          0.0,
+          -0.02
+        ],
+        [
+          0.03,
+          0.08,
+          0.02
+        ]
+      ],
+      "bytes": 2680,
+      "sha256": "ce44f67617c731f8777be1a9e73c75c789025d0aeaa57ecef56ef339efe0af09",
+      "nodes": [
+        {
+          "name": "PF_BLUE_STEEL",
+          "mesh_name": "WorkBlockMesh",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 593,
+          "source_game_object_path_id": 1000,
+          "material": "BlueSteel",
+          "texture": null
+        }
+      ]
+    },
+    {
+      "file": "workblock-plastic-orange.glb",
+      "root": "PF_ORANGE_PP",
+      "sourceGameObjectPathId": 873,
+      "rootTransformMode": "scale-only",
+      "transformNodeCount": 2,
+      "embeddedTextureFormat": "webp",
+      "embeddedTextureTransport": "none",
+      "embeddedTextureMaxSize": 2048,
+      "nodeCount": 1,
+      "triangleCount": 12,
+      "bounds": [
+        [
+          -0.03,
+          0.0,
+          -0.02
+        ],
+        [
+          0.03,
+          0.08,
+          0.02
+        ]
+      ],
+      "bytes": 2596,
+      "sha256": "cc1ab2bd8e9142ae0f96fc2542b6116662fe57fb09444317819a5493d172a4f1",
+      "nodes": [
+        {
+          "name": "PF_ORANGE_PP",
+          "mesh_name": "WorkBlockMesh",
+          "source_file": "sharedassets0.assets",
+          "source_path_id": 593,
+          "source_game_object_path_id": 873,
+          "material": "OrangePP",
+          "texture": null
+        }
+      ]
     }
   ],
-  "textures": []
+  "textures": [],
+  "geometryExclusions": [
+    {
+      "sourceFile": "sharedassets0.assets",
+      "pathId": 1081,
+      "root": "STWorker_Flat",
+      "reason": "duplicate-scale-variant"
+    },
+    {
+      "sourceFile": "sharedassets0.assets",
+      "pathId": 1082,
+      "root": "PPWorker_Plat",
+      "reason": "duplicate-scale-variant"
+    },
+    {
+      "sourceFile": "sharedassets0.assets",
+      "pathId": 1001,
+      "root": "FND_Mesh",
+      "reason": "internal-display-part"
+    },
+    {
+      "sourceFile": "sharedassets0.assets",
+      "pathId": 793,
+      "root": "Analog Count Text",
+      "reason": "internal-display-part"
+    },
+    {
+      "sourceFile": "level0",
+      "pathId": 719,
+      "root": "Emission Box",
+      "reason": "runtime-helper-visual"
+    },
+    {
+      "sourceFile": "level0",
+      "pathId": 1129,
+      "root": "Maker Box",
+      "reason": "runtime-helper-visual"
+    }
+  ],
+  "knownLimitations": [
+    {
+      "code": "SKINNED_FND_NOT_EXPORTED",
+      "affects": [
+        "timer-box.glb",
+        "counter-box.glb",
+        "servo-amplifier.glb",
+        "mps-complete-station.glb",
+        "servo2-workshop.glb"
+      ],
+      "status": "pending-runtime-overlay",
+      "detail": "Skinned seven-segment display meshes are not baked into the static GLB and no runtime digit overlay is implemented yet."
+    }
+  ]
 }

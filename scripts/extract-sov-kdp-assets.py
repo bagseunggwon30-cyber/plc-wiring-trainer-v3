@@ -68,12 +68,42 @@ PREFAB_TARGETS = {
     "Digital Counter Unit_OP": "counter-unit.glb",
     "PF_COUNT_BOX": "counter-box.glb",
     "SSCNETIII_AMP_HEAD": "sscnetiii-amp-head.glb",
+    "PF_RULER": "ruler.glb",
+    "BPlugBlack": "banana-plug-black.glb",
+    "PF_BLUE_STEEL": "workblock-steel-blue.glb",
+    "PF_ORANGE_PP": "workblock-plastic-orange.glb",
     "PF_SMPS": "smps.glb",
     "PF_BUZZER_LAMP": "buzzer-lamp.glb",
     "PF_SWITCH_BOX": "switch-box.glb",
     "STWorker": "workpiece-steel.glb",
     "PPWorker": "workpiece-plastic.glb",
 }
+
+# These two authored work blocks use a unit cube with the physical dimensions
+# stored on the prefab root.  Root position belongs to the Unity palette and
+# must stay stripped, while its 60 x 80 x 40 mm scale is part of the asset.
+ROOT_SCALE_TARGETS = frozenset({"PF_BLUE_STEEL", "PF_ORANGE_PP"})
+
+# Renderable Unity roots that were inspected but are not independent equipment.
+# Keeping this in the generated manifest makes the selective boundary auditable
+# without packaging duplicated variants or runtime-only display helpers.
+GEOMETRY_EXCLUSIONS = (
+    {"sourceFile": "sharedassets0.assets", "pathId": 1081, "root": "STWorker_Flat", "reason": "duplicate-scale-variant"},
+    {"sourceFile": "sharedassets0.assets", "pathId": 1082, "root": "PPWorker_Plat", "reason": "duplicate-scale-variant"},
+    {"sourceFile": "sharedassets0.assets", "pathId": 1001, "root": "FND_Mesh", "reason": "internal-display-part"},
+    {"sourceFile": "sharedassets0.assets", "pathId": 793, "root": "Analog Count Text", "reason": "internal-display-part"},
+    {"sourceFile": "level0", "pathId": 719, "root": "Emission Box", "reason": "runtime-helper-visual"},
+    {"sourceFile": "level0", "pathId": 1129, "root": "Maker Box", "reason": "runtime-helper-visual"},
+)
+
+KNOWN_LIMITATIONS = (
+    {
+        "code": "SKINNED_FND_NOT_EXPORTED",
+        "affects": ["timer-box.glb", "counter-box.glb", "servo-amplifier.glb", "mps-complete-station.glb", "servo2-workshop.glb"],
+        "status": "pending-runtime-overlay",
+        "detail": "Skinned seven-segment display meshes are not baked into the static GLB and no runtime digit overlay is implemented yet.",
+    },
+)
 
 # Equipment already present inside the minimal lab roots is not exported again.
 # Only the standalone servo amplifier remains a useful scene-level asset.
@@ -329,10 +359,12 @@ def apply_material(geometry: trimesh.Trimesh, info: dict[str, Any]) -> None:
     geometry.visual = TextureVisuals(uv=transformed_uv, material=material)
 
 
-def export_subtree(root_game_object: Any, destination: Path) -> dict[str, Any]:
+def export_subtree(root_game_object: Any, destination: Path, *, root_transform_mode: str = "identity") -> dict[str, Any]:
     root_transform = component(root_game_object, "Transform")
     if root_transform is None:
         raise ValueError(f"{root_game_object.m_Name}: Transform not found")
+    if root_transform_mode not in {"identity", "scale-only"}:
+        raise ValueError(f"Unsupported root transform mode: {root_transform_mode}")
 
     scene = trimesh.Scene()
     mesh_cache: dict[tuple[str, int], list[tuple[int, trimesh.Trimesh]]] = {}
@@ -354,7 +386,11 @@ def export_subtree(root_game_object: Any, destination: Path) -> dict[str, Any]:
         game_object_reader = game_object.object_reader
         game_object_path_id = int(game_object_reader.path_id)
         node_name = f"{safe_name(str(game_object.m_Name))}__go{game_object_path_id}"
-        matrix = np.eye(4) if is_root else local_matrix(transform)
+        if is_root and root_transform_mode == "scale-only":
+            root_scale = vec3(getattr(transform, "m_LocalScale", None), (1.0, 1.0, 1.0))
+            matrix = np.diag([root_scale[0], root_scale[1], root_scale[2], 1.0])
+        else:
+            matrix = np.eye(4) if is_root else local_matrix(transform)
         scene.graph.update(frame_to=node_name, frame_from=parent_node, matrix=matrix)
         transform_nodes += 1
 
@@ -362,8 +398,8 @@ def export_subtree(root_game_object: Any, destination: Path) -> dict[str, Any]:
         skinned_renderer = component(game_object, "SkinnedMeshRenderer")
         renderer = component(game_object, "MeshRenderer") or skinned_renderer
         # FND digits are skinned meshes. Exporting their unbaked bind-pose mesh as
-        # a static child produces detached segments; they are recreated by the
-        # Electron display runtime until a proper glTF skin exporter is added.
+        # a static child produces detached segments. They remain a documented
+        # limitation until a proper glTF skin exporter or runtime overlay exists.
         mesh_pointer = getattr(mesh_filter, "m_Mesh", None) if mesh_filter is not None else None
         renderer_enabled = renderer is not None and bool(getattr(renderer, "m_Enabled", True))
         if renderer_enabled and mesh_pointer is not None and getattr(mesh_pointer, "path_id", 0):
@@ -420,6 +456,7 @@ def export_subtree(root_game_object: Any, destination: Path) -> dict[str, Any]:
         "file": destination.name,
         "root": str(root_game_object.m_Name),
         "sourceGameObjectPathId": int(root_game_object.object_reader.path_id),
+        "rootTransformMode": root_transform_mode,
         "transformNodeCount": transform_nodes,
         "embeddedTextureFormat": "webp",
         "embeddedTextureTransport": "data-uri" if inlined_texture_count else "none",
@@ -560,6 +597,8 @@ def main() -> int:
         ],
         "models": [],
         "textures": [],
+        "geometryExclusions": [dict(item) for item in GEOMETRY_EXCLUSIONS],
+        "knownLimitations": [dict(item) for item in KNOWN_LIMITATIONS],
     }
 
     prefabs = find_game_objects(environment, "sharedassets0.assets", PREFAB_TARGETS)
@@ -576,7 +615,8 @@ def main() -> int:
         if target_name not in prefabs or not include_model(filename):
             continue
         print(f"model {target_name!r} -> {filename}")
-        manifest["models"].append(export_subtree(prefabs[target_name], models_dir / filename))
+        root_transform_mode = "scale-only" if target_name in ROOT_SCALE_TARGETS else "identity"
+        manifest["models"].append(export_subtree(prefabs[target_name], models_dir / filename, root_transform_mode=root_transform_mode))
     for target_name, filename in SCENE_TARGETS.items():
         if target_name not in scene_objects or not include_model(filename):
             continue

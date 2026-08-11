@@ -105,14 +105,33 @@ test('selected imported assets match their manifest and contain no executable pa
   const base = path.join(root, 'assets', 'imported', 'sov-kdp');
   const manifest = JSON.parse(fs.readFileSync(path.join(base, 'manifest.json'), 'utf8'));
   assert.equal(manifest.policy, 'selective-assets-only');
-  assert.equal(manifest.models.length, 29);
+  assert.equal(manifest.models.length, 33);
   assert.equal(manifest.textures.length, 0);
   assert.equal(fs.existsSync(path.join(base, 'models', 'pneumatic-workshop.glb')), false);
   assert.equal(fs.existsSync(path.join(base, 'ASSET-NOTICE.md')), false);
-  for (const file of ['counter-box.glb', 'sscnetiii-amp-head.glb']) assert.ok(manifest.models.some(entry => entry.file === file), file);
+  for (const file of [
+    'counter-box.glb', 'sscnetiii-amp-head.glb', 'ruler.glb', 'banana-plug-black.glb',
+    'workblock-steel-blue.glb', 'workblock-plastic-orange.glb'
+  ]) assert.ok(manifest.models.some(entry => entry.file === file), file);
+  for (const file of ['workblock-steel-blue.glb', 'workblock-plastic-orange.glb']) {
+    const entry = manifest.models.find(item => item.file === file);
+    assert.equal(entry.rootTransformMode, 'scale-only', file);
+    const size = entry.bounds[1].map((value, index) => Number((value - entry.bounds[0][index]).toFixed(6)));
+    assert.deepEqual(size, [0.06, 0.08, 0.04], file);
+  }
+  assert.ok(manifest.geometryExclusions.some(item => item.root === 'STWorker_Flat' && item.reason === 'duplicate-scale-variant'));
+  assert.ok(manifest.geometryExclusions.some(item => item.root === 'FND_Mesh' && item.reason === 'internal-display-part'));
+  assert.ok(manifest.knownLimitations.some(item => item.code === 'SKINNED_FND_NOT_EXPORTED' && item.status === 'pending-runtime-overlay'));
   const labUi = read('src/ui/automation-labs.js');
   assert.match(labUi, /'sscnetiii-amp-head\.glb': 'SSCNET III 앰프 헤드'/);
   assert.match(labUi, /servo-amplifier\|sscnet\|relay/);
+  assert.match(labUi, /'banana-plug-black\.glb': '바나나 플러그 · BPlugBlack'/);
+  assert.match(labUi, /A\.equipmentCatalog\.length.*종/);
+  assert.doesNotMatch(labUi, /\['equipment3d', '3D 장비 \d+종'\]/);
+  assert.match(labUi, /workblock-steel-blue\.glb/);
+  assert.match(labUi, /workblock-plastic-orange\.glb/);
+  assert.match(labUi, /id="al-mps-workpiece-style"/);
+  assert.match(labUi, /MPS\.setWorkpieceLength/);
   for (const entry of [...manifest.models.map(item => ({ ...item, folder: 'models' })), ...manifest.textures.map(item => ({ ...item, folder: 'textures' }))]) {
     const file = path.join(base, entry.folder, entry.file);
     assert.equal(fs.existsSync(file), true, entry.file);

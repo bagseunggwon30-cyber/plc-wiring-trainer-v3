@@ -111,6 +111,26 @@ test('photo, inductive and capacitive inputs are calculated from workpiece type 
   assert.equal(state.sensors.exit, true);
 });
 
+test('material target dimensions can switch to the imported 60 mm block without stale workpieces', () => {
+  const state = Runtime.createState();
+  const existing = Runtime.addWorkpiece(state, 'steel', { x: 0.31 });
+  assert.equal(existing.length, 0.028);
+  assert.equal(Runtime.getInput(state, 'inductiveSteel'), false, '28 mm target is clear of the inductive sensor at this position');
+
+  assert.equal(Runtime.setWorkpieceLength(state, 0.06, { updateExisting: true }), 0.06);
+  assert.equal(state.config.workpiece.length, 0.06);
+  assert.equal(existing.length, 0.06);
+  assert.equal(Runtime.getInput(state, 'inductiveSteel'), true, '60 mm block now overlaps the sensor using physical length');
+  assert.equal(Runtime.addWorkpiece(state, 'plastic').length, 0.06);
+
+  const restored = Runtime.createState({ saved: Runtime.exportState(state) });
+  assert.equal(restored.config.workpiece.length, 0.06);
+  assert.ok(restored.workpieces.every(item => item.length === 0.06));
+
+  assert.equal(Runtime.setWorkpieceLength(state, 99), 0.15);
+  assert.equal(Runtime.setWorkpieceLength(state, -1), 0.005);
+});
+
 test('the conveyor moves at 0.06 m/s in positive travel and respects the physical stopper', () => {
   const state = Runtime.createState();
   const item = Runtime.addWorkpiece(state, 'plastic', { x: 0.1 });

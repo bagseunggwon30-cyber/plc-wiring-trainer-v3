@@ -55,6 +55,13 @@ export default defineConfig({
   build: {
     outDir: 'build/renderer',
     emptyOutDir: true,
+    // GLTFLoader fetches model URLs at runtime. Vite's default 4 KiB inlining
+    // turns very small GLBs into data: URLs, which the offline CSP correctly
+    // rejects as a network source. Keep every GLB as a packaged local file.
+    assetsInlineLimit(filePath) {
+      if (/\.glb$/i.test(filePath)) return false;
+      return undefined;
+    },
     rollupOptions: {
       input: resolve(__dirname, 'index.html'),
     },

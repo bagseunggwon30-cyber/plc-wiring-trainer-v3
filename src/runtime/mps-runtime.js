@@ -478,6 +478,18 @@
     return item;
   }
 
+  function setWorkpieceLength(state, length, options = {}) {
+    const value = clamp(finite(length, state.config.workpiece.length), 0.005, 0.15);
+    state.config.workpiece.length = value;
+    if (options.updateExisting) {
+      for (const item of state.workpieces) item.length = value;
+    }
+    updateInputs(state);
+    refreshMemory(state);
+    if (options.emit !== false) addEvent(state, 'configuration', `워크 길이 ${(value * 1000).toFixed(0)} mm`, { updateExisting: !!options.updateExisting });
+    return value;
+  }
+
   function removeWorkpiece(state, id) {
     const index = state.workpieces.findIndex(item => item.id === id);
     if (index < 0) return false;
@@ -1052,6 +1064,7 @@
     create: createState,
     tick,
     addWorkpiece,
+    setWorkpieceLength,
     spawnWorkpiece: addWorkpiece,
     enqueueWorkpiece: addWorkpiece,
     removeWorkpiece,

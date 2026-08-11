@@ -45,6 +45,7 @@ test('renderer build copies local automation scripts, vendor modules, manifest, 
     "'assets/imported/sov-kdp'",
     "'assets/devices/gpt-expansion'"
   ]) assert.ok(vite.includes(token), token);
+  assert.match(vite, /assetsInlineLimit\(filePath\)[\s\S]*?\/\\\.glb\$\/i\.test\(filePath\)[\s\S]*?return false/);
 });
 
 test('selecting a workspace view closes the advanced-tools overlay', () => {
@@ -78,7 +79,7 @@ test('WebP model textures use the DOM texture loader when ImageBitmap decoding i
 
 test('3D equipment gallery exposes every selective model and lazy-loads only the selected asset', () => {
   const manifest = JSON.parse(read('assets/imported/sov-kdp/manifest.json'));
-  assert.equal(manifest.models.length, 29);
+  assert.equal(manifest.models.length, 33);
   assert.match(automationLabs, /\['palletizer3d', 'servo2', 'mps', 'pneumatic', 'equipment3d'\]/);
   assert.match(automationLabs, /await window\.PLCTrainerImportedModels\.loadManifest\(\)/);
   assert.match(automationLabs, /await window\.PLCTrainerImportedModels\.loadModel\(filename/);

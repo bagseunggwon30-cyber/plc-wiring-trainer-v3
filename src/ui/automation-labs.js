@@ -20,6 +20,10 @@
     'counter-unit.glb': '디지털 카운터',
     'counter-box.glb': '디지털 카운터 전체 박스',
     'sscnetiii-amp-head.glb': 'SSCNET III 앰프 헤드',
+    'ruler.glb': '작업물 치수 눈금자',
+    'banana-plug-black.glb': '바나나 플러그 · BPlugBlack',
+    'workblock-steel-blue.glb': '청색 강재 블록',
+    'workblock-plastic-orange.glb': '주황 수지 블록',
     'smps.glb': 'DC 전원공급기(SMPS)',
     'switch-box.glb': '3버튼 스위치 박스',
     'buzzer-lamp.glb': '버저·표시등 박스',
@@ -47,7 +51,8 @@
     ['control', '제어·전원', /(?:plc|servo-amplifier|sscnet|relay|timer|counter|smps|switch-box|buzzer|tower)/],
     ['sensor', '센서·스위치', /(?:sensor|limit-switch)/],
     ['pneumatic', '공압 장비', /(?:cylinder|valve|service-unit|air-distributor|speed-controller)/],
-    ['plant', '설비·워크', /(?:mps|servo2-workshop|workpiece)/]
+    ['accessory', '결선·계측 부속', /(?:banana-plug|ruler)/],
+    ['plant', '설비·워크', /(?:mps|servo2-workshop|workpiece|workblock)/]
   ]);
   const CAMERA_DISTANCE = 16.17;
   const CAMERA_PRESETS = Object.freeze({
@@ -80,6 +85,7 @@
   const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const wrapDegrees = value => ((value % 360) + 360) % 360;
+  const normalizeMpsWorkpieceStyle = value => value === 'block' ? 'block' : 'compact';
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
   function loadSaved() {
@@ -87,7 +93,7 @@
     try { if (typeof S !== 'undefined') saved = S.automationLab || null; } catch (_) { /* standalone */ }
     const activeLab = LABS.includes(saved?.activeLab) ? saved.activeLab : 'servo2';
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       activeLab,
       cameraNavigationPreset: CameraNavigation.normalizePreset(saved?.cameraNavigationPreset),
       labs: {
@@ -96,14 +102,15 @@
         pneumatic: Pneumatic.createState({ saved: saved?.labs?.pneumatic })
       },
       editor: saved?.editor || null,
-      equipment: { selected: typeof saved?.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' }
+      equipment: { selected: typeof saved?.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' },
+      appearance: { mpsWorkpieceStyle: normalizeMpsWorkpieceStyle(saved?.appearance?.mpsWorkpieceStyle) }
     };
   }
 
   function exportState() {
     if (!A.state) return null;
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       activeLab: A.activeLab,
       cameraNavigationPreset: CameraNavigation.normalizePreset(A.state.cameraNavigationPreset),
       labs: {
@@ -112,7 +119,8 @@
         pneumatic: Pneumatic.exportState(A.state.labs.pneumatic)
       },
       editor: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, editor.serialize()])),
-      equipment: { selected: A.state.equipment?.selected || 'relay-module.glb' }
+      equipment: { selected: A.state.equipment?.selected || 'relay-module.glb' },
+      appearance: { mpsWorkpieceStyle: normalizeMpsWorkpieceStyle(A.state.appearance?.mpsWorkpieceStyle) }
     };
   }
 
@@ -183,7 +191,7 @@
 
   function mpsPane() {
     return `<div class="al-pane-grid"><div class="al-scene" data-scene="mps"><div class="al-scene-title"><b>MPS 제어 실습실</b><span>CONVEYOR · PROCESSING · TRANSFER</span></div>${cameraPresetButtons()}${editorToolbar('mps')}${cameraHintElement(' · SPACE/F1/F2 시점')}</div><aside class="al-side">
-      <section class="al-section"><div class="al-status" id="al-mps-status"><b>PLC 출력 대기</b><span>18 OUT · 27 IN</span></div><label class="al-profile">PLC 주소 프로필<select id="al-mps-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><div class="al-actions"><button class="al-btn run" data-mps-action="auto">▶ PLC 제어</button><button class="al-btn stop" data-mps-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-mps-action="steel">＋ 강재 워크</button><button class="al-btn" data-mps-action="plastic">＋ PP 워크</button><button class="al-btn" data-mps-action="reset">↺ 설비 리셋</button><button class="al-btn" data-mps-action="clear">워크 비우기</button></div></section>
+      <section class="al-section"><div class="al-status" id="al-mps-status"><b>PLC 출력 대기</b><span>18 OUT · 27 IN</span></div><label class="al-profile">PLC 주소 프로필<select id="al-mps-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU</option></select></label><label class="al-profile">워크 3D 형상<select id="al-mps-workpiece-style"><option value="compact">기존 소형 워크 · 28 mm</option><option value="block">SoV 재질 블록 · 60×80×40 mm</option></select></label><div class="al-actions"><button class="al-btn run" data-mps-action="auto">▶ PLC 제어</button><button class="al-btn stop" data-mps-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-mps-action="steel">＋ 강재 워크</button><button class="al-btn" data-mps-action="plastic">＋ PP 워크</button><button class="al-btn" data-mps-action="reset">↺ 설비 리셋</button><button class="al-btn" data-mps-action="clear">워크 비우기</button></div></section>
       <section class="al-section"><h3>리프트 서보 <small id="al-mps-lift-addresses">선택 PLC RLS · DOG · FLS</small></h3><label class="al-servo-slide"><span>위치 명령</span><input id="al-mps-lift" type="range" min="0" max="100" value="0"><output id="al-mps-lift-value">0%</output></label></section>
       <section class="al-section"><h3>선택 PLC 출력 18점 <small>한 제조사 주소만 활성</small></h3><div class="al-output-grid">${MPS_OUTPUT_LABELS.map((label, index) => `<label class="al-output" title="O${index} ${label}"><input type="checkbox" data-mps-output-index="${index}"><span data-mps-output-label="${index}">O${index} ${label}</span></label>`).join('')}</div></section>
       <section class="al-section"><h3>선택 PLC 입력 27점</h3><div class="al-io-grid">${MPS_INPUT_LABELS.map((label, index) => `<div class="al-io${index >= 20 && index <= 23 ? ' reserved' : ''}" data-mps-input-index="${index}" title="I${index} ${label}"><span data-mps-input-label="${index}">I${index} ${label}</span></div>`).join('')}</div></section>
@@ -216,7 +224,7 @@
     A.hub = document.createElement('div');
     A.hub.id = 'al-hub';
     A.hub.innerHTML = `<nav id="al-tabs"><b>🏭 자동화 실습실</b>${[
-      ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['equipment3d', '3D 장비 29종']
+      ['palletizer3d', '3축 팔레타이징'], ['servo2', '2축 서보'], ['mps', 'MPS 제어'], ['pneumatic', '공압 제어'], ['equipment3d', '3D 장비']
     ].map(([key, label]) => `<button class="al-tab" data-lab="${key}">${label}</button>`).join('')}<label class="al-camera-navigation"><span>카메라</span><select id="al-camera-navigation" aria-label="3D 카메라 조작 방식"><option value="3ds-max">3ds Max</option><option value="legacy">기존 조작</option></select></label><small>OFFLINE</small></nav><div id="al-content"></div>`;
     A.host.appendChild(A.hub);
     A.content = q('#al-content', A.hub);
@@ -478,8 +486,14 @@
   async function loadWorkpieceTemplates() {
     try {
       const loader = window.PLCTrainerImportedModels, parts = A.scenes.mps.parts;
-      const [steel, plastic] = await Promise.all([loader.loadModel('workpiece-steel.glb'), loader.loadModel('workpiece-plastic.glb')]);
-      parts.workpieceTemplates = { steel, plastic };
+      const [compactSteel, compactPlastic, blockSteel, blockPlastic] = await Promise.all([
+        loader.loadModel('workpiece-steel.glb'), loader.loadModel('workpiece-plastic.glb'),
+        loader.loadModel('workblock-steel-blue.glb'), loader.loadModel('workblock-plastic-orange.glb')
+      ]);
+      parts.workpieceTemplates = {
+        compact: { steel: compactSteel, plastic: compactPlastic },
+        block: { steel: blockSteel, plastic: blockPlastic }
+      };
       schedule();
     } catch (error) { console.warn('Imported workpieces could not be loaded', error); }
   }
@@ -553,6 +567,8 @@
         ? A.state.equipment.selected
         : A.equipmentCatalog[0].file;
       select.value = selected;
+      const equipmentTab = q('[data-lab="equipment3d"]', A.hub);
+      if (equipmentTab) equipmentTab.textContent = `3D 장비 ${A.equipmentCatalog.length}종`;
       q('b', statusBox).textContent = `3D 장비 ${A.equipmentCatalog.length}종 준비`; q('span', statusBox).textContent = '선택 로드';
       updateEquipmentDetails(A.equipmentCatalog.find(item => item.file === selected));
       if (A.activeLab === 'equipment3d') await showEquipmentModel(selected);
@@ -745,11 +761,21 @@
     });
 
     q('#al-mps-profile', A.hub).onchange = event => { MPS.setProfile(A.state.labs.mps, event.target.value); schedule(); updateUi(true); persist(true); };
+    q('#al-mps-workpiece-style', A.hub).onchange = event => {
+      const state = A.state.labs.mps, style = normalizeMpsWorkpieceStyle(event.target.value), profile = MPS.getProfile(state);
+      MPS.writeDevice(state, profile.commands.autoStop, true);
+      A.state.appearance.mpsWorkpieceStyle = style;
+      MPS.setWorkpieceLength(state, style === 'block' ? 0.06 : 0.028, { updateExisting: true });
+      const parts = A.scenes.mps.parts;
+      for (const model of parts.workpieceModels.values()) parts.workpieces.remove(model);
+      parts.workpieceModels.clear();
+      schedule(); updateUi(true); persist(true);
+    };
     qa('[data-mps-action]', A.hub).forEach(button => button.onclick = () => {
       const state = A.state.labs.mps, profile = MPS.getProfile(state), action = button.dataset.mpsAction;
       if (action === 'auto') MPS.writeDevice(state, profile.commands.autoStart, true);
       if (action === 'outputs-off') MPS.writeDevice(state, profile.commands.autoStop, true);
-      if (action === 'steel' || action === 'plastic') MPS.addWorkpiece(state, action);
+      if (action === 'steel' || action === 'plastic') MPS.addWorkpiece(state, action, { length: A.state.appearance.mpsWorkpieceStyle === 'block' ? 0.06 : 0.028 });
       if (action === 'reset') MPS.resetCell(state, { clearCounters: false });
       if (action === 'clear') { for (const item of [...state.workpieces]) MPS.removeWorkpiece(state, item.id); }
       schedule(); updateUi(true); persist(true);
@@ -802,16 +828,18 @@
   function updateMpsScene() {
     const state = A.state.labs.mps, parts = A.scenes.mps.parts, group = parts.workpieces;
     if (parts.workpieceTemplates) {
+      const style = normalizeMpsWorkpieceStyle(A.state.appearance?.mpsWorkpieceStyle);
+      const templates = parts.workpieceTemplates[style] || parts.workpieceTemplates.compact;
       const live = new Set();
       for (const item of state.workpieces) {
         live.add(item.id); let model = parts.workpieceModels.get(item.id);
-        if (!model) { model = parts.workpieceTemplates[item.material === 'steel' ? 'steel' : 'plastic'].clone(true); group.add(model); parts.workpieceModels.set(item.id, model); }
+        if (!model) { model = templates[item.material === 'steel' ? 'steel' : 'plastic'].clone(true); model.userData.mpsWorkpieceStyle = style; group.add(model); parts.workpieceModels.set(item.id, model); }
         if (item.heldByVacuum) {
           model.position.set(-.2807 - state.actuators.unloading.position * .0453, .8874 + state.liftServo.position * .216, -.09);
         } else {
-          model.position.set(-.055 - item.x / state.config.conveyor.length * .31, .925, -.09);
+          model.position.set(-.055 - item.x / state.config.conveyor.length * .31, style === 'block' ? .915 : .925, -.09);
         }
-        model.rotation.set(0, Math.PI / 2, 0);
+        model.rotation.set(0, style === 'block' ? 0 : Math.PI / 2, 0);
       }
       for (const [id, model] of parts.workpieceModels) if (!live.has(id)) { group.remove(model); parts.workpieceModels.delete(id); }
     } else {
@@ -856,7 +884,7 @@
     const allServo = Object.values(servo.axes).every(axis => axis.servoOn), servoButton = q('[data-servo-action="servo"]', A.hub); servoButton.textContent = allServo ? 'SERVO OFF' : 'SERVO ON'; servoButton.classList.toggle('on', allServo);
     const sp = Servo.getProfile(servo), memoryRows = [['ON X', sp.commands.servoOn.X, Servo.readDevice(servo, sp.status.servoReady.X)], ['ON Y', sp.commands.servoOn.Y, Servo.readDevice(servo, sp.status.servoReady.Y)], ['X 목표', sp.data.target.X, Servo.readDevice(servo, sp.data.target.X)], ['Y 목표', sp.data.target.Y, Servo.readDevice(servo, sp.data.target.Y)], ['직선보간', sp.commands.linear, Servo.readDevice(servo, sp.status.linearBusy)]]; q('#al-servo-memory', A.hub).innerHTML = memoryRows.map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] === true ? 'ON' : row[2] === false ? 'OFF' : Number(row[2] || 0).toFixed(1)}</td></tr>`).join('');
 
-    const mps = A.state.labs.mps; MPS.updateInputs(mps); const mp = MPS.getProfile(mps), mpsStatus = q('#al-mps-status', A.hub), activeOutputs = mps.outputBits.filter(Boolean).length, activeInputs = mps.inputBits.filter(Boolean).length; q('b', mpsStatus).textContent = mps.auto.running ? '외부 PLC 출력 제어' : 'PLC 출력 대기'; q('span', mpsStatus).textContent = `${mp.id === 'ls' ? 'LS' : 'MELSEC'} · ${activeOutputs} OUT · ${activeInputs} IN · ${mps.workpieces.length} EA`; mpsStatus.classList.toggle('fault', !!mps.fault); q('#al-mps-profile', A.hub).value = mps.profileId;
+    const mps = A.state.labs.mps; MPS.updateInputs(mps); const mp = MPS.getProfile(mps), mpsStatus = q('#al-mps-status', A.hub), activeOutputs = mps.outputBits.filter(Boolean).length, activeInputs = mps.inputBits.filter(Boolean).length; q('b', mpsStatus).textContent = mps.auto.running ? '외부 PLC 출력 제어' : 'PLC 출력 대기'; q('span', mpsStatus).textContent = `${mp.id === 'ls' ? 'LS' : 'MELSEC'} · ${activeOutputs} OUT · ${activeInputs} IN · ${mps.workpieces.length} EA`; mpsStatus.classList.toggle('fault', !!mps.fault); q('#al-mps-profile', A.hub).value = mps.profileId; const workpieceStyle = q('#al-mps-workpiece-style', A.hub); workpieceStyle.value = normalizeMpsWorkpieceStyle(A.state.appearance?.mpsWorkpieceStyle); workpieceStyle.disabled = mps.workpieces.length > 0; workpieceStyle.title = workpieceStyle.disabled ? '워크를 비운 뒤 형상을 변경하세요' : '3D 형상과 센서 판정 길이를 함께 변경합니다';
     qa('[data-mps-output-index]', A.hub).forEach(input => { const index = Number(input.dataset.mpsOutputIndex), definition = MPS.OUTPUT_DEFINITIONS[index], mapped = mp.outputs[definition.key], label = q(`[data-mps-output-label="${index}"]`, A.hub); input.checked = !!mps.outputBits[index]; if (label) label.textContent = `${mapped} ${MPS_OUTPUT_LABELS[index]}`; input.parentElement.title = `${mp.vendor} ${mapped} · 물리 O${index} ${MPS_OUTPUT_LABELS[index]}`; });
     qa('[data-mps-input-index]', A.hub).forEach(item => { const index = Number(item.dataset.mpsInputIndex), definition = MPS.INPUT_DEFINITIONS[index], mapped = mp.inputs[definition.key], label = q(`[data-mps-input-label="${index}"]`, item); item.classList.toggle('on', !!mps.inputBits[index]); if (label) label.textContent = `${mapped} ${MPS_INPUT_LABELS[index]}`; item.title = `${mp.vendor} ${mapped} · 물리 I${index} ${MPS_INPUT_LABELS[index]}`; });
     q('#al-mps-lift-addresses', A.hub).textContent = `${mp.inputs[MPS.INPUT_DEFINITIONS[24].key]} RLS · ${mp.inputs[MPS.INPUT_DEFINITIONS[25].key]} DOG · ${mp.inputs[MPS.INPUT_DEFINITIONS[26].key]} FLS`;
@@ -885,6 +913,10 @@
   function resize() { if (!A.renderer || !A.canvasHost) return; const rect = A.canvasHost.getBoundingClientRect(); if (rect.width < 20 || rect.height < 20) return; A.renderer.setSize(rect.width, rect.height, false); const scene = A.scenes[A.activeLab]; if (scene) { scene.aspect = rect.width / rect.height; updateCameraProjection(scene); } }
   function setVisible(visible) { A.visible = !!visible; if (!A.initialized) return; A.lastTime = 0; A.host?.classList.toggle('show', A.visible); window.PLCTrainerPalletizer3D?.setVisible?.(A.visible && A.activeLab === 'palletizer3d'); if (A.visible) { setLab(A.activeLab); resize(); schedule(); } else persist(true); }
   function renderActive() { if (!A.initialized) return; updateScenes(); updateUi(true); if (A.visible) schedule(); }
+  function syncMpsWorkpiecePhysicalSize() {
+    const style = normalizeMpsWorkpieceStyle(A.state?.appearance?.mpsWorkpieceStyle);
+    return MPS.setWorkpieceLength(A.state.labs.mps, style === 'block' ? 0.06 : 0.028, { updateExisting: true, emit: false });
+  }
   function getEditor(lab = A.activeLab) { return A.editors[lab] || null; }
   function getSceneDiagnostics() {
     const plant = A.scenes.mps?.parts?.importedPlant;
@@ -910,15 +942,16 @@
 
   function importState(saved) {
     if (!saved || typeof saved !== 'object') return;
-    A.state = { schemaVersion: 2, activeLab: LABS.includes(saved.activeLab) ? saved.activeLab : 'servo2', cameraNavigationPreset: CameraNavigation.normalizePreset(saved.cameraNavigationPreset), labs: { servo2: Servo.createState({ saved: saved.labs?.servo2 }), mps: MPS.createState({ saved: saved.labs?.mps }), pneumatic: Pneumatic.createState({ saved: saved.labs?.pneumatic }) }, editor: saved.editor || null, equipment: { selected: typeof saved.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' } };
+    A.state = { schemaVersion: 3, activeLab: LABS.includes(saved.activeLab) ? saved.activeLab : 'servo2', cameraNavigationPreset: CameraNavigation.normalizePreset(saved.cameraNavigationPreset), labs: { servo2: Servo.createState({ saved: saved.labs?.servo2 }), mps: MPS.createState({ saved: saved.labs?.mps }), pneumatic: Pneumatic.createState({ saved: saved.labs?.pneumatic }) }, editor: saved.editor || null, equipment: { selected: typeof saved.equipment?.selected === 'string' ? saved.equipment.selected : 'relay-module.glb' }, appearance: { mpsWorkpieceStyle: normalizeMpsWorkpieceStyle(saved.appearance?.mpsWorkpieceStyle) } };
+    syncMpsWorkpiecePhysicalSize();
     for (const [lab, editor] of Object.entries(A.editors)) if (saved.editor?.[lab]) { try { editor.importState(saved.editor[lab], { strict: false }); } catch (error) { console.warn(`Editor state for ${lab} could not be restored`, error); } }
     A.activeLab = A.state.activeLab; setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); setLab(A.activeLab); updateScenes(); updateUi(true); if (A.equipmentCatalog.length) void showEquipmentModel(A.state.equipment.selected); persist(true);
   }
 
   function init() {
-    injectCss(); A.state = loadSaved(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
+    injectCss(); A.state = loadSaved(); syncMpsWorkpiecePhysicalSize(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
   }
 
-  window.PLCTrainerAutomationLabs = { version: '2.9.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
+  window.PLCTrainerAutomationLabs = { version: '2.10.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
   init();
 })();
