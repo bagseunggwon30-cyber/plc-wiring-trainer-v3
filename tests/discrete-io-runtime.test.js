@@ -133,6 +133,7 @@ test('export and import preserve configuration and wiring but restore safe-off',
   const state = createPoweredReference({ profile: 'mitsubishi', inputMode: 'source' });
   const profile = Discrete.getProfile(state);
   state.layout = { relay: { x: 120, y: 80, z: 0 } };
+  Discrete.setMeterMode(state, 'continuity');
   Discrete.setPhysicalInput(state, 'capacitiveNpn', true);
   Discrete.writeDevice(state, profile.outputs.relay3, true);
   Discrete.writeDevice(state, profile.outputs.timer, true);
@@ -143,6 +144,7 @@ test('export and import preserve configuration and wiring but restore safe-off',
 
   assert.equal(restored.profileId, 'mitsubishi');
   assert.equal(restored.inputMode, 'source');
+  assert.equal(restored.meterMode, 'continuity');
   assert.deepEqual(restored.connections, state.connections);
   assert.deepEqual(restored.layout, state.layout);
   assert.equal(restored.physicalInputs.capacitiveNpn, true);
@@ -152,4 +154,32 @@ test('export and import preserve configuration and wiring but restore safe-off',
   assert.equal(restored.timer.active, false);
   assert.equal(restored.timer.value, 0);
   assert.equal(restored.counter.previousPulse, false);
+});
+
+test('two 3D probe tips measure DC polarity and continuity without bypassing the wiring graph', () => {
+  const state = createPoweredReference();
+  const withProbes = state.connections.concat([
+    { id: 'probe-red', from: { moduleId: 'probe-red', anchorId: 'TIP' }, to: { moduleId: 'power', anchorId: 'P24-19' } },
+    { id: 'probe-black', from: { moduleId: 'probe-black', anchorId: 'TIP' }, to: { moduleId: 'power', anchorId: 'N24-19' } }
+  ]);
+  Discrete.setConnections(state, withProbes);
+
+  assert.deepEqual(Discrete.measureBetween(state, 'probe-red.TIP', 'probe-black.TIP', 'voltage'), {
+    status: 'OK', mode: 'voltage', volts: 24, unit: 'V DC', powered: true
+  });
+  assert.equal(Discrete.measureBetween(state, 'probe-black.TIP', 'probe-red.TIP', 'voltage').volts, -24);
+  assert.equal(Discrete.measureBetween(state, 'probe-red.TIP', 'counter.DONE', 'voltage').status, 'BLOCKED');
+
+  Discrete.setPower(state, false);
+  assert.equal(Discrete.measureBetween(state, 'probe-red.TIP', 'probe-black.TIP', 'continuity').continuity, false);
+  const sameRail = withProbes.map(connection => connection.id === 'probe-black'
+    ? { ...connection, to: { moduleId: 'power', anchorId: 'P24-18' } }
+    : connection);
+  Discrete.setConnections(state, sameRail);
+  assert.deepEqual(Discrete.measureBetween(state, 'probe-red.TIP', 'probe-black.TIP', 'continuity'), {
+    status: 'OK', mode: 'continuity', continuity: true, ohms: 0, powered: false
+  });
+
+  Discrete.setPower(state, true);
+  assert.equal(Discrete.measureBetween(state, 'probe-red.TIP', 'probe-black.TIP', 'continuity').code, 'POWER_ON_CONTINUITY_BLOCKED');
 });

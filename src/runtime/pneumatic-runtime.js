@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '2.7.0';
+  const VERSION = '2.7.1';
   const STEP = 0.02;
   const PORTS = Object.freeze([
     'source.OUT', 'service.IN', 'service.OUT', 'dist.IN', 'dist.1', 'dist.2', 'dist.3',
@@ -96,6 +96,11 @@
 
   function setCoil(state, coil, on) {
     const key = String(coil).toUpperCase() === 'B' ? 'coilB' : 'coilA';
+    if (key === 'coilB' && state.valve.type === 'single' && !!on) {
+      state.valve.coilB = false;
+      updateSpool(state);
+      return false;
+    }
     state.valve[key] = !!on;
     updateSpool(state);
     return !state.valve.conflict;
@@ -267,7 +272,7 @@
     if (state.auto.state === 'EXTEND' && state.cylinder.extended) {
       state.auto.state = 'DWELL'; state.auto.timer = 0; state.auto.message = '전진단 대기'; setVacuum(state, true);
     } else if (state.auto.state === 'DWELL' && state.auto.timer >= .5) {
-      state.auto.state = 'RETRACT'; state.auto.timer = 0; state.auto.message = '실린더 후진'; setCoil(state, 'A', false); setCoil(state, 'B', true);
+      state.auto.state = 'RETRACT'; state.auto.timer = 0; state.auto.message = '실린더 후진'; setCoil(state, 'A', false); setCoil(state, 'B', state.valve.type === 'double');
     } else if (state.auto.state === 'RETRACT' && state.cylinder.retracted) {
       state.auto.running = false; state.auto.state = 'COMPLETE'; state.auto.timer = 0; state.auto.message = '1사이클 완료'; state.auto.cycleCount += 1;
       state.valve.coilA = state.valve.coilB = false; updateSpool(state); setVacuum(state, false); addEvent(state, 'complete', '공압 1사이클 완료');

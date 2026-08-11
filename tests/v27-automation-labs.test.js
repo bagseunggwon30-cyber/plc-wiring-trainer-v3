@@ -76,6 +76,34 @@ test('manual lab controls are routed through the currently selected vendor addre
   assert.doesNotMatch(ui, /Pneumatic\.setCoil\(/);
 });
 
+test('pneumatic valve selection swaps the single and double solenoid equipment safely', () => {
+  assert.match(ui, /addImported\('pneumatic', 'valve-5-2-single\.glb'/);
+  assert.match(ui, /addImported\('pneumatic', 'valve-5-2-double\.glb'/);
+  assert.match(ui, /registerEditorModule\('pneumatic', 'valve-single'/);
+  assert.match(ui, /registerEditorModule\('pneumatic', 'valve-double'/);
+  assert.match(ui, /function syncPneumaticValveVisual\(\)/);
+  assert.match(ui, /single\.visible = state\.valve\.type === 'single'/);
+  assert.match(ui, /double\.visible = state\.valve\.type === 'double'/);
+  assert.match(ui, /coilB\.disabled = state\.valve\.type !== 'double'/);
+  assert.match(ui, /state\.valve\.type !== 'double' && state\.valve\.coilB[\s\S]*?Pneumatic\.writeDevice\(state, Pneumatic\.getProfile\(state\)\.commands\.coilB, false\)/);
+  assert.match(ui, /input\.dataset\.pneuCoil === 'B' && state\.valve\.type !== 'double'/);
+  assert.match(ui, /function updatePneumaticScene\(\)[\s\S]*?syncPneumaticValveVisual\(\)/);
+  assert.match(ui, /function importState\(saved\)[\s\S]*?updateScenes\(\)/);
+});
+
+test('the discrete lab uses movable 3D probes and the circuit graph as its multimeter source', () => {
+  assert.match(ui, /add\('probe-black', 'banana-plug-black\.glb'/);
+  assert.match(ui, /parts\.imported\['probe-red'\]/);
+  assert.match(ui, /add\('ruler', 'ruler\.glb'/);
+  assert.match(ui, /registerEditorModule\('discrete', 'probe-red'/);
+  assert.match(ui, /function applyProbeReferenceConnections\(\)/);
+  assert.match(ui, /moduleId: 'probe-red', anchorId: 'TIP'/);
+  assert.match(ui, /moduleId: 'probe-black', anchorId: 'TIP'/);
+  assert.match(ui, /Discrete\.measureBetween\(discrete, 'probe-red\.TIP', 'probe-black\.TIP'\)/);
+  assert.match(ui, /id="al-discrete-meter-mode"/);
+  assert.match(ui, /POWER_ON_CONTINUITY_BLOCKED|연속성 모드는 통전 중 자동 차단/);
+});
+
 test('automation lab camera keeps the audited orthographic presets behind shared navigation controls', () => {
   assert.match(ui, /new Three\.OrthographicCamera\(-3\.5, 3\.5, 3\.5, -3\.5, \.01, 100\)/);
   assert.match(ui, /const CAMERA_DISTANCE = 16\.17/);

@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const INPUT_MODES = Object.freeze(['sink', 'source']);
   const BANKS = new Set(['P', 'M', 'D', 'X', 'Y']);
 
@@ -161,6 +161,7 @@
       profile: profileId,
       power: { on: false, voltage: 24 },
       inputMode,
+      meterMode: options.meterMode === 'continuity' ? 'continuity' : 'voltage',
       physicalInputs: booleanMap(INPUT_DEFINITIONS),
       commandOutputs: booleanMap(OUTPUT_DEFINITIONS),
       effectiveOutputs: booleanMap(OUTPUT_DEFINITIONS),
@@ -386,6 +387,46 @@
     };
     refreshMemory(state);
     return state.solution;
+  }
+
+  function setMeterMode(state, value) {
+    const mode = String(value || '').trim().toLowerCase();
+    if (!['voltage', 'continuity'].includes(mode)) return false;
+    state.meterMode = mode;
+    return true;
+  }
+
+  function measureBetween(state, left, right, rawMode = state.meterMode || 'voltage') {
+    const first = endpointKey(left);
+    const second = endpointKey(right);
+    const mode = String(rawMode || 'voltage').trim().toLowerCase() === 'continuity' ? 'continuity' : 'voltage';
+    if (!first || !second) {
+      return { status: 'BLOCKED', mode, code: 'INVALID_PROBE_ENDPOINT', message: '측정할 두 단자 또는 프로브 끝점이 필요합니다.' };
+    }
+
+    const graph = buildGraph(state);
+    if (mode === 'continuity') {
+      if (state.power.on) {
+        return { status: 'BLOCKED', mode, code: 'POWER_ON_CONTINUITY_BLOCKED', message: '연속성 측정 전 DC 24V 전원을 꺼야 합니다.' };
+      }
+      const continuity = connected(graph, first, second);
+      return { status: 'OK', mode, continuity, ohms: continuity ? 0 : null, powered: false };
+    }
+
+    const potential = endpoint => {
+      if (connected(graph, endpoint, 'source.P24')) return state.power.on ? state.power.voltage : 0;
+      if (connected(graph, endpoint, 'source.N24')) return 0;
+      return null;
+    };
+    const firstPotential = potential(first);
+    const secondPotential = potential(second);
+    if (firstPotential == null || secondPotential == null) {
+      if (connected(graph, first, second)) {
+        return { status: 'OK', mode, volts: 0, unit: 'V DC', powered: !!state.power.on };
+      }
+      return { status: 'BLOCKED', mode, code: 'FLOATING_PROBE_ENDPOINT', message: '측정점 중 하나 이상이 +24V 또는 24G 기준에 연결되지 않았습니다.' };
+    }
+    return { status: 'OK', mode, volts: firstPotential - secondPotential, unit: 'V DC', powered: !!state.power.on };
   }
 
   function referenceConnections(inputMode = 'sink') {
@@ -656,6 +697,7 @@
       profileId: state.profileId,
       profile: state.profileId,
       inputMode: state.inputMode,
+      meterMode: state.meterMode,
       power: state.power,
       physicalInputs: state.physicalInputs,
       commandOutputs: state.commandOutputs,
@@ -672,6 +714,7 @@
     state.profileId = profileId;
     state.profile = profileId;
     state.inputMode = INPUT_MODES.includes(saved.inputMode) ? saved.inputMode : state.inputMode;
+    state.meterMode = saved.meterMode === 'continuity' ? 'continuity' : 'voltage';
     state.connections = normalizeConnections(saved.connections);
     state.layout = clone(saved.layout || {});
     for (const definition of INPUT_DEFINITIONS) {
@@ -709,10 +752,12 @@
     switchProfile: setProfile,
     setPower,
     setInputMode,
+    setMeterMode,
     setPhysicalInput,
     setConnections,
     referenceConnections,
     evaluateTopology,
+    measureBetween,
     tick,
     readDevice,
     writeDevice,

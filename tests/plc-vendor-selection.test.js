@@ -100,6 +100,27 @@ test('discrete bench uses one selected vendor map and switching safely drops eve
   assert.equal(Discrete.writeDevice(state, mitsubishi.outputs.relay1, true).ok, true);
 });
 
+test('each 3D plant keeps its own selected vendor session instead of sharing one mutable profile', () => {
+  const plants = {
+    palletizer: { runtime: Palletizer, state: Palletizer.createState({ profile: 'ls' }) },
+    servo: { runtime: Servo, state: Servo.createState({ profile: 'mitsubishi' }) },
+    mps: { runtime: MPS, state: MPS.createState({ profile: 'ls' }) },
+    pneumatic: { runtime: Pneumatic, state: Pneumatic.createState({ profile: 'mitsubishi' }) },
+    discrete: { runtime: Discrete, state: Discrete.createState({ profile: 'ls' }) }
+  };
+
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(plants).map(([name, plant]) => [name, plant.runtime.getProfile(plant.state).id])),
+    { palletizer: 'ls', servo: 'mitsubishi', mps: 'ls', pneumatic: 'mitsubishi', discrete: 'ls' }
+  );
+
+  MPS.setProfile(plants.mps.state, 'mitsubishi');
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(plants).map(([name, plant]) => [name, plant.runtime.getProfile(plant.state).id])),
+    { palletizer: 'ls', servo: 'mitsubishi', mps: 'mitsubishi', pneumatic: 'mitsubishi', discrete: 'ls' }
+  );
+});
+
 test('saved plant states restore with every output and motion command safely off', () => {
   const palletizer = Palletizer.createState({ profile: 'mitsubishi' });
   const palletProfile = Palletizer.getProfile(palletizer);

@@ -234,6 +234,7 @@
       <section class="al-section"><h3>현장 입력 11점 <small>버튼·센서·리미트</small></h3><div class="al-checks">${DISCRETE_INPUTS.map(([key, label]) => `<label class="al-check"><input type="checkbox" data-discrete-input="${key}"><span data-discrete-input-label="${key}">${esc(label)}</span></label>`).join('')}</div></section>
       <section class="al-section"><h3>선택 PLC 출력 13점 <small>다른 제조사 주소 거부</small></h3><div class="al-output-grid">${DISCRETE_OUTPUTS.map(([key, label]) => `<label class="al-output"><input type="checkbox" data-discrete-output="${key}"><span data-discrete-output-label="${key}">${esc(label)}</span></label>`).join('')}</div></section>
       <section class="al-section"><h3>타이머·카운터 <small>3D FND 런타임 오버레이</small></h3><div class="al-fields"><label class="al-field">타이머 설정 s<input id="al-discrete-timer-preset" type="number" min=".1" max="99.9" step=".1" value="3"></label><label class="al-field">카운터 설정<input id="al-discrete-counter-preset" type="number" min="1" max="999" step="1" value="5"></label><button class="al-btn" data-discrete-action="counter-reset">카운터 RESET</button></div><div class="al-counters" style="margin-top:6px"><div class="al-counter"><b id="al-discrete-timer-value">0.0</b><span>TIMER s</span></div><div class="al-counter"><b id="al-discrete-counter-value">0</b><span>COUNT</span></div><div class="al-counter"><b id="al-discrete-wire-count">0</b><span>WIRES</span></div></div></section>
+      <section class="al-section"><h3>가상 멀티미터 <small>3D 적·흑 프로브</small></h3><label class="al-profile">측정 모드<select id="al-discrete-meter-mode"><option value="voltage">DC 전압</option><option value="continuity">연속성 · 전원 OFF</option></select></label><button class="al-btn" data-discrete-action="probe-reference" style="width:100%">프로브를 +24V / 24G에 시험 연결</button><div class="al-status" id="al-discrete-meter" style="margin-top:7px"><b>프로브 미연결</b><span>BLOCKED</span></div><div class="al-asset-note">프로브 TIP을 원하는 단자에 결선하면 실제 결선 그래프를 따라 측정합니다. 연속성 모드는 통전 중 자동 차단됩니다.</div></section>
       <section class="al-section"><h3>전기 토폴로지 진단</h3><div class="al-log" id="al-discrete-issues"></div><table class="al-memory" id="al-discrete-memory"></table><div class="al-asset-note">SoV 3D 외형은 교육용입니다. 화면의 Mitsubishi 모듈 외형을 LS 장비로 오인하지 않도록, 선택 제조사 주소표와 세션만 바뀝니다. 정확한 검토 통과는 별도 매뉴얼 기반 장비 프로필이 필요합니다.</div></section>
     </aside></div>`;
   }
@@ -341,6 +342,7 @@
       const [x1, y1, x2, y2, color] = spec, length = Math.hypot(x2 - x1, y2 - y1); const mesh = cylinder(root, .055, length, [(x1 + x2) / 2, (y1 + y2) / 2, 1.55], material(color, .08, .5, { transparent: true, opacity: .82 }), 'x'); mesh.rotation.z = Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2; data.parts.tubes.push(mesh);
     }
     data.parts.gauge = led(root, [-3.6, 3.35, 1.45], 0x4ad7ff); data.parts.vacuum = led(root, [3.9, 1.25, .3], 0x7bf2c3);
+    data.parts.importedValves = { single: null, double: null };
     data.parts.proxyEquipment = [service, valve, cyl];
     return data;
   }
@@ -440,6 +442,20 @@
       editor.clearConnections({ emit: false }); syncDiscreteTopology();
       console.warn('Discrete reference wiring could not be applied', error); return false;
     }
+  }
+
+  function applyProbeReferenceConnections() {
+    const editor = A.editors.discrete;
+    if (!editor || !['probe-red', 'probe-black', 'power'].every(id => editor.modules.has(id))) return false;
+    const connections = editor.serialize().connections.filter(connection =>
+      !['probe-red', 'probe-black'].includes(connection.from.moduleId)
+      && !['probe-red', 'probe-black'].includes(connection.to.moduleId)
+    );
+    connections.push(
+      { id: 'meter-probe-red', kind: 'electric', from: { moduleId: 'probe-red', anchorId: 'TIP' }, to: { moduleId: 'power', anchorId: 'P24-19' } },
+      { id: 'meter-probe-black', kind: 'electric', from: { moduleId: 'probe-black', anchorId: 'TIP' }, to: { moduleId: 'power', anchorId: 'N24-19' } }
+    );
+    return applyDiscreteConnections(connections);
   }
 
   function installEditorControls() {
@@ -710,6 +726,20 @@
       electric('G+', [-.5, .18, .14]), electric('Y+', [-.3, .18, .14]), electric('R+', [-.1, .18, .14]), electric('W+', [.1, .18, .14]), electric('BZ+', [.3, .18, .14]), electric('COM', [.5, .18, .14])
     ]);
     add('tower', 'tower-lamp.glb', 1.45, [.55, 1.02, -1.7], [electric('G+', [-.32, .12, .12]), electric('Y+', [-.1, .12, .12]), electric('R+', [.12, .12, .12]), electric('COM', [.34, .12, .12])]);
+    add('probe-black', 'banana-plug-black.glb', .48, [-3.25, .68, -1.68], [electric('TIP', [0, .1, .18])], ({ model }) => {
+      const redModel = model.clone(true), redWrapper = new Three.Group();
+      redModel.traverse?.(object => {
+        if (!object.isMesh || !object.material) return;
+        const materials = (Array.isArray(object.material) ? object.material : [object.material]).map(source => {
+          const next = source.clone(); next.color?.setHex?.(0xa3262b); next.needsUpdate = true; return next;
+        });
+        object.material = Array.isArray(object.material) ? materials : materials[0];
+      });
+      redWrapper.name = 'multimeter-probe-red'; redWrapper.position.set(-3.9, .68, -1.68); redWrapper.add(redModel);
+      A.scenes.discrete.root.add(redWrapper); parts.imported['probe-red'] = { wrapper: redWrapper, model: redModel };
+      registerEditorModule('discrete', 'probe-red', redWrapper, [electric('TIP', [0, .1, .18])], true);
+    });
+    add('ruler', 'ruler.glb', 1.5, [3.55, .64, -1.72], []);
 
     await Promise.all(tasks);
     const saved = A.state?.editor?.discrete;
@@ -758,11 +788,23 @@
       { id: 'IN', tag: 'IN/PP', kind: 'air', position: [-.05, .035, 0] },
       ...Array.from({ length: 8 }, (_, index) => ({ id: `P${index + 1}`, tag: `OUT/P${index + 1}`, kind: 'air', position: [.05, .015 + (index % 2) * .025, -.035 + Math.floor(index / 2) * .023] }))
     ], true), { authoredCoordinates: true });
-    addImported('pneumatic', 'valve-5-2-double.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'valve-double', wrapper, [
-      { id: 'PP', tag: 'PP', kind: 'air', position: [0, .085, .033] }, { id: 'PA', tag: 'PA', kind: 'air', position: [-.04, .085, -.033] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.04, .085, -.033] },
-      { id: 'A-P24', tag: 'PA/P24', kind: 'electric', position: [-.073, .05, .02] }, { id: 'A-N24', tag: 'PA/N24', kind: 'electric', position: [-.073, .025, .02] },
-      { id: 'B-P24', tag: 'PB/P24', kind: 'electric', position: [.073, .05, .02] }, { id: 'B-N24', tag: 'PB/N24', kind: 'electric', position: [.073, .025, .02] }
-    ], true), { authoredCoordinates: true });
+    addImported('pneumatic', 'valve-5-2-single.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => {
+      A.scenes.pneumatic.parts.importedValves.single = wrapper;
+      registerEditorModule('pneumatic', 'valve-single', wrapper, [
+        { id: 'PP', tag: 'PP', kind: 'air', position: [0, .085, .033] }, { id: 'PA', tag: 'PA', kind: 'air', position: [-.04, .085, -.033] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.04, .085, -.033] },
+        { id: 'A-P24', tag: 'PA/P24', kind: 'electric', position: [-.073, .05, .02] }, { id: 'A-N24', tag: 'PA/N24', kind: 'electric', position: [-.073, .025, .02] }
+      ], true);
+      syncPneumaticValveVisual();
+    }, { authoredCoordinates: true });
+    addImported('pneumatic', 'valve-5-2-double.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => {
+      A.scenes.pneumatic.parts.importedValves.double = wrapper;
+      registerEditorModule('pneumatic', 'valve-double', wrapper, [
+        { id: 'PP', tag: 'PP', kind: 'air', position: [0, .085, .033] }, { id: 'PA', tag: 'PA', kind: 'air', position: [-.04, .085, -.033] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.04, .085, -.033] },
+        { id: 'A-P24', tag: 'PA/P24', kind: 'electric', position: [-.073, .05, .02] }, { id: 'A-N24', tag: 'PA/N24', kind: 'electric', position: [-.073, .025, .02] },
+        { id: 'B-P24', tag: 'PB/P24', kind: 'electric', position: [.073, .05, .02] }, { id: 'B-N24', tag: 'PB/N24', kind: 'electric', position: [.073, .025, .02] }
+      ], true);
+      syncPneumaticValveVisual();
+    }, { authoredCoordinates: true });
     addImported('pneumatic', 'speed-controller.glb', null, [.12, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'speed-controller', wrapper, [{ id: 'IN', tag: 'IN', kind: 'air', position: [-.045, .04, 0] }, { id: 'OUT', tag: 'OUT', kind: 'air', position: [.045, .04, 0] }], true), { authoredCoordinates: true });
     addImported('pneumatic', 'double-acting-cylinder.glb', null, [.4, .84, .08], [0, 0, 0], 1, ({ model, wrapper }) => {
       const rod = findImportedNode(model, /(?:Rod|Piston|Shaft).*__go/i);
@@ -924,20 +966,29 @@
 
     q('#al-pneu-profile', A.hub).onchange = event => { Pneumatic.setProfile(A.state.labs.pneumatic, event.target.value); schedule(); updateUi(true); persist(true); };
     qa('[data-pneu-action]', A.hub).forEach(button => button.onclick = () => { const state = A.state.labs.pneumatic, profile = Pneumatic.getProfile(state), action = button.dataset.pneuAction; if (action === 'supply') Pneumatic.writeDevice(state, profile.commands.supply, !state.source.on); if (action === 'auto') Pneumatic.writeDevice(state, profile.commands.auto, true); if (action === 'stop') Pneumatic.writeDevice(state, profile.commands.stop, true); if (action === 'reset') Pneumatic.writeDevice(state, profile.commands.reset, true); Pneumatic.tick(state, 0); schedule(); updateUi(true); persist(true); });
-    q('#al-pneu-valve', A.hub).onchange = event => { Pneumatic.setValveType(A.state.labs.pneumatic, event.target.value); updateUi(true); };
+    q('#al-pneu-valve', A.hub).onchange = event => { Pneumatic.setValveType(A.state.labs.pneumatic, event.target.value); syncPneumaticValveVisual(); schedule(); updateUi(true); persist(true); };
     q('#al-pneu-reg', A.hub).onchange = event => { Pneumatic.setRegulator(A.state.labs.pneumatic, event.target.value); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
     q('#al-pneu-throttle', A.hub).onchange = event => { Pneumatic.setThrottle(A.state.labs.pneumatic, 'extend', event.target.value); };
-    qa('[data-pneu-coil]', A.hub).forEach(input => input.onchange = () => { const state = A.state.labs.pneumatic, profile = Pneumatic.getProfile(state), command = input.dataset.pneuCoil === 'B' ? profile.commands.coilB : profile.commands.coilA; Pneumatic.writeDevice(state, command, input.checked); Pneumatic.tick(state, 0); schedule(); updateUi(true); });
+    qa('[data-pneu-coil]', A.hub).forEach(input => input.onchange = () => {
+      const state = A.state.labs.pneumatic, profile = Pneumatic.getProfile(state);
+      if (input.dataset.pneuCoil === 'B' && state.valve.type !== 'double') {
+        input.checked = false; Pneumatic.writeDevice(state, profile.commands.coilB, false); Pneumatic.tick(state, 0); syncPneumaticValveVisual(); schedule(); updateUi(true); return;
+      }
+      const command = input.dataset.pneuCoil === 'B' ? profile.commands.coilB : profile.commands.coilA;
+      Pneumatic.writeDevice(state, command, input.checked); Pneumatic.tick(state, 0); schedule(); updateUi(true);
+    });
     q('#al-pneu-vacuum', A.hub).onchange = event => { const state = A.state.labs.pneumatic; Pneumatic.writeDevice(state, Pneumatic.getProfile(state).commands.vacuum, event.target.checked); Pneumatic.tick(state, 0); updateUi(true); };
     q('#al-pneu-part', A.hub).onchange = event => { A.state.labs.pneumatic.vacuum.partPresent = event.target.checked; Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); };
     q('#al-pneu-leak', A.hub).oninput = event => { Pneumatic.setTubeLeak(A.state.labs.pneumatic, 'T03', event.target.value); Pneumatic.tick(A.state.labs.pneumatic, 0); updateUi(true); schedule(); };
 
     q('#al-discrete-profile', A.hub).onchange = event => { const state = A.state.labs.discrete; Discrete.setProfile(state, event.target.value); Discrete.tick(state, 0); updateUi(true); schedule(); persist(true); };
     q('#al-discrete-input-mode', A.hub).onchange = event => { const state = A.state.labs.discrete; Discrete.setInputMode(state, event.target.value); Discrete.tick(state, 0); updateUi(true); schedule(); persist(true); };
+    q('#al-discrete-meter-mode', A.hub).onchange = event => { Discrete.setMeterMode(A.state.labs.discrete, event.target.value); updateUi(true); persist(true); };
     qa('[data-discrete-action]', A.hub).forEach(button => button.onclick = () => {
       const state = A.state.labs.discrete, profile = Discrete.getProfile(state), action = button.dataset.discreteAction;
       if (action === 'power') Discrete.setPower(state, !state.power.on);
       if (action === 'reference') applyDiscreteConnections(Discrete.referenceConnections(state.inputMode));
+      if (action === 'probe-reference') applyProbeReferenceConnections();
       if (action === 'outputs-off') for (const address of Object.values(profile.outputs)) Discrete.writeDevice(state, address, false);
       if (action === 'clear') applyDiscreteConnections([]);
       if (action === 'counter-reset') Discrete.writeDevice(state, profile.commands.counterReset, true);
@@ -1024,8 +1075,26 @@
     }
   }
 
+  function syncPneumaticValveVisual() {
+    const state = A.state?.labs?.pneumatic, parts = A.scenes.pneumatic?.parts;
+    if (!state || !parts) return;
+    if (state.valve.type !== 'double' && state.valve.coilB) {
+      Pneumatic.writeDevice(state, Pneumatic.getProfile(state).commands.coilB, false);
+    }
+    const single = parts.importedValves?.single, double = parts.importedValves?.double;
+    if (single) single.visible = state.valve.type === 'single';
+    if (double) double.visible = state.valve.type === 'double';
+    const coilB = A.hub ? q('[data-pneu-coil="B"]', A.hub) : null;
+    if (coilB) {
+      coilB.disabled = state.valve.type !== 'double';
+      if (coilB.disabled) coilB.checked = false;
+      coilB.closest('label')?.classList.toggle('disabled', coilB.disabled);
+      coilB.title = coilB.disabled ? '5/2 단솔 밸브에는 SOL B 코일이 없습니다.' : '5/2 복솔 밸브 SOL B 후진 코일';
+    }
+  }
+
   function updatePneumaticScene() {
-    const state = A.state.labs.pneumatic, parts = A.scenes.pneumatic.parts; parts.rod.position.x = parts.rodBaseX + state.cylinder.position * 1.4; setLed(parts.coilLeds[0], state.valve.coilA); setLed(parts.coilLeds[1], state.valve.coilB, 0xffb637); setLed(parts.gauge, state.service.outputBar >= 3, 0x4ad7ff); setLed(parts.vacuum, state.vacuum.holding, 0x7bf2c3);
+    const state = A.state.labs.pneumatic, parts = A.scenes.pneumatic.parts; syncPneumaticValveVisual(); parts.rod.position.x = parts.rodBaseX + state.cylinder.position * 1.4; setLed(parts.coilLeds[0], state.valve.coilA); setLed(parts.coilLeds[1], state.valve.type === 'double' && state.valve.coilB, 0xffb637); setLed(parts.gauge, state.service.outputBar >= 3, 0x4ad7ff); setLed(parts.vacuum, state.vacuum.holding, 0x7bf2c3);
     if (parts.importedCylinder?.rod && parts.importedCylinder.base) parts.importedCylinder.rod.position.x = parts.importedCylinder.base.x + state.cylinder.position * .18;
     const leak = state.tubes.find(tube => tube.id === 'T03')?.leak || 0; parts.tubes.forEach((tube, index) => { tube.material.opacity = index === 0 ? .82 : .82 * (1 - leak * .7); });
   }
@@ -1083,20 +1152,23 @@
     const liftValue = Math.round(mps.liftServo.target * 100); q('#al-mps-lift', A.hub).value = liftValue; q('#al-mps-lift-value', A.hub).textContent = `${Math.round(mps.liftServo.position * 100)}%`;
     q('#al-mps-log', A.hub).innerHTML = mps.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
 
-    const pneu = A.state.labs.pneumatic, pp = Pneumatic.getProfile(pneu), pneuStatus = q('#al-pneu-status', A.hub); q('b', pneuStatus).textContent = pneu.faults[0]?.message || pneu.auto.message; q('span', pneuStatus).textContent = `${pp.id === 'ls' ? 'LS' : 'MELSEC'} · ${pneu.auto.state} · ${pneu.valve.spool.toUpperCase()}`; pneuStatus.classList.toggle('fault', !!pneu.faults.length); q('#al-pneu-profile', A.hub).value = pneu.profileId; q('#al-pneu-valve', A.hub).value = pneu.valve.type; q('#al-pneu-reg', A.hub).value = pneu.service.regulatorBar; q('#al-pneu-throttle', A.hub).value = pneu.cylinder.throttleExtend;
-    q('#al-pneu-memory', A.hub).innerHTML = [['AIR', pp.commands.supply, pneu.source.on], ['SOL A', pp.commands.coilA, pneu.valve.coilA], ['SOL B', pp.commands.coilB, pneu.valve.coilB], ['READY', pp.status.ready, Pneumatic.readDevice(pneu, pp.status.ready)], ['EXT', pp.status.extended, pneu.cylinder.extended], ['RET', pp.status.retracted, pneu.cylinder.retracted]].map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] ? 'ON' : 'OFF'}</td></tr>`).join('');
-    const airButton = q('[data-pneu-action="supply"]', A.hub); airButton.textContent = pneu.source.on ? 'AIR OFF' : 'AIR ON'; airButton.classList.toggle('on', pneu.source.on); qa('[data-pneu-coil]', A.hub).forEach(input => { input.checked = !!pneu.valve[`coil${input.dataset.pneuCoil}`]; }); q('#al-pneu-vacuum', A.hub).checked = pneu.vacuum.command; q('#al-pneu-part', A.hub).checked = pneu.vacuum.partPresent;
+    const pneu = A.state.labs.pneumatic, pp = Pneumatic.getProfile(pneu), pneuStatus = q('#al-pneu-status', A.hub); syncPneumaticValveVisual(); q('b', pneuStatus).textContent = pneu.faults[0]?.message || pneu.auto.message; q('span', pneuStatus).textContent = `${pp.id === 'ls' ? 'LS' : 'MELSEC'} · ${pneu.auto.state} · ${pneu.valve.spool.toUpperCase()}`; pneuStatus.classList.toggle('fault', !!pneu.faults.length); q('#al-pneu-profile', A.hub).value = pneu.profileId; q('#al-pneu-valve', A.hub).value = pneu.valve.type; q('#al-pneu-reg', A.hub).value = pneu.service.regulatorBar; q('#al-pneu-throttle', A.hub).value = pneu.cylinder.throttleExtend;
+    q('#al-pneu-memory', A.hub).innerHTML = [['AIR', pp.commands.supply, pneu.source.on], ['SOL A', pp.commands.coilA, pneu.valve.coilA], ['SOL B', pp.commands.coilB, pneu.valve.type === 'double' && pneu.valve.coilB], ['READY', pp.status.ready, Pneumatic.readDevice(pneu, pp.status.ready)], ['EXT', pp.status.extended, pneu.cylinder.extended], ['RET', pp.status.retracted, pneu.cylinder.retracted]].map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${row[2] ? 'ON' : 'OFF'}</td></tr>`).join('');
+    const airButton = q('[data-pneu-action="supply"]', A.hub); airButton.textContent = pneu.source.on ? 'AIR OFF' : 'AIR ON'; airButton.classList.toggle('on', pneu.source.on); qa('[data-pneu-coil]', A.hub).forEach(input => { const unavailable = input.dataset.pneuCoil === 'B' && pneu.valve.type !== 'double'; input.disabled = unavailable; input.checked = unavailable ? false : !!pneu.valve[`coil${input.dataset.pneuCoil}`]; }); q('#al-pneu-vacuum', A.hub).checked = pneu.vacuum.command; q('#al-pneu-part', A.hub).checked = pneu.vacuum.partPresent;
     q('[data-pneu-gauge="input"]', A.hub).textContent = pneu.service.inputBar.toFixed(1); q('[data-pneu-gauge="output"]', A.hub).textContent = pneu.service.outputBar.toFixed(1); q('[data-pneu-gauge="vacuum"]', A.hub).textContent = pneu.vacuum.pressureBar.toFixed(1); q('#al-pneu-stroke', A.hub).style.width = `${pneu.cylinder.position * 100}%`;
     const leak = pneu.tubes.find(tube => tube.id === 'T03')?.leak || 0; q('#al-pneu-leak', A.hub).value = leak; q('#al-pneu-leak-label', A.hub).textContent = `${Math.round(leak * 100)}%`; const pneuSensors = { retracted: pneu.cylinder.retracted, extended: pneu.cylinder.extended, vacuum: pneu.vacuum.holding, fault: !!pneu.faults.length }; qa('[data-pneu-sensor]', A.hub).forEach(item => item.classList.toggle('on', !!pneuSensors[item.dataset.pneuSensor])); q('#al-pneu-log', A.hub).innerHTML = pneu.events.slice(-7).reverse().map(event => `<div class="${event.type === 'alarm' ? 'fault' : ''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
 
     const discrete = A.state.labs.discrete, dp = Discrete.getProfile(discrete), solution = Discrete.evaluateTopology(discrete), discreteStatus = q('#al-discrete-status', A.hub);
     q('b', discreteStatus).textContent = solution.ready ? '폐회로 결선 정상' : solution.issues[0]?.message || '기준 결선 필요';
     q('span', discreteStatus).textContent = `${dp.id === 'ls' ? 'LS' : 'MELSEC'} · ${discrete.power.on ? '24V ON' : 'POWER OFF'} · ${solution.issues.length} ISSUE`;
-    discreteStatus.classList.toggle('fault', solution.issues.length > 0); q('#al-discrete-profile', A.hub).value = discrete.profileId; q('#al-discrete-input-mode', A.hub).value = discrete.inputMode;
+    discreteStatus.classList.toggle('fault', solution.issues.length > 0); q('#al-discrete-profile', A.hub).value = discrete.profileId; q('#al-discrete-input-mode', A.hub).value = discrete.inputMode; q('#al-discrete-meter-mode', A.hub).value = discrete.meterMode;
     const powerButton = q('[data-discrete-action="power"]', A.hub); powerButton.textContent = discrete.power.on ? 'DC 24V OFF' : 'DC 24V ON'; powerButton.classList.toggle('on', discrete.power.on);
     qa('[data-discrete-input]', A.hub).forEach(inputBox => { const key = inputBox.dataset.discreteInput, address = dp.inputs[key]; inputBox.checked = !!discrete.physicalInputs[key]; const label = q(`[data-discrete-input-label="${key}"]`, A.hub), name = DISCRETE_INPUTS.find(item => item[0] === key)?.[1] || key; if (label) label.textContent = `${address} ${name}`; inputBox.parentElement.classList.toggle('on', !!discrete.inputs[key]); inputBox.parentElement.title = `${dp.vendor} ${address} · 물리 입력 ${key}`; });
     qa('[data-discrete-output]', A.hub).forEach(outputBox => { const key = outputBox.dataset.discreteOutput, address = dp.outputs[key]; outputBox.checked = !!discrete.commandOutputs[key]; const label = q(`[data-discrete-output-label="${key}"]`, A.hub), name = DISCRETE_OUTPUTS.find(item => item[0] === key)?.[1] || key; if (label) label.textContent = `${address} ${name}`; outputBox.parentElement.classList.toggle('on', !!discrete.effectiveOutputs[key]); outputBox.parentElement.title = `${dp.vendor} ${address} · 명령 ${discrete.commandOutputs[key] ? 'ON' : 'OFF'} · 실제 부하 ${discrete.effectiveOutputs[key] ? 'ON' : 'OFF'}`; });
     q('#al-discrete-timer-preset', A.hub).value = discrete.timer.preset; q('#al-discrete-counter-preset', A.hub).value = discrete.counter.preset; q('#al-discrete-timer-value', A.hub).textContent = discrete.timer.value.toFixed(1); q('#al-discrete-counter-value', A.hub).textContent = String(discrete.counter.value); q('#al-discrete-wire-count', A.hub).textContent = String(discrete.connections.length);
+    const measurement = Discrete.measureBetween(discrete, 'probe-red.TIP', 'probe-black.TIP'), meter = q('#al-discrete-meter', A.hub), meterOk = measurement.status === 'OK';
+    q('b', meter).textContent = measurement.mode === 'voltage' && meterOk ? `${measurement.volts >= 0 ? '+' : ''}${measurement.volts.toFixed(1)} V DC` : measurement.mode === 'continuity' && meterOk ? measurement.continuity ? '0 Ω · 연속' : 'OL · 단선' : measurement.message || '프로브 미연결';
+    q('span', meter).textContent = meterOk ? measurement.mode.toUpperCase() : measurement.code || 'BLOCKED'; meter.classList.toggle('fault', !meterOk);
     q('#al-discrete-issues', A.hub).innerHTML = solution.issues.length ? solution.issues.slice(0, 10).map(issue => `<div class="fault"><b>${esc(issue.code)}</b> · ${esc(issue.message)}</div>`).join('') : '<div>전원·입력 COM·출력 귀로가 모두 완성되었습니다.</div>';
     q('#al-discrete-memory', A.hub).innerHTML = [['PLC', dp.vendor, dp.family], ['전원 준비', dp.status.powerReady, solution.powerReady], ['입력 COM', dp.status.inputCommonReady, solution.inputCommonReady], ['타이머 완료', dp.status.timerDone, discrete.timer.done], ['카운터 완료', dp.status.counterDone, discrete.counter.done]].map(row => `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${typeof row[2] === 'boolean' ? row[2] ? 'ON' : 'OFF' : esc(row[2])}</td></tr>`).join('');
   }
@@ -1140,6 +1212,7 @@
         inputMode: A.state.labs.discrete.inputMode,
         powerOn: A.state.labs.discrete.power.on,
         ready: A.state.labs.discrete.solution.ready,
+        measurement: Discrete.measureBetween(A.state.labs.discrete, 'probe-red.TIP', 'probe-black.TIP'),
         issueCodes: A.state.labs.discrete.solution.issues.map(issue => issue.code),
         importedAssets: Object.keys(A.scenes.discrete?.parts?.imported || {}).sort(),
         runtimeDisplays: Object.keys(A.scenes.discrete?.parts?.fnd || {}).sort()
@@ -1164,6 +1237,6 @@
     injectCss(); A.state = loadSaved(); syncMpsWorkpiecePhysicalSize(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
   }
 
-  window.PLCTrainerAutomationLabs = { version: '2.11.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
+  window.PLCTrainerAutomationLabs = { version: '2.12.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };
   init();
 })();

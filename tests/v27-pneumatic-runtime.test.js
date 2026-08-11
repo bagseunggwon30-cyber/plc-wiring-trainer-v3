@@ -18,6 +18,8 @@ test('service unit regulates pressure through the default air graph', () => {
 test('single-solenoid valve extends and spring-returns a double-acting cylinder', () => {
   const state = Runtime.createState();
   Runtime.setSupply(state, true);
+  assert.equal(Runtime.setCoil(state, 'B', true), false);
+  assert.equal(state.valve.coilB, false);
   Runtime.setCoil(state, 'A', true);
   runUntil(state, () => state.cylinder.extended);
   assert.equal(state.cylinder.extended, true);
@@ -65,10 +67,15 @@ test('automatic pneumatic sequence completes deterministically', () => {
   const state = Runtime.createState();
   Runtime.tick(state, 0);
   assert.equal(Runtime.startAuto(state), true);
-  runUntil(state, () => state.auto.state === 'COMPLETE' || state.auto.state === 'FAULT', 20);
+  let singleValveCoilBWasEnergized = false;
+  for (let i = 0; i < 2000 && !['COMPLETE', 'FAULT'].includes(state.auto.state); i += 1) {
+    Runtime.tick(state, .01);
+    singleValveCoilBWasEnergized ||= state.valve.coilB;
+  }
   assert.equal(state.auto.state, 'COMPLETE');
   assert.equal(state.auto.cycleCount, 1);
   assert.equal(state.cylinder.retracted, true);
+  assert.equal(singleValveCoilBWasEnergized, false);
 });
 
 test('LS and Mitsubishi maps are internal-only commands and restoration is safely stopped', () => {
