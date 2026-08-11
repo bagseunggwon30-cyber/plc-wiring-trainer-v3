@@ -1,8 +1,10 @@
 // 결선 작업장 Electron 메인 프로세스
 const { app, BrowserWindow, Menu, dialog } = require('electron');
 const path = require('path');
+const pkg = require('./package.json');
 
 let mainWindow;
+const appTitle = `결선 작업장 v${pkg.version}`;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -10,23 +12,35 @@ function createWindow() {
     height: 1000,
     minWidth: 1024,
     minHeight: 700,
-    title: '결선 작업장 v2',
+    title: appTitle,
     backgroundColor: '#1a1a1a',
+    show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  const entry = path.join(__dirname, 'index.html');
+  mainWindow.loadFile(entry);
+  mainWindow.once('ready-to-show', () => mainWindow.show());
 
-  // 앱 메뉴
+  // 교육용 로컬 앱은 임의 팝업과 외부 페이지 이동을 허용하지 않는다.
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) event.preventDefault();
+  });
+
   const template = [
     {
       label: '파일',
       submenu: [
-        { label: '새로고침', accelerator: 'F5', click: () => mainWindow.reload() },
-        { label: '하드 새로고침', accelerator: 'CmdOrCtrl+Shift+R', click: () => mainWindow.webContents.reloadIgnoringCache() },
+        { label: '새로고침', accelerator: 'F5', click: () => mainWindow?.reload() },
+        { label: '하드 새로고침', accelerator: 'CmdOrCtrl+Shift+R', click: () => mainWindow?.webContents.reloadIgnoringCache() },
         { type: 'separator' },
         { label: '종료', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
       ]
@@ -50,9 +64,9 @@ function createWindow() {
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: '결선 작업장 v2',
+              title: appTitle,
               message: '박승권의 결선 작업장',
-              detail: 'PLC/HMI/인버터 결선 연습 도구\n\n• XBC-DR32H, SV-iG5A, XBF-AH04A, EXP2-700, MD02 등 실장비 단자 매뉴얼 기반\n• 자동 라우팅, 시뮬레이션, 미션 학습 지원\n\nv1.0.0',
+              detail: `PLC/HMI/인버터 결선 및 자동화 연습 도구\n\n• 역할 기반 다중 장비 미션\n• 전원·접점·통신·아날로그 검증\n• LS XGB 랙·슬롯 및 XG5000 P 주소 미리보기\n• Modbus RTU·실제 아날로그 값·iG5A 가감속\n• EOCR 트립·MC 자기유지·인버터 정역 시뮬레이션\n• 3축 팔레타이징·2축 서보·MPS·공압 3D 실습\n• LS L7S/XML 및 Mitsubishi QD75/MR-J4 교육 프로필\n\nv${pkg.version}`,
               buttons: ['확인']
             });
           }
@@ -76,6 +90,7 @@ function createWindow() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+app.setAppUserModelId('com.bark.wiring-trainer');
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {

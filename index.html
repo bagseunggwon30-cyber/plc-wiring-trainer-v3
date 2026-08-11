@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>박승권의 결선 작업장 v2.1 · 제어반 레일/배전</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' blob:; object-src 'none'; base-uri 'self'">
+<title>박승권의 결선 작업장 v2.7 · 자동화 제어 실습실</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:'Segoe UI','Malgun Gothic',sans-serif;background:#1a1a1a;color:#ddd;font-size:13px}
@@ -52,6 +53,7 @@ header .hgroup .sep { background: #333; margin: 0 2px; height: 14px; }
 .pal[data-cat=hmi]{border-left-color:#16a085}
 .pal[data-cat=motion]{border-left-color:#ff5aa5}
 .pal[data-cat=actuator]{border-left-color:#e67e22}
+.pal[data-cat=pneumatic]{border-left-color:#35b7c8}
 .pal[data-cat=sensor]{border-left-color:#9b59b6}
 .pal[data-cat=switch]{border-left-color:#f1c40f}
 .pal[data-cat=wiring]{border-left-color:#666}
@@ -68,6 +70,13 @@ svg.canvas.pan:active{cursor:grabbing}
 .device.locked .device-body{stroke:#7a9;stroke-width:1.4;stroke-dasharray:4 3}
 .device.locked.sel .device-body{stroke:#f60;stroke-dasharray:none}
 .device-lock-badge{font-size:11px;font-weight:700;fill:#c70;pointer-events:none;user-select:none}
+.device-role-bg{fill:rgba(7,18,32,.9);stroke:#7dd3fc;stroke-width:1;pointer-events:none}.device-role-label{fill:#e0f2fe;font-size:10px;font-weight:700;pointer-events:none;text-anchor:middle;font-family:'Segoe UI','Malgun Gothic',sans-serif}
+.device-rack-bg{fill:rgba(16,46,35,.94);stroke:#6ee7b7;stroke-width:1;pointer-events:none}.device-rack-bg.error{fill:rgba(76,22,22,.94);stroke:#f87171}.device-rack-label{fill:#d1fae5;font-size:9px;font-weight:800;pointer-events:none;text-anchor:middle;font-family:'Consolas','Cascadia Mono',monospace}.rack-row{margin:3px 0;padding:4px 5px;border-left:3px solid #4a90e2;background:#20252b;border-radius:2px}.rack-module{display:inline-block;margin:2px 2px 0 0;padding:2px 4px;border:1px solid #3f6f60;border-radius:3px;color:#bff7dd;background:#17352a}.rack-error{color:#f88;border-left-color:#d33}.runtime-value{font-family:'Consolas','Cascadia Mono',monospace;color:#9df}
+.device-config-modal{display:none;position:fixed;inset:0;z-index:2600;background:rgba(0,0,0,.68);align-items:center;justify-content:center;padding:20px}.device-config-modal.show{display:flex}.device-config-box{width:min(720px,94vw);max-height:88vh;overflow:auto;background:#20242a;border:1px solid #52606d;border-radius:10px;padding:16px 18px;color:#ddd;box-shadow:0 12px 38px rgba(0,0,0,.62)}.device-config-box h3{margin:0 0 10px;color:#9cf}.device-config-box fieldset{border:1px solid #45515c;border-radius:6px;margin:10px 0;padding:10px}.device-config-box legend{color:#8f8;padding:0 6px;font-weight:700}.device-config-box label{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1.2fr);gap:10px;align-items:center;margin:7px 0;font-size:11px}.device-config-box input,.device-config-box select{width:100%;background:#15191d;color:#eee;border:1px solid #58636e;border-radius:4px;padding:5px 7px}.device-config-box input[type=checkbox]{width:auto;justify-self:start}.config-channel{padding:8px;margin:7px 0;background:#181d22;border-radius:5px}.config-channel>b{display:block;color:#9df;margin-bottom:5px}.config-note{font-size:10px;color:#9aa8b5;line-height:1.5}.device-config-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.device-config-actions button{background:#303740;color:#ddd;border:1px solid #596674;border-radius:4px;padding:6px 14px;cursor:pointer}.device-config-actions button.primary{background:#276749;border-color:#38a169;color:#fff}
+
+.device.tripped{filter:drop-shadow(0 0 8px #f33) saturate(.55)}
+.device.drive-running,.device.motor-running{filter:drop-shadow(0 0 9px #39f) saturate(1.15)}
+.device.interlock-fault{filter:drop-shadow(0 0 10px #f60) saturate(.7)}
 .device.sel .device-body{stroke:#f60;stroke-width:2.5}
 .device-body{fill:#fdfdfd;stroke:#999;stroke-width:1;fill-opacity:0.96}
 .image-device .device-body{fill:transparent;fill-opacity:0;stroke:none}
@@ -86,6 +95,13 @@ svg.canvas.pan:active{cursor:grabbing}
 .terminal:hover{r:10;stroke-width:2.4;stroke:#f60}
 .terminal.pending{fill:#fa0;stroke:#a40;stroke-width:2}
 .terminal.highlight{fill:#ff0;stroke:#f60;stroke-width:2.5;r:10}
+.terminal.io-on{fill:#7CFF7C;stroke:#087f23;stroke-width:2.4;filter:drop-shadow(0 0 5px rgba(0,255,80,.85))}
+.terminal.output-forced{fill:#ffd54a;stroke:#b56a00;stroke-width:2.4;filter:drop-shadow(0 0 5px rgba(255,180,0,.8))}
+.device.sim-open .device-image{opacity:.52;filter:grayscale(.55)}
+.device.sim-open .device-body{stroke:#d22!important;stroke-width:3!important;stroke-dasharray:7 4}
+.device.power-off .device-image{opacity:.62;filter:grayscale(.7)}
+.device-overlay-bg{fill:rgba(10,18,28,.88);stroke:rgba(255,255,255,.55);stroke-width:.6;pointer-events:none}
+.device-overlay-label{font-size:12px;font-weight:800;fill:#fff;letter-spacing:.3px;pointer-events:none;font-family:'Segoe UI','Malgun Gothic',sans-serif}
 .terminal-hit{fill:rgba(0,0,0,0);stroke:rgba(0,0,0,0);stroke-width:2;filter:none;pointer-events:all;vector-effect:non-scaling-stroke}
 .terminal-hit:hover{stroke:rgba(255,128,0,.12);fill:rgba(255,128,0,.08)}
 .terminal-debug-visual{fill:rgba(255,255,255,.92);stroke:#222;stroke-width:1.2;pointer-events:none}
@@ -255,7 +271,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
   font-family:Consolas,monospace;font-size:11px;color:#8f8;line-height:1.6
 }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/rbush@4.0.1/rbush.min.js"></script>
+<!-- 오프라인/Electron 배포: 외부 CDN 없이 내장 spatial-index fallback 사용 -->
 </head>
 <body>
 <div id="calib-hint">
@@ -264,7 +280,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 </div>
 <header>
 <button id="t-left" title="좌측 패널 (L)">◧</button>
-<b>⚡ 결선 작업장 v2</b>
+<b>⚡ 결선 작업장 v2.7</b>
 <span class="edu-badge" title="실제 장비 제어 기능 없음">교육용 시뮬레이터 · 실제 장비 제어 아님</span>
 
 <span class="hgroup">
@@ -335,6 +351,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 
 <span class="hgroup">
 <button id="b-simulate" title="시뮬레이션 ON/OFF (S)">▶ 시뮬</button>
+<button id="b-device-config" title="선택 장비의 랙·아날로그·통신·인버터 설정">⚙ 장비설정</button>
 <button id="b-tidy" title="부품 자동 정렬 (T)">🧹 정렬</button>
 <button id="b-rotate" title="선택 부품 90도 회전 (R)">🔄 회전</button>
 <button id="b-lock" title="선택 부품 위치 고정/해제 (K) — 이동·회전·크기 잠금">🔒 고정</button>
@@ -372,7 +389,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <button id="b-clear">🗑</button>
 </span>
 
-<span style="margin-left:auto;color:#666;font-size:10px">v2.1 · <span id="counter">0</span> 부품 · <span id="wcounter">0</span> 와이어 · <span id="jcounter">0</span> 점퍼 · <span id="zoomlbl">100%</span> · <span id="boardlbl">제어반</span></span>
+<span style="margin-left:auto;color:#666;font-size:10px">v2.7 · <span id="counter">0</span> 부품 · <span id="wcounter">0</span> 와이어 · <span id="jcounter">0</span> 점퍼 · <span id="zoomlbl">100%</span> · <span id="boardlbl">제어반</span></span>
 <button id="t-right" title="우측 패널 (R)">◨</button>
 </header>
 <aside id="palette"></aside>
@@ -458,6 +475,8 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <div class="panel-body" id="goals"></div>
 <h3>📋 현장 품질체크</h3>
 <div class="panel-body"><div id="field-quality" class="box muted">결선 후 자동 점검</div></div>
+<h3>🧩 PLC 랙 · I/O 주소</h3>
+<div class="panel-body"><div id="rack-monitor" class="box muted" style="font-family:monospace;font-size:10px;min-height:42px">CPU와 증설 모듈을 같은 DIN 레일에 배치하세요</div></div>
 <h3 class="collapsed">⚡ 시뮬 모니터</h3>
 <div class="panel-body"><div id="sim-monitor" class="box muted" style="font-family:monospace;font-size:10px;min-height:42px">시뮬 ON 시 상태 표시</div></div>
 <h3>🔍 검증 결과</h3>
@@ -509,12 +528,20 @@ DIN 레일/도어에만 장비 배치<br>
 <div style="margin-top:6px;font-size:10px;color:#888">기본: 연결 시 전원/신호 자동 색구분<br>(상단 스와치에서 고정색 선택 가능)</div>
 </div></div>
 </aside>
+<script src="src/device-packs/device-pack-registry.js"></script>
+<script src="src/device-packs/ls-xgb-v24-pack.js"></script>
+<script src="src/device-packs/automation-equipment-pack.js"></script>
+<script src="src/runtime/rack-runtime.js"></script>
+<script src="src/runtime/analog-runtime.js"></script>
+<script src="src/runtime/modbus-runtime.js"></script>
+<script src="src/runtime/drive-runtime.js"></script>
+<script src="src/ui/device-config.js"></script>
 <script>
 /* ===================================================================
    부품 라이브러리 — 각 제조사 매뉴얼 기준 단자 배치
    pol(극성/타입): AC-L | AC-N | DC+ | DC- | PE | DI | DO | AI | AO | COMM | NEUTRAL | SW
    - NEUTRAL: 단자대/퓨즈/MCCB 같이 어느 극성이든 통과시키는 부품
-   - SW(스위치접점): MY-MD02 접점 등
+   - SW(스위치접점): 릴레이·스위치의 무전압 접점
    matesWith[]: 정상적으로 연결 허용되는 상대 극성 목록(빈 배열=NEUTRAL과만)
    =================================================================== */
 const POL = {
@@ -528,7 +555,13 @@ const POL = {
   'DO':   {color:'#fa0', name:'디지털출력', matesWith:['DO','DI','DC+','DC-','NEUTRAL','AC-L','AC-N','SW']},
   'AI':   {color:'#0aa', name:'아날로그입력', matesWith:['AI','AO','NEUTRAL']},
   'AO':   {color:'#fa6', name:'아날로그출력', matesWith:['AO','AI','NEUTRAL']},
-  'COMM': {color:'#93f', name:'통신',     matesWith:['COMM','NEUTRAL']},
+  'COMM': {color:'#93f', name:'통신',     matesWith:['COMM','RS485+','RS485-','NEUTRAL']},
+  'RS485+':{color:'#93f', name:'RS485 A/+', matesWith:['RS485+','NEUTRAL']},
+  'RS485-':{color:'#93f', name:'RS485 B/-', matesWith:['RS485-','NEUTRAL']},
+  'IO-COM':{color:'#36c', name:'I/O 공통', matesWith:['IO-COM','DC+','DC-','DI','DO','NEUTRAL','SW']},
+  'AI-COM':{color:'#0aa', name:'아날로그 입력 공통', matesWith:['AI-COM','AI','AO','NEUTRAL','PE']},
+  'AO-COM':{color:'#fa6', name:'아날로그 출력 공통', matesWith:['AO-COM','AO','AI','NEUTRAL','PE']},
+  'RTD':  {color:'#0aa', name:'RTD 센서선', matesWith:['RTD','NEUTRAL']},
   'COM':  {color:'#36c', name:'COM(공통)', matesWith:['COM','DC-','AC-N','NEUTRAL','SW']},
   'NEUTRAL':{color:'#666', name:'중립(통과)', matesWith:['*']},
   'SW':   {color:'#999', name:'스위치접점', matesWith:['*']},
@@ -544,7 +577,7 @@ function compatible(a,b){
 
 /** 전원 계열 vs 신호 계열 극성 분류 */
 const POWER_POLS=new Set(['AC-L','AC-N','AC-G','DC+','DC-','PE','COM']);
-const SIGNAL_POLS=new Set(['DI','DO','AI','AO','COMM','SW']);
+const SIGNAL_POLS=new Set(['DI','DO','AI','AO','COMM','RS485+','RS485-','AI-COM','AO-COM','RTD','SW']);
 /**
  * 결선 색 자동 결정
  * - 전원(AC/DC/PE/COM): 갈색/파랑/빨강/녹 등 전원 색
@@ -605,7 +638,13 @@ const POL_HINT = {
   'DO':'PLC 디지털 출력. 릴레이 접점(무극성) 또는 트랜지스터.',
   'AI':'아날로그 입력. 0~10V, 4~20mA. 차폐선 권장.',
   'AO':'아날로그 출력. 부하저항 사양 확인.',
-  'COMM':'통신선. RS485 A+/B-, RS232 TXD/RXD/SG.',
+  'COMM':'일반 통신선. RS232 TXD/RXD/SG 등.',
+  'RS485+':'RS485 A/+ 선. 상대 장비의 A/+에만 연결.',
+  'RS485-':'RS485 B/- 선. 상대 장비의 B/-에만 연결.',
+  'IO-COM':'디지털 I/O 공통. 소스/싱크 방식에 따라 +24V 또는 0V 사용.',
+  'AI-COM':'아날로그 입력 채널의 기준(-) 단자. 차폐·접지와 구분.',
+  'AO-COM':'아날로그 출력 채널의 기준(-) 단자. 부하 귀로.',
+  'RTD':'측온저항체 센서 A/B/b 배선. 전원선과 분리.',
   'COM':'공통. 입력 COM은 사용 전원의 반대극에.',
   'NEUTRAL':'관통/중립. 어느 극성이든 통과.',
   'SW':'스위치 접점. 무극성. NO/NC.',
@@ -1684,7 +1723,7 @@ Object.assign(LIB['LAMP'],{image:ORTHO+'lamp-yellow-front.png',imageHasLabels:fa
 Object.assign(LIB['BUZZER'],{image:ORTHO+'buzzer-front-flat.png',imageHasLabels:false});
 
 const REMOVED_DEVICE_TYPES=[
-  'MCCB1P','FUSE-1','MY2N','PB-NO','PB-NC','EMSTOP','LIMIT','PHOTO','PT100','GND-BAR'
+  'FUSE-1','MY2N','PB-NO','PB-NC','EMSTOP','LIMIT','PHOTO','PT100','GND-BAR'
 ];
 for(const type of REMOVED_DEVICE_TYPES){
   if(LIB[type])LIB[type].hidden=true;
@@ -2341,6 +2380,21 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
     ]
   });
 
+  // EOCR-3DE/FDE 매뉴얼 기반 기능 메타데이터 (단자표 p.9)
+  Object.assign(LIB['EOCR'],{
+    label:'EOCR-3DE/FDE',
+    sub:'전자식 과전류 계전기 · CT 관통형 · DC24V 제어전원 · 트립 접점',
+    manualSource:'pdf/07_EOCR-3DE_FDE_Datasheet.pdf',
+    manualVerified:true,
+    powerPairs:[{pos:'A1',neg:'A2',label:'EOCR 제어전원'}],
+    netHints:[['R-IN','R-OUT'],['S-IN','S-OUT'],['T-IN','T-OUT']],
+    tripContact:{normal:[['95','96']],trip:[['97','98'],['07','08']]},
+    simTripDevice:true,
+    notes:'A1(+)/A2 제어전원. 95-96은 정상시 닫힌 과부하 트립 NC, 97-98은 트립 NO, 07-08은 경보 출력. R/S/T는 CT 관통 도체.'
+  });
+  Object.assign(LIB['MOTOR-3P'],{motorPhases:['U','V','W']});
+
+
   // 10-12) 타이머 / 플리커 / 카운터 — 나사 중심 실측
   Object.assign(LIB['TIMER'],{
     w:160,h:260,image:CODEX+'timer-codex.png',imageBox:{x:8,y:5,w:144,h:250},imageHasLabels:false,
@@ -2658,6 +2712,447 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
 })();
 
 /* ===================================================================
+   매뉴얼 기반 장비 확장팩 (2026-08)
+   - LS XGB Hardware / Analog Module 매뉴얼의 접점 수·공통 방식·외부전원을 반영
+   - GPT 생성 장비 시트에서 개별 장비 이미지를 잘라 사용하고, 단자명은 HTML로 정확히 렌더링
+   =================================================================== */
+(function installManualDeviceExpansion(){
+  const GPTX='assets/devices/gpt-expansion/';
+  const h2=n=>n.toString(16).toUpperCase().padStart(2,'0');
+  const makeRow=(ids,y,x0,x1,side,meta={})=>ids.map((id,i)=>({
+    id,
+    x:+(ids.length===1?((x0+x1)/2):(x0+(x1-x0)*i/(ids.length-1))).toFixed(1),
+    y,side,
+    label:meta[id]?.label||id,
+    pol:meta[id]?.pol||'NEUTRAL',
+    r:meta[id]?.r||6.2,
+    forceLabel:true
+  }));
+  const makeCol=(ids,x,y0,y1,side,meta={})=>ids.map((id,i)=>({
+    id,x,
+    y:+(ids.length===1?((y0+y1)/2):(y0+(y1-y0)*i/(ids.length-1))).toFixed(1),
+    side,
+    label:meta[id]?.label||id,
+    pol:meta[id]?.pol||'NEUTRAL',
+    r:meta[id]?.r||6.2,
+    forceLabel:true
+  }));
+
+  /* 단상 L/N을 함께 차단하는 2P MCCB — 단상 SMPS 결선의 표준 보호기 */
+  Object.assign(LIB['MCCB1P'],{
+    hidden:false,
+    label:'MCCB 2P (L/N)',
+    sub:'단상 AC 입력 차단 · L/N 동시 개폐',
+    w:180,h:260,
+    image:GPTX+'mccb-2p-gpt.png',imageBox:{x:0,y:0,w:180,h:260},imageHasLabels:false,
+    overlayLabel:true,
+    terminals:[
+      {id:'L',x:55,y:24,side:'T',label:'L IN',pol:'AC-L',forceLabel:true},
+      {id:'N',x:125,y:24,side:'T',label:'N IN',pol:'AC-N',forceLabel:true},
+      {id:"L'",x:55,y:236,side:'B',label:'L OUT',pol:'AC-L',forceLabel:true},
+      {id:"N'",x:125,y:236,side:'B',label:'N OUT',pol:'AC-N',forceLabel:true},
+    ],
+    netHints:[['L',"L'"],['N',"N'"]],
+    simSwitch:true,
+    simSwitchPairs:[['L',"L'"],['N',"N'"]],
+    notes:'단상 AC의 L/N을 동시에 개폐한다. SMPS 입력에는 3P MCCB의 두 상을 L/N처럼 사용하지 않는다.'
+  });
+  Object.assign(LIB['MCCB'],{
+    simSwitch:true,
+    simSwitchPairs:[['L1','T1'],['L2','T2'],['L3','T3']]
+  });
+  Object.assign(LIB['FUSE'],{
+    simSwitch:true,
+    simSwitchLabel:'퓨즈 정상/단선',
+    simSwitchPairs:[['L-IN','L-OUT'],['N-IN','N-OUT']]
+  });
+  Object.assign(LIB['MDR-100'],{
+    powerSupply:{acL:'L',acN:'N',dcPos:['V+1','V+2'],dcNeg:['V-1','V-2']}
+  });
+  Object.assign(LIB['PSU24'],{
+    powerSupply:{acL:'L',acN:'N',dcPos:['V+'],dcNeg:['V-']}
+  });
+
+  /* XBE-DC32A — 32점 DC24V 입력, 40핀 커넥터, 32점/COM */
+  const dc32Terms=[];
+  for(let i=0;i<16;i++){
+    dc32Terms.push({id:'I'+h2(i),x:18,y:28+i*12.1,side:'L',label:h2(i),pol:'DI',r:5.5,forceLabel:true,pin:'B'+(20-i)});
+    dc32Terms.push({id:'I'+h2(i+16),x:402,y:28+i*12.1,side:'R',label:h2(i+16),pol:'DI',r:5.5,forceLabel:true,pin:'A'+(20-i)});
+  }
+  dc32Terms.push(
+    {id:'COM-B1',x:18,y:226,side:'L',label:'COM',pol:'IO-COM',r:5.5,forceLabel:true,pin:'B02'},
+    {id:'COM-B2',x:18,y:242,side:'L',label:'COM',pol:'IO-COM',r:5.5,forceLabel:true,pin:'B01'},
+    {id:'COM-A1',x:402,y:226,side:'R',label:'COM',pol:'IO-COM',r:5.5,forceLabel:true,pin:'A02'},
+    {id:'COM-A2',x:402,y:242,side:'R',label:'COM',pol:'IO-COM',r:5.5,forceLabel:true,pin:'A01'}
+  );
+  LIB['XBE-DC32A']={
+    cat:'plc',label:'XBE-DC32A',sub:'DC24V 입력 32점 · Source/Sink · 40핀',
+    w:420,h:260,color:'#274d72',image:GPTX+'xgb-main-expansion-gpt.png',imageBox:{x:0,y:0,w:420,h:260},imageHasLabels:false,
+    overlayLabel:true,terminals:dc32Terms,
+    netHints:[['COM-A1','COM-A2'],['COM-A1','COM-B1'],['COM-A1','COM-B2']],
+    inputGroups:[{inputs:Array.from({length:32},(_,i)=>'I'+h2(i)),commons:['COM-A1','COM-A2','COM-B1','COM-B2']}],
+    ioLedTerms:Array.from({length:32},(_,i)=>'I'+h2(i)),
+    digitalInputModule:true,
+    notes:'매뉴얼: DC24V 입력 32점, 32점/COM, 40핀 커넥터. 00~0F와 10~1F를 각각 B/A 열로 표시.'
+  };
+
+  /* XBE-RY16A — 16점 릴레이 출력, 8점/COM × 2 */
+  const ryTop=Array.from({length:8},(_,i)=>'Q'+i.toString(16).toUpperCase()).concat('COM0');
+  const ryBot=Array.from({length:8},(_,i)=>'Q'+(i+8).toString(16).toUpperCase()).concat('COM1');
+  const ryMeta={COM0:{label:'COM',pol:'SW'},COM1:{label:'COM',pol:'SW'}};
+  for(const id of [...ryTop,...ryBot])if(!ryMeta[id])ryMeta[id]={label:id.slice(1),pol:'DO'};
+  LIB['XBE-RY16A']={
+    cat:'plc',label:'XBE-RY16A',sub:'릴레이 출력 16점 · 8점/COM × 2',
+    w:320,h:300,color:'#274d72',image:GPTX+'xgb-relay-io-gpt.png',imageBox:{x:0,y:0,w:320,h:300},imageHasLabels:false,
+    overlayLabel:true,
+    terminals:[...makeRow(ryTop,32,20,300,'T',ryMeta),...makeRow(ryBot,268,20,300,'B',ryMeta)],
+    outputGroups:[
+      {outputs:ryTop.slice(0,8),commons:['COM0'],mode:'relay'},
+      {outputs:ryBot.slice(0,8),commons:['COM1'],mode:'relay'}
+    ],
+    ioLedTerms:[...ryTop.slice(0,8),...ryBot.slice(0,8)],
+    manualForceOutputs:true,
+    notes:'매뉴얼: 릴레이 출력 16점, 8점/COM, 9핀 단자대 2개. 접점은 외부 AC/DC 회로를 스위칭한다.'
+  };
+
+  /* XBE-TN16A — 싱크형 트랜지스터 출력 */
+  const tnA=Array.from({length:8},(_,i)=>'Q'+i.toString(16).toUpperCase());
+  const tnB=Array.from({length:8},(_,i)=>'Q'+(i+8).toString(16).toUpperCase()).concat(['PWR24','COM']);
+  const tnMeta={PWR24:{label:'DC12/24V',pol:'DC+'},COM:{label:'COM/0V',pol:'DC-'}};
+  for(const id of [...tnA,...tnB])if(!tnMeta[id])tnMeta[id]={label:id.slice(1),pol:'DO'};
+  LIB['XBE-TN16A']={
+    cat:'plc',label:'XBE-TN16A',sub:'트랜지스터 출력 16점 · Sink',
+    w:250,h:360,color:'#274d72',image:GPTX+'xgb-digital-io-gpt.png',imageBox:{x:0,y:0,w:250,h:360},imageHasLabels:false,
+    overlayLabel:true,
+    terminals:[...makeRow(tnA,30,18,232,'T',tnMeta),...makeRow(tnB,330,14,236,'B',tnMeta)],
+    powerPairs:[{pos:'PWR24',neg:'COM',kind:'DC24'}],
+    outputGroups:[{outputs:[...tnA,...tnB.slice(0,8)],commons:['COM'],mode:'sink',power:{pos:'PWR24',neg:'COM'}}],
+    ioLedTerms:[...tnA,...tnB.slice(0,8)],manualForceOutputs:true,
+    notes:'매뉴얼: DC12/24V 싱크 출력 16점, 16점/COM. 출력 ON 시 부하 전류를 COM(0V)으로 끌어내린다.'
+  };
+
+  /* XBE-TP16A — 소스형 트랜지스터 출력 */
+  const tpA=Array.from({length:8},(_,i)=>'Q'+i.toString(16).toUpperCase());
+  const tpB=Array.from({length:8},(_,i)=>'Q'+(i+8).toString(16).toUpperCase()).concat(['COM+','0V']);
+  const tpMeta={'COM+':{label:'COM/+24V',pol:'DC+'},'0V':{label:'0V',pol:'DC-'}};
+  for(const id of [...tpA,...tpB])if(!tpMeta[id])tpMeta[id]={label:id.slice(1),pol:'DO'};
+  LIB['XBE-TP16A']={
+    cat:'plc',label:'XBE-TP16A',sub:'트랜지스터 출력 16점 · Source',
+    w:250,h:360,color:'#274d72',image:GPTX+'xgb-digital-io-gpt.png',imageBox:{x:0,y:0,w:250,h:360},imageHasLabels:false,
+    overlayLabel:true,
+    terminals:[...makeRow(tpA,30,18,232,'T',tpMeta),...makeRow(tpB,330,14,236,'B',tpMeta)],
+    powerPairs:[{pos:'COM+',neg:'0V',kind:'DC24'}],
+    outputGroups:[{outputs:[...tpA,...tpB.slice(0,8)],commons:['COM+'],mode:'source',power:{pos:'COM+',neg:'0V'}}],
+    ioLedTerms:[...tpA,...tpB.slice(0,8)],manualForceOutputs:true,
+    notes:'매뉴얼: DC12/24V 소스 출력 16점. COM에 +24V, 0V 단자에 전원 귀로를 연결한다.'
+  };
+
+  /* XBE-DR16A — 입력 8점 + 릴레이 출력 8점 */
+  const drIn=Array.from({length:8},(_,i)=>'I'+i.toString(16).toUpperCase()).concat('IN_COM');
+  const drOut=Array.from({length:8},(_,i)=>'Q'+i.toString(16).toUpperCase()).concat('OUT_COM');
+  const drMeta={IN_COM:{label:'IN COM',pol:'IO-COM'},OUT_COM:{label:'OUT COM',pol:'SW'}};
+  for(const id of drIn)if(!drMeta[id])drMeta[id]={label:'IN '+id.slice(1),pol:'DI'};
+  for(const id of drOut)if(!drMeta[id])drMeta[id]={label:'OUT '+id.slice(1),pol:'DO'};
+  LIB['XBE-DR16A']={
+    cat:'plc',label:'XBE-DR16A',sub:'DC24V 입력 8점 + 릴레이 출력 8점',
+    w:320,h:300,color:'#274d72',image:GPTX+'xgb-relay-io-gpt.png',imageBox:{x:0,y:0,w:320,h:300},imageHasLabels:false,
+    overlayLabel:true,
+    terminals:[...makeRow(drIn,32,20,300,'T',drMeta),...makeRow(drOut,268,20,300,'B',drMeta)],
+    inputGroups:[{inputs:drIn.slice(0,8),commons:['IN_COM']}],
+    outputGroups:[{outputs:drOut.slice(0,8),commons:['OUT_COM'],mode:'relay'}],
+    ioLedTerms:[...drIn.slice(0,8),...drOut.slice(0,8)],manualForceOutputs:true,
+    notes:'매뉴얼: 입력 8점/COM과 릴레이 출력 8점/COM을 각각 9핀 단자대에 제공.'
+  };
+
+  /* XBF 아날로그 모듈 공통 형상 */
+  const analogTermMeta=(mode)=>{
+    const m={P24:{label:'DC +24V',pol:'DC+'},P0V:{label:'DC 0V',pol:'DC-'}};
+    for(let ch=0;ch<4;ch++){
+      m[`CH${ch}+`]={label:`CH${ch}+`,pol:mode==='input'?'AI':'AO'};
+      m[`CH${ch}-`]={label:`CH${ch}-`,pol:mode==='input'?'AI-COM':'AO-COM'};
+    }
+    return m;
+  };
+  const analogIds=Array.from({length:4},(_,ch)=>[`CH${ch}+`,`CH${ch}-`]).flat().concat(['P24','P0V']);
+  const analogTerms=mode=>makeCol(analogIds,20,60,350,'L',analogTermMeta(mode));
+
+  LIB['XBF-AD04A']={
+    cat:'plc',label:'XBF-AD04A',sub:'전압/전류 아날로그 입력 4채널',
+    w:250,h:390,color:'#274d72',image:GPTX+'xgb-analog-io-gpt.png',imageBox:{x:0,y:0,w:250,h:390},imageHasLabels:false,
+    overlayLabel:true,terminals:analogTerms('input'),
+    powerPairs:[{pos:'P24',neg:'P0V',kind:'DC24'}],
+    analogChannels:Array.from({length:4},(_,ch)=>({channel:ch,pos:`CH${ch}+`,neg:`CH${ch}-`,direction:'input',ranges:['0-10V','0-20mA','4-20mA']})),
+    notes:'매뉴얼: 4채널 전압/전류 입력, 11점 단자대, 외부 DC24V. 채널별 V↔I 선택 스위치 사용.'
+  };
+  LIB['XBF-DV04A']={
+    cat:'plc',label:'XBF-DV04A',sub:'전압 아날로그 출력 4채널 · 0~10V',
+    w:250,h:390,color:'#274d72',image:GPTX+'xgb-analog-io-gpt.png',imageBox:{x:0,y:0,w:250,h:390},imageHasLabels:false,
+    overlayLabel:true,terminals:analogTerms('output'),
+    powerPairs:[{pos:'P24',neg:'P0V',kind:'DC24'}],
+    analogChannels:Array.from({length:4},(_,ch)=>({channel:ch,pos:`CH${ch}+`,neg:`CH${ch}-`,direction:'output',range:'0-10V'})),
+    notes:'매뉴얼: 전압 출력 4채널, 부하 2kΩ 이상, 외부 DC24V.'
+  };
+  LIB['XBF-DC04A']={
+    cat:'plc',label:'XBF-DC04A',sub:'전류 아날로그 출력 4채널 · 0/4~20mA',
+    w:250,h:390,color:'#274d72',image:GPTX+'xgb-analog-io-gpt.png',imageBox:{x:0,y:0,w:250,h:390},imageHasLabels:false,
+    overlayLabel:true,terminals:analogTerms('output'),
+    powerPairs:[{pos:'P24',neg:'P0V',kind:'DC24'}],
+    analogChannels:Array.from({length:4},(_,ch)=>({channel:ch,pos:`CH${ch}+`,neg:`CH${ch}-`,direction:'output',ranges:['0-20mA','4-20mA']})),
+    notes:'매뉴얼: 전류 출력 4채널, 부하 510Ω 이하, 외부 DC24V.'
+  };
+
+  /* XBF-RD04A — PT100/JPT100 3선식 4채널 */
+  const rdIds=[];
+  const rdMeta={P24:{label:'24V',pol:'DC+'},P0V:{label:'24G',pol:'DC-'},PE:{label:'PE/SHIELD',pol:'PE'}};
+  for(let ch=0;ch<4;ch++){
+    for(const lead of ['A','B','b']){
+      const id=`CH${ch}${lead}`; rdIds.push(id); rdMeta[id]={label:`CH${ch} ${lead}`,pol:'RTD'};
+    }
+  }
+  rdIds.push('P24','P0V','PE');
+  LIB['XBF-RD04A']={
+    cat:'plc',label:'XBF-RD04A',sub:'PT100/JPT100 RTD 입력 4채널 · 3선식',
+    w:270,h:500,color:'#274d72',image:GPTX+'xgb-analog-io-gpt.png',imageBox:{x:0,y:0,w:270,h:500},imageHasLabels:false,
+    overlayLabel:true,terminals:makeCol(rdIds,20,58,462,'L',rdMeta),
+    powerPairs:[{pos:'P24',neg:'P0V',kind:'DC24'}],
+    rtdChannels:Array.from({length:4},(_,ch)=>({channel:ch,A:`CH${ch}A`,B:`CH${ch}B`,b:`CH${ch}b`,sensor:['PT100','JPT100']})),
+    notes:'매뉴얼: PT100/JPT100 4채널, 기본 3선식, A/B/b × 4 + 24V/24G/PE = 15점 단자.'
+  };
+
+  /* 기존 핵심 장비의 전기적 역할을 실제 단자 의미로 정규화 */
+  const setPol=(type,id,pol)=>{
+    const t=LIB[type]?.terminals?.find(x=>x.id===id);
+    if(t)t.pol=pol;
+  };
+  setPol('XBC-DR32H','485+','RS485+');
+  setPol('XBC-DR32H','485-','RS485-');
+  setPol('XBC-DR32H','COMI','IO-COM');
+  for(const id of ['COM0','COM1','COM2','COM3'])setPol('XBC-DR32H',id,'SW');
+  Object.assign(LIB['XBC-DR32H'],{
+    mainPower:{acL:'L',acN:'N'},
+    inputGroups:[{inputs:Array.from({length:16},(_,i)=>'P0'+i.toString(16).toUpperCase()),commons:['COMI']}],
+    outputGroups:[
+      {outputs:['P20','P21','P22','P23'],commons:['COM0'],mode:'relay'},
+      {outputs:['P24','P25','P26','P27'],commons:['COM1'],mode:'relay'},
+      {outputs:['P28','P29','P2A','P2B'],commons:['COM2'],mode:'relay'},
+      {outputs:['P2C','P2D','P2E','P2F'],commons:['COM3'],mode:'relay'}
+    ],
+    ioLedTerms:[
+      ...Array.from({length:16},(_,i)=>'P0'+i.toString(16).toUpperCase()),
+      ...Array.from({length:16},(_,i)=>'P2'+i.toString(16).toUpperCase())
+    ],
+    manualForceOutputs:true,
+    outputsRequireDevicePower:true,
+    rs485Pairs:[['485+','485-']]
+  });
+
+  setPol('EXP2-700','T+','RS485+');
+  setPol('EXP2-700','T-','RS485-');
+  setPol('EXP2-700','COM3-RDA','RS485+');
+  setPol('EXP2-700','COM3-RDB','RS485-');
+  setPol('EXP2-700','COM3-SDA','RS485+');
+  setPol('EXP2-700','COM3-SDB','RS485-');
+  Object.assign(LIB['EXP2-700'],{
+    powerPairs:[{pos:'V+',neg:'V-',kind:'DC24'}],
+    rs485Pairs:[['T+','T-'],['COM3-RDA','COM3-RDB'],['COM3-SDA','COM3-SDB']]
+  });
+
+  for(const id of ['I0-','I1-'])setPol('XBF-AH04A',id,'AI-COM');
+  for(const id of ['O0-','O1-'])setPol('XBF-AH04A',id,'AO-COM');
+  Object.assign(LIB['XBF-AH04A'],{
+    powerPairs:[{pos:'+24V',neg:'0V',kind:'DC24'}]
+  });
+
+  /* 정식 장비명 XY-MD02 사용, 예전 MY-MD02 저장본은 로딩 시 마이그레이션 */
+  const mdLegacy=LIB['MY-MD02'];
+  if(mdLegacy){
+    LIB['XY-MD02']={
+      ...mdLegacy,
+      label:'XY-MD02',
+      sub:'온습도 센서 · DC5~30V · Modbus RTU',
+      terminals:(mdLegacy.terminals||[]).map(t=>({...t,pol:t.id==='A+'?'RS485+':t.id==='B-'?'RS485-':t.pol})),
+      powerPairs:[{pos:'V+',neg:'V-',kind:'DC24'}],
+      rs485Pairs:[['A+','B-']],
+      canonicalType:'XY-MD02'
+    };
+    mdLegacy.hidden=true;
+    mdLegacy.aliasOf='XY-MD02';
+  }
+})();
+
+/* ===================================================================
+   매뉴얼 장비 확장팩 마무리
+   - 누락 이미지 연결
+   - XBF 단자 ID를 실물 표기와 일치시킴
+   - XBF-TC04S / XBF-AD08A / PT100 3선 / K열전대 추가
+   =================================================================== */
+(function completeManualDeviceExpansion(){
+  const G='assets/devices/gpt/';
+  const GX='assets/devices/gpt-expansion/';
+  const vertical=(ids,meta,w,h)=>{
+    const x=+(w*0.32).toFixed(1), y0=+(h*0.282).toFixed(1), y1=+(h*0.896).toFixed(1);
+    const step=ids.length>1?(y1-y0)/(ids.length-1):0;
+    return ids.map((id,i)=>({
+      id,x,y:+(y0+i*step).toFixed(1),side:'L',
+      label:meta[id]?.label||id,pol:meta[id]?.pol||'NEUTRAL',
+      r:ids.length>14?5.4:6.4,forceLabel:true,manualOrder:i+1
+    }));
+  };
+  const pairChannels=(count,direction)=>Array.from({length:count},(_,ch)=>({
+    channel:ch,pos:`CH${ch}+`,neg:`CH${ch}-`,direction,
+    ranges:direction==='input'?['0~10V','0~20mA','4~20mA']:['0~10V','0~20mA','4~20mA']
+  }));
+  const analogMeta=(count,mode)=>{
+    const meta={'+24V':{label:'DC24V +',pol:'DC+'},'0V':{label:'DC24V -',pol:'DC-'}};
+    for(let ch=0;ch<count;ch++){
+      meta[`CH${ch}+`]={label:`CH${ch}+`,pol:mode==='input'?'AI':'AO'};
+      meta[`CH${ch}-`]={label:`CH${ch}-`,pol:mode==='input'?'AI-COM':'AO-COM'};
+    }
+    return meta;
+  };
+  const analogIds=count=>Array.from({length:count},(_,ch)=>[`CH${ch}+`,`CH${ch}-`]).flat().concat(['+24V','0V']);
+
+  // 기존 확장 I/O 장비의 GPT 이미지 파일을 실제 프로젝트 자산에 연결
+  Object.assign(LIB['MCCB1P'],{image:GX+'mccb-2p-gpt.png'});
+  Object.assign(LIB['XBE-DC32A'],{image:GX+'xgb-main-expansion-gpt.png',manualSource:'pdf/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf',manualVerified:true});
+  for(const t of ['XBE-RY16A','XBE-DR16A'])Object.assign(LIB[t],{image:GX+'xgb-relay-io-gpt.png',manualSource:'pdf/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf',manualVerified:true});
+  for(const t of ['XBE-TN16A','XBE-TP16A'])Object.assign(LIB[t],{image:GX+'xgb-digital-io-gpt.png',manualSource:'pdf/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf',manualVerified:true});
+
+  const ids4=analogIds(4);
+  LIB['XBF-AD04A']={
+    ...LIB['XBF-AD04A'],w:160,h:520,image:G+'xbf-ad04a-gpt.png',imageBox:{x:0,y:0,w:160,h:520},overlayLabel:false,
+    terminals:vertical(ids4,analogMeta(4,'input'),160,520),
+    powerPairs:[{pos:'+24V',neg:'0V',kind:'DC24'}],polarityCritical:[['+24V','0V']],
+    analogChannels:pairChannels(4,'input'),terminalAliases:{P24:'+24V',P0V:'0V'},
+    manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'매뉴얼 2장 기준: CH0~CH3 각 +/-와 외부 DC24V +/- 기능 단자. 입력 장치 전원은 모듈에서 공급하지 않는다.'
+  };
+  LIB['XBF-DV04A']={
+    ...LIB['XBF-DV04A'],w:160,h:520,image:G+'xbf-dv04a-gpt.png',imageBox:{x:0,y:0,w:160,h:520},overlayLabel:false,
+    terminals:vertical(ids4,analogMeta(4,'output'),160,520),
+    powerPairs:[{pos:'+24V',neg:'0V',kind:'DC24'}],polarityCritical:[['+24V','0V']],
+    analogChannels:pairChannels(4,'output').map(c=>({...c,ranges:['0~10V']})),terminalAliases:{P24:'+24V',P0V:'0V'},
+    manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'매뉴얼 3장 기준: CH0~CH3 전압 출력 +/-와 외부 DC24V +/-. 부하저항 2kΩ 이상.'
+  };
+  LIB['XBF-DC04A']={
+    ...LIB['XBF-DC04A'],w:160,h:520,image:G+'xbf-dc04a-gpt.png',imageBox:{x:0,y:0,w:160,h:520},overlayLabel:false,
+    terminals:vertical(ids4,analogMeta(4,'output'),160,520),
+    powerPairs:[{pos:'+24V',neg:'0V',kind:'DC24'}],polarityCritical:[['+24V','0V']],
+    analogChannels:pairChannels(4,'output').map(c=>({...c,ranges:['0~20mA','4~20mA']})),terminalAliases:{P24:'+24V',P0V:'0V'},
+    manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'매뉴얼 3장 기준: CH0~CH3 전류 출력 +/-와 외부 DC24V +/-. 부하저항 510Ω 이하.'
+  };
+
+  const rdIds=[],rdMeta={},rtdChannels=[];
+  for(let ch=0;ch<4;ch++){
+    rdIds.push(`CH${ch}A`,`CH${ch}B`,`CH${ch}b`);
+    rdMeta[`CH${ch}A`]={label:`CH${ch} A`,pol:'RTD'};
+    rdMeta[`CH${ch}B`]={label:`CH${ch} B`,pol:'RTD'};
+    rdMeta[`CH${ch}b`]={label:`CH${ch} b`,pol:'RTD'};
+    rtdChannels.push({channel:ch,A:`CH${ch}A`,B:`CH${ch}B`,b:`CH${ch}b`,sensor:['PT100','JPT100']});
+  }
+  rdIds.push('+24V','0V','PE');rdMeta['+24V']={label:'DC24V +',pol:'DC+'};rdMeta['0V']={label:'DC24V -',pol:'DC-'};rdMeta.PE={label:'PE/SHIELD',pol:'PE'};
+  LIB['XBF-RD04A']={
+    ...LIB['XBF-RD04A'],w:160,h:520,image:G+'xbf-rd04a-gpt.png',imageBox:{x:0,y:0,w:160,h:520},overlayLabel:false,
+    terminals:vertical(rdIds,rdMeta,160,520),powerPairs:[{pos:'+24V',neg:'0V',kind:'DC24'}],
+    polarityCritical:[['+24V','0V']],rtdChannels,terminalAliases:{P24:'+24V',P0V:'0V'},
+    manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'매뉴얼 4장 기준: 채널별 A/B/b 3선식 + 외부 DC24V +/- + PE, 총 15점. 차폐는 PE에 한쪽 접지.'
+  };
+
+  const tcIds=analogIds(4).slice(0,8).concat(['NC','+24V','0V']);
+  const tcMeta=analogMeta(4,'input');tcMeta.NC={label:'NC',pol:'NEUTRAL'};
+  LIB['XBF-TC04S']={
+    cat:'plc',label:'XBF-TC04S',sub:'열전대 입력 4CH · K/J/T/R · 외부 DC24V',
+    w:160,h:520,color:'#e7e8ea',image:G+'xbf-tc04s-gpt.png',imageBox:{x:0,y:0,w:160,h:520},imageHasLabels:false,
+    terminals:vertical(tcIds,tcMeta,160,520),powerPairs:[{pos:'+24V',neg:'0V',kind:'DC24'}],
+    polarityCritical:[['+24V','0V']],analogChannels:pairChannels(4,'input'),
+    thermocoupleTypes:['K','J','T','R'],manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'매뉴얼 5장 기준: CH0~CH3 열전대 +/-와 NC, 외부 DC24V +/-. 센서 타입과 동일한 보상도선 사용.'
+  };
+
+  const ids8=analogIds(8);
+  LIB['XBF-AD08A']={
+    cat:'plc',label:'XBF-AD08A',sub:'아날로그 입력 8CH · 채널별 전압/전류 선택',
+    w:170,h:580,color:'#e7e8ea',image:G+'xbf-ad08a-gpt.png',imageBox:{x:0,y:0,w:170,h:580},imageHasLabels:false,
+    terminals:vertical(ids8,analogMeta(8,'input'),170,580),powerPairs:[{pos:'+24V',neg:'0V',kind:'DC24'}],
+    polarityCritical:[['+24V','0V']],analogChannels:pairChannels(8,'input'),
+    manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'매뉴얼 7장 기준: CH0~CH7 각 +/-와 외부 DC24V +/-. 채널별 전압/전류 선택 스위치.'
+  };
+
+  LIB['PT100-3W']={
+    cat:'sensor',label:'PT100 3선 센서',sub:'A/B/b 측온저항체 · XBF-RD04A용',
+    w:300,h:130,color:'#9b59b6',image:GX+'pt100-3wire-gpt.png',imageBox:{x:0,y:0,w:300,h:130},imageHasLabels:false,
+    terminals:[
+      {id:'A',x:5,y:30,side:'L',label:'A',pol:'RTD',forceLabel:true},
+      {id:'B',x:5,y:65,side:'L',label:'B',pol:'RTD',forceLabel:true},
+      {id:'b',x:5,y:100,side:'L',label:'b',pol:'RTD',forceLabel:true}
+    ],sensorKind:'RTD',manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'PT100 3선식: A는 한쪽, B/b는 반대쪽의 동일 저항단에서 나온 두 개의 보상선.'
+  };
+  LIB['TC-K']={
+    cat:'sensor',label:'K형 열전대',sub:'열전대 +/− · 차폐',
+    w:300,h:130,color:'#b46f35',image:GX+'thermocouple-k-gpt.png',imageBox:{x:0,y:0,w:300,h:130},imageHasLabels:false,
+    terminals:[
+      {id:'+',x:5,y:30,side:'L',label:'TC +',pol:'AI',forceLabel:true},
+      {id:'-',x:5,y:65,side:'L',label:'TC -',pol:'AI-COM',forceLabel:true},
+      {id:'SH',x:5,y:100,side:'L',label:'SHIELD',pol:'PE',forceLabel:true}
+    ],sensorKind:'THERMOCOUPLE',thermocoupleType:'K',manualSource:'pdf/03_LS_XGB_Analog_Manual_KR.pdf',manualVerified:true,
+    notes:'K형 열전대 극성과 보상도선을 유지하고 차폐는 제어반측 PE에 한쪽만 접지.'
+  };
+
+  // PSU24도 MDR와 동일하게 AC 입력이 유효할 때만 DC 출력을 활성화한다.
+  Object.assign(LIB['PSU24'],{powerSupply:{acL:'L',acN:'N',dcPos:['V+'],dcNeg:['V-']}});
+  for(const type of ['XBF-AD04A','XBF-DV04A','XBF-DC04A','XBF-RD04A','XBF-TC04S','XBF-AD08A']){
+    LIB[type].generatedFromGptBase=true;
+  }
+})();
+
+/* ===================================================================
+   v2.4 모듈형 장비팩 설치 및 LS XGB 랙/통신 메타데이터
+   - 외부 장비팩은 index.html을 직접 수정하지 않고 LIB에 설치된다.
+   - CPU와 증설 슬롯의 XGB P 주소를 매뉴얼 규칙으로 계산한다.
+   - 실제 XG5000 연결 시에는 이후 Bridge/태그 매핑 계층에서 동일 주소를 사용한다.
+   =================================================================== */
+(function installV24DevicePacks(){
+  if(typeof window!=='undefined'&&window.PLCDevicePacks){
+    window.V24_DEVICE_PACK_REPORT=window.PLCDevicePacks.installAll(LIB,{force:true});
+  }
+  if(LIB['XBC-DR32H'])Object.assign(LIB['XBC-DR32H'],{
+    rack:{role:'host',family:'LS-XGB',maxSlots:10,maxCommunication:2,maxHighSpeed:2},
+    rackCpu:{family:'LS-XGB',maxExpansion:10,maxSlots:10,maxCommunication:2,maxHighSpeed:2,pointsPerSlot:64,inputPointBase:0,outputPointBase:32,cpuPointMap:'XBC-DR32H'},
+    modbusDefaults:{enabled:true,role:'master',address:1,baudRate:9600,dataBits:8,parity:'none',stopBits:1,mode:'2wire',termination:true}
+  });
+  const digitalRack={
+    'XBE-DC32A':{actualPoints:32,inputOffset:0},
+    'XBE-RY16A':{actualPoints:16,outputOffset:0},
+    'XBE-TN16A':{actualPoints:16,outputOffset:0},
+    'XBE-TP16A':{actualPoints:16,outputOffset:0},
+    'XBE-DR16A':{actualPoints:16,inputOffset:0,outputOffset:16}
+  };
+  for(const [type,extra] of Object.entries(digitalRack))if(LIB[type]){
+    LIB[type].rack={role:'module',family:'LS-XGB',moduleClass:'io',occupiedPoints:64,...extra};
+    LIB[type].rackModule={family:'LS-XGB',moduleClass:'io',occupiedPoints:64,pointsPerSlot:64,...extra};
+  }
+  for(const type of ['XBF-AH04A','XBF-AD04A','XBF-DV04A','XBF-DC04A','XBF-RD04A','XBF-TC04S','XBF-AD08A']){
+    if(LIB[type]){
+      LIB[type].rack={role:'module',family:'LS-XGB',moduleClass:'special',occupiedPoints:64,specialBase:true};
+      LIB[type].rackModule={family:'LS-XGB',moduleClass:'special',occupiedPoints:64,pointsPerSlot:64,specialBase:true};
+    }
+  }
+  if(LIB['XBL-C41A'])LIB['XBL-C41A'].modbusDefaults={...(LIB['XBL-C41A'].modbusDefaults||{}),enabled:true,role:'master',address:1};
+  if(LIB['XY-MD02'])Object.assign(LIB['XY-MD02'],{
+    canonicalType:'XY-MD02',sensorKind:'TEMP_HUMIDITY',
+    modbusDefaults:{enabled:true,role:'slave',address:1,baudRate:9600,dataBits:8,parity:'none',stopBits:1,mode:'2wire',termination:false},
+    modbusRegisters:{temperature:{table:'input',address:1,scale:0.1,unit:'°C',signed:true},humidity:{table:'input',address:2,scale:0.1,unit:'%RH'}}
+  });
+  if(LIB['EXP2-700'])LIB['EXP2-700'].modbusDefaults={enabled:false,role:'master',address:1,baudRate:9600,dataBits:8,parity:'none',stopBits:1,mode:'2wire',termination:false};
+  if(LIB['IG5A'])LIB['IG5A'].driveModel='ig5a';
+})();
+
+/* ===================================================================
    지정 장비 단자 데이터 레지스트리
    - 기존 LIB/이미지 정의는 보존하고, 교육용 결선 검사용 단자 데이터만
      별도 객체에서 관리한다.
@@ -2780,7 +3275,7 @@ function terminalHitRadius(def,t){
   return isFiniteCoord(hit.r) ? Number(hit.r) : (t.r || (def.terminals.length>32 ? 7.2 : 8.5));
 }
 /** 교육용 기본 등록 타입(초기 스냅샷). 보정 시 다른 장비 타입도 자동 추가됨 */
-const TERMINAL_DATA_DEVICE_TYPES=['XBC-DR32H','MDR-100','XBF-AH04A','EOCR','MC','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
+const TERMINAL_DATA_DEVICE_TYPES=[...new Set(['XBC-DR32H','MDR-100','PSU24','MCCB','MCCB1P','FUSE','XBF-AH04A','XBF-AD04A','XBF-DV04A','XBF-DC04A','XBF-RD04A','XBF-TC04S','XBF-AD08A','XBE-DC32A','XBE-RY16A','XBE-TN16A','XBE-TP16A','XBE-DR16A','EXP2-700','XY-MD02','MY-MD02','EOCR','MC','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','PT100-3W','TC-K','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER',...Object.keys(LIB).filter(type=>Array.isArray(LIB[type]?.terminals)&&LIB[type].terminals.length)])];
 const LSK_CALIB='wiring-workshop-terminal-calib-v1';
 function cloneTerminalData(value){
   return value==null ? value : JSON.parse(JSON.stringify(value));
@@ -3479,50 +3974,132 @@ applyTerminalCalibrationToRegistry(BOOTSTRAP_TERMINAL_CALIBRATION);
 window.DEVICE_TERMINAL_DATA=DEVICE_TERMINAL_DATA;
 
 /* ===================================================================
+   미션 장비 인스턴스/역할 해석
+   - 같은 타입 장비를 여러 대 사용하는 정역·인터록 회로를 역할(role)로 구분
+   - 기존 문자열 needed 형식과 하위 호환
+   =================================================================== */
+function normalizeMissionDeviceSpec(item){
+  if(typeof item==='string')return {type:item};
+  if(!item||typeof item!=='object')return null;
+  return {...item};
+}
+function missionSpecKey(spec){
+  spec=normalizeMissionDeviceSpec(spec);
+  if(!spec)return '';
+  return `${spec.type||''}|${spec.role||''}`;
+}
+function missionDeviceSpecLabel(spec){
+  spec=normalizeMissionDeviceSpec(spec)||{};
+  return spec.label||spec.instanceLabel||spec.role||LIB[spec.type]?.label||spec.type||'장비';
+}
+function missionNeededSpecs(goal){
+  const out=[]; const seen=new Set();
+  const add=item=>{
+    const spec=normalizeMissionDeviceSpec(item);
+    if(!spec?.type)return;
+    const key=missionSpecKey(spec);
+    if(seen.has(key))return;
+    seen.add(key); out.push(spec);
+  };
+  for(const item of goal?.needed||[])add(item);
+  for(const check of goal?.checks||[]){
+    add(check.from); add(check.to);
+  }
+  return out;
+}
+function deviceMatchesMissionSpec(dev,spec){
+  spec=normalizeMissionDeviceSpec(spec);
+  if(!dev||!spec)return false;
+  if(spec.type && dev.type!==spec.type)return false;
+  if(spec.role && dev.role!==spec.role)return false;
+  return true;
+}
+function findMissionDeviceId(spec,devices){
+  spec=normalizeMissionDeviceSpec(spec);
+  if(!spec)return null;
+  const registry=devices||((typeof S!=='undefined'&&S.devices)||{});
+  if(spec.dev && registry[spec.dev])return spec.dev;
+  for(const [id,dev] of Object.entries(registry)){
+    if(deviceMatchesMissionSpec(dev,spec))return id;
+  }
+  return null;
+}
+function missionDeviceExtra(spec){
+  spec=normalizeMissionDeviceSpec(spec)||{};
+  const extra={};
+  for(const key of ['role','instanceLabel','interlockGroup','interlockPriority','colorOverride','modbus','analogConfig','driveConfig','temperatureC','humidityRh']){
+    if(spec[key]!==undefined)extra[key]=structuredClone(spec[key]);
+  }
+  if(spec.label && extra.instanceLabel===undefined)extra.instanceLabel=spec.label;
+  return extra;
+}
+function applyMissionDeviceMetadata(id,spec){
+  const dev=(typeof S!=='undefined'&&S.devices)?.[id];
+  if(!dev)return id;
+  Object.assign(dev,missionDeviceExtra(spec));
+  return id;
+}
+function missionDeviceDisplayName(id){
+  const dev=(typeof S!=='undefined'&&S.devices)?.[id];
+  if(!dev)return id;
+  const base=LIB[dev.type]?.label||dev.type;
+  return dev.instanceLabel?`${dev.instanceLabel} (${base})`:base;
+}
+
+/* ===================================================================
    GOAL — 미션
    =================================================================== */
 const GOALS = [
   {
     id:'g-field', title:'0. 현장 제어반 표준 결선 연습',
-    desc:'현장 순서: 장비배치 → 주전원 → 24V배전 → 도어조작(PB/표시등) → 검증·시뮬',
-    needed:['MCCB','MDR-100','TB-24V-10','TB-0V-10','XBC-DR32H','PB-1C','LAMP-G'],
+    desc:'현장 순서: 장비배치 → 주전원 → 24V배전 → 단자대 경유 도어조작 → 검증·시뮬',
+    wiringPolicy:'terminal-block-required',
+    needed:['MCCB1P','MDR-100','TB-24V-10','TB-0V-10','TB10','XBC-DR32H',
+      {type:'PB-1C',role:'runPB',label:'운전 PB',colorOverride:'#0a7'},
+      {type:'LAMP-G',role:'runLamp',label:'운전 표시등'}],
     tips:[
       '🔧 현장 표준: ①전원/차단 ②SMPS·DC배전 ③PLC ④단자대 경유 제어 ⑤도어 조작 ⑥통전 전 검증',
-      '💡 도어 PB/표시등은 내부 단자대를 경유해 결선 (직접 PLC 연결 금지 — 유지보수 배려)',
+      '💡 도어 PB/표시등은 신호 단자대(TB10)를 경유해 결선합니다.',
       '💡 선 색: AC갈·N파·+24V적·0V파·PE녹·DI녹·DO노·통신보라 (상단 자동색 권장)',
       '💡 상단 「# 선번」으로 와이어 번호표를 켜고 현장처럼 선번 관리를 연습하세요.',
-      '⚠ 통전 전: 검증(빨간 오류 0) + 현장 품질체크 + 시뮬로 동작 확인'
+      '⚠ 통전 전: 검증(위험/기능 오류 0) + 현장 품질체크 + 시뮬로 동작 확인'
     ],
     checks:[
-      {kind:'connect', from:{type:'MCCB',term:'T1'}, to:{type:'MDR-100',term:'L'}, label:'주전원 L: MCCB→SMPS', tip:'차단기 2차 → SMPS AC L'},
-      {kind:'connect', from:{type:'MCCB',term:'T2'}, to:{type:'MDR-100',term:'N'}, label:'주전원 N: MCCB→SMPS', tip:'차단기 2차 → SMPS AC N'},
-      {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'TB-24V-10',term:'1'}, label:'+24V 배전 → 단자대', tip:'SMPS +V를 24V 단자대로'},
-      {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'TB-0V-10',term:'1'}, label:'0V 배전 → 단자대', tip:'SMPS -V를 0V 단자대로'},
-      {kind:'connect', from:{type:'TB-24V-10',term:'1'}, to:{type:'PB-1C',term:'11'}, label:'+24V → 운전 PB(11)', tip:'단자대 경유 도어 입력'},
-      {kind:'connect', from:{type:'PB-1C',term:'12'}, to:{type:'XBC-DR32H',term:'P00'}, label:'PB(12) → PLC P00', tip:'NO 접점 → 입력'},
-      {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'XBC-DR32H',term:'COMI'}, label:'0V → PLC 입력 COM', tip:'입력 공통'},
-      {kind:'connect', from:{type:'XBC-DR32H',term:'P20'}, to:{type:'LAMP-G',term:'+'}, label:'PLC 출력 → 표시등+', tip:'출력으로 운전 표시'},
-      {kind:'connect', from:{type:'LAMP-G',term:'-'}, to:{type:'MDR-100',term:'V-1'}, label:'표시등- → 0V', tip:'부하 귀로'},
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'MDR-100',term:'L'},label:'주전원 L: MCCB→SMPS'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'MDR-100',term:'N'},label:'주전원 N: MCCB→SMPS'},
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'XBC-DR32H',term:'L'},label:'주전원 L: MCCB→PLC 본체 L'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'XBC-DR32H',term:'N'},label:'주전원 N: MCCB→PLC 본체 N'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'TB-24V-10',term:'1'},label:'+24V 배전 → 분배 단자대'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'TB-0V-10',term:'1'},label:'0V 배전 → 분배 단자대'},
+      {kind:'connect',from:{type:'TB-24V-10',term:'2'},to:{type:'PB-1C',role:'runPB',term:'11'},label:'+24V → 운전 PB(11)'},
+      {kind:'connect',from:{type:'PB-1C',role:'runPB',term:'12'},to:{type:'TB10',term:'1'},label:'운전 PB(12) → 신호 TB 1'},
+      {kind:'connect',from:{type:'TB10',term:"1'"},to:{type:'XBC-DR32H',term:'P00'},label:"신호 TB 1' → PLC P00"},
+      {kind:'connect',from:{type:'TB-0V-10',term:'2'},to:{type:'XBC-DR32H',term:'COMI'},label:'0V 분배 → PLC 입력 COM'},
+      {kind:'connect',from:{type:'TB-24V-10',term:'3'},to:{type:'XBC-DR32H',term:'COM0'},label:'+24V 분배 → PLC 출력 COM0'},
+      {kind:'connect',from:{type:'XBC-DR32H',term:'P20'},to:{type:'TB10',term:'2'},label:'PLC P20 → 신호 TB 2'},
+      {kind:'connect',from:{type:'TB10',term:"2'"},to:{type:'LAMP-G',role:'runLamp',term:'+'},label:"신호 TB 2' → 운전 표시등+"},
+      {kind:'connect',from:{type:'LAMP-G',role:'runLamp',term:'-'},to:{type:'TB-0V-10',term:'3'},label:'운전 표시등- → 0V 분배'}
     ]
   },
   {
     id:'g1', title:'1. 분전반 기본: AC → SMPS → 24V 배전',
     desc:'AC전원을 MCCB로 받고, MDR-100으로 24V를 만들어 단자대까지 배전',
-    needed:['MCCB','MDR-100','TB10'],
+    needed:['MCCB1P','MDR-100','TB10'],
     tips:[
-      '💡 MCCB 1차측(L1/L2)에 AC 전원을 받고 2차측(T1/T2)으로 SMPS L/N에 보냅니다.',
+      "💡 MCCB 2P의 1차측 L/N에 AC 전원을 받고 2차측 L'/N'으로 SMPS L/N에 보냅니다.",
       '💡 MDR-100의 +V/-V 두 쌍은 내부에서 같은 net이라 한 쌍만 써도 됩니다.',
       '⚠ AC L상과 DC− 또는 PE를 같은 net에 묶으면 단락! 빨간 점선 와이어가 보이면 즉시 끊으세요.'
     ],
     checks:[
-      {kind:'connect', from:{type:'MCCB',term:'T1'}, to:{type:'MDR-100',term:'L'}, label:'MCCB T1 → SMPS L', tip:'차단기 2차측(부하측)에서 SMPS의 AC L 입력으로'},
-      {kind:'connect', from:{type:'MCCB',term:'T2'}, to:{type:'MDR-100',term:'N'}, label:'MCCB T2 → SMPS N', tip:'차단기 N극(또는 L2)에서 SMPS의 AC N 입력으로'},
+      {kind:'connect', from:{type:'MCCB1P',term:"L'"}, to:{type:'MDR-100',term:'L'}, label:"MCCB L' → SMPS L", tip:'2P 차단기 L 부하측에서 SMPS AC L로'},
+      {kind:'connect', from:{type:'MCCB1P',term:"N'"}, to:{type:'MDR-100',term:'N'}, label:"MCCB N' → SMPS N", tip:'2P 차단기 N 부하측에서 SMPS AC N으로'},
       {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'TB10',term:'1'}, label:'+24V → TB10(1)', tip:'SMPS의 +V를 단자대 1번 핀에 분배'},
       {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'TB10',term:'2'}, label:'0V → TB10(2)', tip:'SMPS의 -V를 단자대 2번 핀에 분배'},
     ]
   },
   {
     id:'g2', title:'2. PLC 입력: 푸시버튼 → P00',
+    powerProfile:'dc24-plc',
     desc:'+24V → PB(11) / PB(12) → P00 / 입력 COM은 0V',
     needed:['MDR-100','PB-1C','XBC-DR32H'],
     tips:[
@@ -3538,36 +4115,51 @@ const GOALS = [
   },
   {
     id:'g3', title:'3. 온습도 센서 MD02 결선',
+    powerProfile:'dc24-plc',
     desc:'MD02 전원(+24V/0V)과 RS485(A+/B−)를 PLC와 같은 net으로',
-    needed:['MDR-100','XBC-DR32H','MY-MD02'],
+    needed:['MDR-100','XBC-DR32H','XY-MD02'],
     tips:[
       '💡 MD02는 DC5-30V 광범위 입력. 24V SMPS 그대로 사용 가능.',
       '💡 RS485는 A+ ↔ A+, B- ↔ B-로 1:1 매칭. 꼬이면 통신 안 됨.',
       '⚠ 전원 + - 극성 반대로 끼면 보드 손상 가능 (빨간 알람 보일 것).'
     ],
     checks:[
-      {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'MY-MD02',term:'V+'}, label:'+24V → MD02(+)', tip:'전원 + 극성 반드시 확인'},
-      {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'MY-MD02',term:'V-'}, label:'0V  → MD02(−)', tip:'전원 - 극성'},
-      {kind:'connect', from:{type:'MY-MD02',term:'A+'},   to:{type:'XBC-DR32H',term:'485+'}, label:'MD02 A+ → PLC 485+', tip:'RS485 차동 + 라인'},
-      {kind:'connect', from:{type:'MY-MD02',term:'B-'},   to:{type:'XBC-DR32H',term:'485-'}, label:'MD02 B− → PLC 485-', tip:'RS485 차동 - 라인'},
+      {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'XY-MD02',term:'V+'}, label:'+24V → MD02(+)', tip:'전원 + 극성 반드시 확인'},
+      {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'XY-MD02',term:'V-'}, label:'0V  → MD02(−)', tip:'전원 - 극성'},
+      {kind:'connect', from:{type:'XY-MD02',term:'A+'},   to:{type:'XBC-DR32H',term:'485+'}, label:'MD02 A+ → PLC 485+', tip:'RS485 차동 + 라인'},
+      {kind:'connect', from:{type:'XY-MD02',term:'B-'},   to:{type:'XBC-DR32H',term:'485-'}, label:'MD02 B− → PLC 485-', tip:'RS485 차동 - 라인'},
     ]
   },
   {
-    id:'g4', title:'4. 인버터 정역: P1=FX, P2=RX',
-    desc:'외부 PB로 P1-CM, P2-CM 단락. 인버터 내부 24V 사용.',
-    needed:['IG5A','PB-1C'],
+    id:'g4', title:'4. iG5A 인버터 정·역운전과 PB 전기 인터록',
+    desc:'3상 주전원과 모터를 연결하고, 정회전/역회전 PB의 NC 접점을 교차 사용해 P1(FX)·P2(RX) 동시 입력을 방지',
+    needed:['MCCB','IG5A','MOTOR-3P',
+      {type:'PB-1C',role:'forwardPB',label:'정회전 PB',colorOverride:'#0a7'},
+      {type:'PB-1C',role:'reversePB',label:'역회전 PB',colorOverride:'#fa0'}],
     tips:[
-      '💡 iG5A는 내부 24V(단자명 24)와 CM(공통)을 자체 공급. 외부 전원 불필요.',
-      '💡 정회전 PB: 24 ↔ PB ↔ P1, 역회전 PB는 24 ↔ PB ↔ P2.',
-      '⚠ FX와 RX 동시 ON은 매뉴얼상 금지(설정에 따라 정지 또는 역회전 방향). PB는 인터록 회로로 보호.'
+      '💡 iG5A 디지털 입력은 P1/P2와 CM 사이의 무전압 접점으로 운전 지령을 만듭니다.',
+      '💡 정회전 회로에는 역회전 PB의 NC, 역회전 회로에는 정회전 PB의 NC를 직렬로 넣습니다.',
+      '💡 U/V/W는 모터 U/V/W와 같은 이름끼리 연결합니다.',
+      '⚠ P1(FX)과 P2(RX)를 같은 net으로 묶지 마세요. 두 PB 동시 조작 시 두 회로가 모두 차단되어야 합니다.'
     ],
     checks:[
-      {kind:'connect', from:{type:'IG5A',term:'CM'}, to:{type:'PB-1C',term:'11'}, label:'CM → PB(11)', tip:'인버터 디지털 입력 공통(0V)에 PB 한쪽'},
-      {kind:'connect', from:{type:'PB-1C',term:'12'}, to:{type:'IG5A',term:'P1'}, label:'PB(12) → P1(FX)', tip:'PB 반대쪽이 P1 → 누르면 정회전'},
+      {kind:'connect',from:{type:'MCCB',term:'T1'},to:{type:'IG5A',term:'R'},label:'MCCB T1 → iG5A R'},
+      {kind:'connect',from:{type:'MCCB',term:'T2'},to:{type:'IG5A',term:'S'},label:'MCCB T2 → iG5A S'},
+      {kind:'connect',from:{type:'MCCB',term:'T3'},to:{type:'IG5A',term:'T'},label:'MCCB T3 → iG5A T'},
+      {kind:'connect',from:{type:'IG5A',term:'U'},to:{type:'MOTOR-3P',term:'U'},label:'iG5A U → 모터 U'},
+      {kind:'connect',from:{type:'IG5A',term:'V'},to:{type:'MOTOR-3P',term:'V'},label:'iG5A V → 모터 V'},
+      {kind:'connect',from:{type:'IG5A',term:'W'},to:{type:'MOTOR-3P',term:'W'},label:'iG5A W → 모터 W'},
+      {kind:'connect',from:{type:'IG5A',term:'CM'},to:{type:'PB-1C',role:'reversePB',term:'21'},label:'CM → 역회전 PB NC(21)'},
+      {kind:'connect',from:{type:'PB-1C',role:'reversePB',term:'22'},to:{type:'PB-1C',role:'forwardPB',term:'11'},label:'역회전 NC(22) → 정회전 NO(11)'},
+      {kind:'connect',from:{type:'PB-1C',role:'forwardPB',term:'12'},to:{type:'IG5A',term:'P1'},label:'정회전 NO(12) → P1(FX)'},
+      {kind:'connect',from:{type:'IG5A',term:'CM'},to:{type:'PB-1C',role:'forwardPB',term:'21'},label:'CM → 정회전 PB NC(21)'},
+      {kind:'connect',from:{type:'PB-1C',role:'forwardPB',term:'22'},to:{type:'PB-1C',role:'reversePB',term:'11'},label:'정회전 NC(22) → 역회전 NO(11)'},
+      {kind:'connect',from:{type:'PB-1C',role:'reversePB',term:'12'},to:{type:'IG5A',term:'P2'},label:'역회전 NO(12) → P2(RX)'}
     ]
   },
   {
     id:'g5', title:'5. 단동 실린더 솔레노이드 결선',
+    powerProfile:'dc24-plc',
     desc:'PLC 출력으로 솔레노이드 ON/OFF, 극성 주의',
     needed:['XBC-DR32H','MDR-100','CYL-SA'],
     tips:[
@@ -3583,40 +4175,51 @@ const GOALS = [
   },
   {
     id:'g6', title:'6. HMI ↔ PLC 시리얼 (RS232C 3선)',
+    powerProfile:'dc24-plc',
     desc:'HMI COM2(RS232C) → PLC 내장 RS232 (TXD-RXD-SG 크로스)',
-    needed:['EXP2-700','XBC-DR32H'],
+    needed:['MDR-100','EXP2-700','XBC-DR32H'],
     tips:[
       '💡 RS232는 송수신 크로스: HMI TXD ↔ PLC RX, HMI RXD ↔ PLC TX, SG ↔ SG.',
       '💡 EXP2-700D 후면 COM2 RS232C(DB9)의 TXD/RXD/SG를 PLC 내장 RS232와 크로스로 연결.',
       '⚠ TX-TX, RX-RX 직결은 통신 안 됨 (스트레이트 케이블 ≠ RS232 크로스).'
     ],
     checks:[
+      {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'EXP2-700',term:'V+'}, label:'+24V → HMI 전원+', tip:'통신선과 별개로 HMI DC24V 공급'},
+      {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'EXP2-700',term:'V-'}, label:'0V → HMI 전원-', tip:'HMI DC 전원 귀로'},
       {kind:'connect', from:{type:'EXP2-700',term:'TXD'}, to:{type:'XBC-DR32H',term:'RX'}, label:'HMI TXD → PLC RX', tip:'송신을 상대 수신으로'},
       {kind:'connect', from:{type:'EXP2-700',term:'RXD'}, to:{type:'XBC-DR32H',term:'TX'}, label:'HMI RXD → PLC TX', tip:'수신을 상대 송신에서'},
       {kind:'connect', from:{type:'EXP2-700',term:'SG'},  to:{type:'XBC-DR32H',term:'SG'}, label:'HMI SG → PLC SG', tip:'시그널 그라운드 공통'},
     ]
   },
   {
-    id:'g7', title:'7. 자기유지 회로 (PB ON-OFF + MC)',
-    desc:'운전 PB → MC 코일 ON / MC 보조접점 13-14로 자기유지 / 정지 PB(NC)로 차단',
-    needed:['MDR-100','PB-1C','MC','LAMP-G'],
+    id:'g7', title:'7. 자기유지 회로 (운전·정지 PB + MC)',
+    desc:'정지 NC 뒤에서 운전 NO와 MC 보조 NO(13-14)를 병렬 구성하고 표시등을 코일과 병렬 연결',
+    powerProfile:'dc24',
+    needed:[
+      {type:'PB-1C',role:'startPB',label:'운전 PB',colorOverride:'#0a7'},
+      {type:'PB-1C',role:'stopPB',label:'정지 PB',colorOverride:'#d33'},
+      {type:'MC',role:'mainMC',label:'주 접촉기'},
+      {type:'LAMP-G',role:'runLamp',label:'운전 표시등'}
+    ],
     tips:[
-      '💡 자기유지: 운전 PB(NO)와 병렬로 MC 자체 보조접점(13-14, NO)을 연결.',
-      '💡 정지 PB(NC)는 운전회로 직렬에 → 누르면 회로가 끊겨 MC 코일 차단 → 자기유지 풀림.',
-      '⚠ MC 코일 극성(A1=+, A2=-) 엄수. DC24V 코일 사양 확인.'
+      '💡 +24V → 정지 NC → (운전 NO ∥ MC 13-14) → MC A1 순서가 표준 자기유지 회로입니다.',
+      '💡 운전 표시등은 MC A1-A2 코일과 병렬로 연결해 접촉기 여자 상태를 표시합니다.',
+      '⚠ 정지 PB를 누르면 NC가 열려 코일과 자기유지 접점 전체가 차단되어야 합니다.'
     ],
     checks:[
-      {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'PB-1C',term:'11'}, label:'+24V → 운전PB(11)', tip:'운전 PB의 NO 시작점에 +24V'},
-      {kind:'connect', from:{type:'PB-1C',term:'12'}, to:{type:'MC',term:'A1'}, label:'PB(12) → MC A1(+)', tip:'운전 PB 통과 후 MC 코일 + 단자'},
-      {kind:'connect', from:{type:'MC',term:'A2'}, to:{type:'MDR-100',term:'V-1'}, label:'MC A2 → 0V', tip:'MC 코일 - 단자를 0V로'},
-      {kind:'connect', from:{type:'MC',term:'13'}, to:{type:'MDR-100',term:'V+1'}, label:'MC 13 → +24V (자기유지)', tip:'MC 보조 NO 13에 +24V'},
-      {kind:'connect', from:{type:'MC',term:'14'}, to:{type:'MC',term:'A1'}, label:'MC 14 → A1 (자기유지 완성)', tip:'MC 14가 코일 입력에 → 자기유지 회로 닫힘'},
-      {kind:'connect', from:{type:'MC',term:'13'}, to:{type:'LAMP-G',term:'+'}, label:'MC 13 → 운전등(+)', tip:'운전중 표시등 전원'},
-      {kind:'connect', from:{type:'LAMP-G',term:'-'}, to:{type:'MDR-100',term:'V-1'}, label:'운전등(-) → 0V', tip:'운전등 회로 완성'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'PB-1C',role:'stopPB',term:'21'},label:'+24V → 정지 PB NC(21)'},
+      {kind:'connect',from:{type:'PB-1C',role:'stopPB',term:'22'},to:{type:'PB-1C',role:'startPB',term:'11'},label:'정지 NC(22) → 운전 NO(11)'},
+      {kind:'connect',from:{type:'PB-1C',role:'startPB',term:'12'},to:{type:'MC',role:'mainMC',term:'A1'},label:'운전 NO(12) → MC A1'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'A2'},to:{type:'MDR-100',term:'V-1'},label:'MC A2 → 0V'},
+      {kind:'connect',from:{type:'PB-1C',role:'stopPB',term:'22'},to:{type:'MC',role:'mainMC',term:'13'},label:'정지 NC 후단 → MC 보조 NO 13'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'14'},to:{type:'MC',role:'mainMC',term:'A1'},label:'MC 보조 NO 14 → A1 (자기유지)'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'A1'},to:{type:'LAMP-G',role:'runLamp',term:'+'},label:'MC A1 → 운전 표시등+'},
+      {kind:'connect',from:{type:'LAMP-G',role:'runLamp',term:'-'},to:{type:'MDR-100',term:'V-1'},label:'운전 표시등- → 0V'}
     ]
   },
   {
     id:'g8', title:'8. 정지 NC 인터록',
+    powerProfile:'dc24',
     desc:'PB-1C의 NC 접점을 운전회로 직렬에 넣어 코일을 차단',
     needed:['MDR-100','MC','PB-1C'],
     tips:[
@@ -3632,22 +4235,47 @@ const GOALS = [
     ]
   },
   {
-    id:'g9', title:'9. 정역 인터록 (정회전 MC ↔ 역회전 MC)',
-    desc:'정회전 MC와 역회전 MC가 동시에 ON되면 단락. b접점 인터록 필수',
-    needed:['MDR-100','PB-1C','MC','LAMP-Y'],
+    id:'g9', title:'9. 정·역 접촉기 전기 인터록과 자기유지',
+    desc:'정회전·역회전 MC 두 대를 역할별로 구분하고 상대 MC의 NC(21-22)를 코일 회로에 직렬 연결',
+    powerProfile:'dc24',
+    needed:[
+      {type:'PB-1C',role:'stopPB',label:'정지 PB',colorOverride:'#d33'},
+      {type:'PB-1C',role:'forwardPB',label:'정회전 PB',colorOverride:'#0a7'},
+      {type:'PB-1C',role:'reversePB',label:'역회전 PB',colorOverride:'#fa0'},
+      {type:'MC',role:'forwardMC',label:'정회전 MC',interlockGroup:'direction-MC'},
+      {type:'MC',role:'reverseMC',label:'역회전 MC',interlockGroup:'direction-MC'},
+      {type:'LAMP-G',role:'forwardLamp',label:'정회전 표시등'},
+      {type:'LAMP-Y',role:'reverseLamp',label:'역회전 표시등'}
+    ],
     tips:[
-      '💡 인터록: 정회전 MC의 NC(21-22)를 역회전 코일 회로에, 그 반대도 적용.',
-      '💡 한쪽이 ON되면 자동으로 반대쪽 코일 회로가 끊어져 동시 ON 불가.',
-      '⚠ 인터록 없이 R-S 단락 = 차단기 트립 + 모터 코일 손상.'
+      '💡 정회전 코일 앞에는 역회전 MC의 NC, 역회전 코일 앞에는 정회전 MC의 NC를 넣습니다.',
+      '💡 각 MC의 13-14 보조 NO는 자신의 운전 PB와 병렬로 연결해 자기유지합니다.',
+      '💡 시뮬레이션은 같은 interlockGroup의 두 코일이 동시에 여자되는 상태를 안전 정지로 처리합니다.',
+      '⚠ 실제 정역 주회로에는 기계식 인터록과 2상 교차 결선이 추가로 필요합니다.'
     ],
     checks:[
-      // 정회전 MC 코일 (간단화)
-      {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'MC',term:'21'}, label:'+24V → MC NC(21)', tip:'역회전 MC의 NC를 정회전 회로 직렬에 (인터록)'},
-      {kind:'connect', from:{type:'MC',term:'22'}, to:{type:'PB-1C',term:'11'}, label:'MC NC(22) → 정회전PB', tip:'NC 통과 후 정회전 PB로'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'PB-1C',role:'stopPB',term:'21'},label:'+24V → 정지 PB NC(21)'},
+      {kind:'connect',from:{type:'PB-1C',role:'stopPB',term:'22'},to:{type:'MC',role:'reverseMC',term:'21'},label:'정지 NC 후단 → 역회전 MC NC(21)'},
+      {kind:'connect',from:{type:'MC',role:'reverseMC',term:'22'},to:{type:'PB-1C',role:'forwardPB',term:'11'},label:'역회전 MC NC(22) → 정회전 PB NO(11)'},
+      {kind:'connect',from:{type:'PB-1C',role:'forwardPB',term:'12'},to:{type:'MC',role:'forwardMC',term:'A1'},label:'정회전 PB NO(12) → 정회전 MC A1'},
+      {kind:'connect',from:{type:'PB-1C',role:'stopPB',term:'22'},to:{type:'MC',role:'forwardMC',term:'21'},label:'정지 NC 후단 → 정회전 MC NC(21)'},
+      {kind:'connect',from:{type:'MC',role:'forwardMC',term:'22'},to:{type:'PB-1C',role:'reversePB',term:'11'},label:'정회전 MC NC(22) → 역회전 PB NO(11)'},
+      {kind:'connect',from:{type:'PB-1C',role:'reversePB',term:'12'},to:{type:'MC',role:'reverseMC',term:'A1'},label:'역회전 PB NO(12) → 역회전 MC A1'},
+      {kind:'connect',from:{type:'MC',role:'forwardMC',term:'A2'},to:{type:'MDR-100',term:'V-1'},label:'정회전 MC A2 → 0V'},
+      {kind:'connect',from:{type:'MC',role:'reverseMC',term:'A2'},to:{type:'MDR-100',term:'V-1'},label:'역회전 MC A2 → 0V'},
+      {kind:'connect',from:{type:'MC',role:'reverseMC',term:'22'},to:{type:'MC',role:'forwardMC',term:'13'},label:'정회전 회로 노드 → 정회전 MC 13'},
+      {kind:'connect',from:{type:'MC',role:'forwardMC',term:'14'},to:{type:'MC',role:'forwardMC',term:'A1'},label:'정회전 MC 14 → A1 (자기유지)'},
+      {kind:'connect',from:{type:'MC',role:'forwardMC',term:'22'},to:{type:'MC',role:'reverseMC',term:'13'},label:'역회전 회로 노드 → 역회전 MC 13'},
+      {kind:'connect',from:{type:'MC',role:'reverseMC',term:'14'},to:{type:'MC',role:'reverseMC',term:'A1'},label:'역회전 MC 14 → A1 (자기유지)'},
+      {kind:'connect',from:{type:'MC',role:'forwardMC',term:'A1'},to:{type:'LAMP-G',role:'forwardLamp',term:'+'},label:'정회전 MC A1 → 녹색 표시등+'},
+      {kind:'connect',from:{type:'LAMP-G',role:'forwardLamp',term:'-'},to:{type:'MDR-100',term:'V-1'},label:'정회전 표시등- → 0V'},
+      {kind:'connect',from:{type:'MC',role:'reverseMC',term:'A1'},to:{type:'LAMP-Y',role:'reverseLamp',term:'+'},label:'역회전 MC A1 → 황색 표시등+'},
+      {kind:'connect',from:{type:'LAMP-Y',role:'reverseLamp',term:'-'},to:{type:'MDR-100',term:'V-1'},label:'역회전 표시등- → 0V'}
     ]
   },
   {
     id:'g10', title:'10. 타이머 시퀀스 (PB → 3초 후 LED ON)',
+    powerProfile:'dc24',
     desc:'PB 누르면 타이머 코일 ON, 3초 후 NO 접점이 닫혀 LED 점등',
     needed:['MDR-100','PB-1C','TIMER','LAMP-W'],
     tips:[
@@ -3665,6 +4293,7 @@ const GOALS = [
   },
   {
     id:'g11', title:'11. 머시닝 X축: 서보모터 + 리니어 레일',
+    powerProfile:'dc24',
     desc:'위치결정 모듈 → 서보드라이브 → 서보모터/엔코더/브레이크 + 레일 HOME/LIMIT 센서',
     needed:['MCCB','MDR-100','PB-1C','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL'],
     tips:[
@@ -3715,7 +4344,7 @@ const GOALS = [
   {
     id:'g12', title:'12. AC→SMPS→DC24V 배전',
     desc:'MCCB → 퓨즈 → MDR-100 → +24V/0V 분배 단자대까지 전원 배전',
-    needed:['MCCB','FUSE','MDR-100','TB-24V-10','TB-0V-10'],
+    needed:['MCCB1P','FUSE','MDR-100','TB-24V-10','TB-0V-10'],
     tips:[
       '💡 상단 전원 레일에 MCCB·퓨즈·SMPS·분배 단자대를 배치하세요 (제어반 모드).',
       '💡 배전 모드에서 +24V/0V 버스를 선택하면 호환 단자가 초록으로 표시됩니다.',
@@ -3723,9 +4352,9 @@ const GOALS = [
       '⚠ SMPS FG(PE)는 별도 PE 경로로 — AC-N과 묶지 마세요.'
     ],
     checks:[
-      {kind:'connect', from:{type:'MCCB',term:'T1'}, to:{type:'FUSE',term:'L-IN'}, label:'MCCB T1 → 퓨즈 L-IN', tip:'차단기 2차 → 퓨즈 입력'},
+      {kind:'connect', from:{type:'MCCB1P',term:"L'"}, to:{type:'FUSE',term:'L-IN'}, label:"MCCB L' → 퓨즈 L-IN", tip:'차단기 2차 → 퓨즈 입력'},
       {kind:'connect', from:{type:'FUSE',term:'L-OUT'}, to:{type:'MDR-100',term:'L'}, label:'퓨즈 L-OUT → SMPS L'},
-      {kind:'connect', from:{type:'MCCB',term:'T2'}, to:{type:'FUSE',term:'N-IN'}, label:'MCCB T2 → 퓨즈 N-IN'},
+      {kind:'connect', from:{type:'MCCB1P',term:"N'"}, to:{type:'FUSE',term:'N-IN'}, label:"MCCB N' → 퓨즈 N-IN"},
       {kind:'connect', from:{type:'FUSE',term:'N-OUT'}, to:{type:'MDR-100',term:'N'}, label:'퓨즈 N-OUT → SMPS N'},
       {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'TB-24V-10',term:'1'}, label:'SMPS +V → +24V 단자대'},
       {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'TB-0V-10',term:'1'}, label:'SMPS -V → 0V 단자대'},
@@ -3733,6 +4362,8 @@ const GOALS = [
   },
   {
     id:'g13', title:'13. 도어 조작판 경유 배선',
+    wiringPolicy:'terminal-block-required',
+    powerProfile:'dc24-plc',
     desc:'도어 PB → 하단 단자대 경유 → PLC 입력 (직접 연결 금지)',
     needed:['MDR-100','PB-1C','TB10','XBC-DR32H'],
     tips:[
@@ -3751,20 +4382,263 @@ const GOALS = [
   {
     id:'g14', title:'14. 제어반 배치 연습',
     desc:'장비 종류별 올바른 레일/도어 배치 (결선 최소)',
-    needed:['MCCB','MDR-100','XBC-DR32H','TB10','PB-1C','LAMP-G'],
+    needed:['MCCB1P','MDR-100','XBC-DR32H','TB10','PB-1C','LAMP-G'],
     tips:[
       '💡 MCCB/SMPS → 상단 전원 레일',
       '💡 PLC → 중단 PLC 레일',
       '💡 단자대 → 하단 단자대 레일',
       '💡 PB/램프 → 우측 도어 조작판',
-      '💡 배치 후 SMPS +V를 PLC 24V에, -V를 24G에 연결'
+      "💡 배치 후 2P MCCB L'/N'을 XBC 본체 L/N에 연결하고, 입력부 24V/24G는 별도 보조전원 단자로 구분"
     ],
     checks:[
-      {kind:'connect', from:{type:'MDR-100',term:'V+1'}, to:{type:'XBC-DR32H',term:'24V'}, label:'+24V → PLC 24V'},
-      {kind:'connect', from:{type:'MDR-100',term:'V-1'}, to:{type:'XBC-DR32H',term:'24G'}, label:'0V → PLC 24G'},
+      {kind:'connect', from:{type:'MCCB1P',term:"L'"}, to:{type:'XBC-DR32H',term:'L'}, label:"MCCB L' → PLC 본체 L"},
+      {kind:'connect', from:{type:'MCCB1P',term:"N'"}, to:{type:'XBC-DR32H',term:'N'}, label:"MCCB N' → PLC 본체 N"},
     ]
   },
+  {
+    id:'g15', title:'15. 아날로그 출력→입력 루프 (DV04A→AD04A)',
+    desc:'XBF-DV04A CH0 전압출력을 XBF-AD04A CH0 입력으로 연결하고 두 모듈의 외부 DC24V를 공급',
+    needed:['MCCB1P','MDR-100','XBF-DV04A','XBF-AD04A'],
+    tips:[
+      '💡 아날로그 신호선은 CH0+ ↔ CH0+, CH0- ↔ CH0-로 극성을 맞춥니다.',
+      '💡 두 모듈 모두 외부 DC24V +/− 전원이 필요합니다.',
+      '⚠ 전압 출력 모드와 입력 범위를 동일하게 설정하고 차폐선은 한쪽만 PE에 접지하세요.'
+    ],
+    checks:[
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'MDR-100',term:'L'},label:'MCB L → SMPS L'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'MDR-100',term:'N'},label:'MCB N → SMPS N'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'XBF-DV04A',term:'+24V'},label:'+24V → DV04A'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'XBF-DV04A',term:'0V'},label:'0V → DV04A'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+2'},to:{type:'XBF-AD04A',term:'+24V'},label:'+24V → AD04A'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-2'},to:{type:'XBF-AD04A',term:'0V'},label:'0V → AD04A'},
+      {kind:'connect',from:{type:'XBF-DV04A',term:'CH0+'},to:{type:'XBF-AD04A',term:'CH0+'},label:'DV04A CH0+ → AD04A CH0+'},
+      {kind:'connect',from:{type:'XBF-DV04A',term:'CH0-'},to:{type:'XBF-AD04A',term:'CH0-'},label:'DV04A CH0- → AD04A CH0-'}
+    ]
+  },
+  {
+    id:'g16', title:'16. PT100 3선식 온도입력 (RD04A)',
+    desc:'PT100 A/B/b 세 선과 XBF-RD04A CH0를 동일 표기로 연결하고 모듈 전원을 공급',
+    needed:['MCCB1P','MDR-100','XBF-RD04A','PT100-3W'],
+    tips:[
+      '💡 PT100의 B와 b는 같은 저항단에서 나온 두 보상선으로 서로 바뀌어도 측정 원리는 같습니다.',
+      '💡 A선을 B/b 측과 바꾸면 온도값이 비정상적으로 표시됩니다.',
+      '⚠ 센서선은 동력선과 분리하고 차폐는 제어반측 PE 한쪽 접지를 권장합니다.'
+    ],
+    checks:[
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'MDR-100',term:'L'},label:'MCB L → SMPS L'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'MDR-100',term:'N'},label:'MCB N → SMPS N'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'XBF-RD04A',term:'+24V'},label:'+24V → RD04A'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'XBF-RD04A',term:'0V'},label:'0V → RD04A'},
+      {kind:'connect',from:{type:'PT100-3W',term:'A'},to:{type:'XBF-RD04A',term:'CH0A'},label:'PT100 A → CH0 A'},
+      {kind:'connect',from:{type:'PT100-3W',term:'B'},to:{type:'XBF-RD04A',term:'CH0B'},label:'PT100 B → CH0 B'},
+      {kind:'connect',from:{type:'PT100-3W',term:'b'},to:{type:'XBF-RD04A',term:'CH0b'},label:'PT100 b → CH0 b'}
+    ]
+  },
+  {
+    id:'g17', title:'17. K형 열전대 입력 (TC04S)',
+    desc:'K형 열전대 +/−를 XBF-TC04S CH0에 연결하고 차폐를 PE 단자대로 종단',
+    needed:['MCCB1P','MDR-100','XBF-TC04S','TC-K','TB-PE-10'],
+    tips:[
+      '💡 열전대 +와 − 극성 및 K형 보상도선을 유지해야 합니다.',
+      '💡 모듈은 외부 DC24V가 필요하고 NC 단자는 사용하지 않습니다.',
+      '⚠ 차폐는 신호 −와 합치지 말고 PE 단자대에 한쪽만 접지하세요.'
+    ],
+    checks:[
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'MDR-100',term:'L'},label:'MCB L → SMPS L'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'MDR-100',term:'N'},label:'MCB N → SMPS N'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'XBF-TC04S',term:'+24V'},label:'+24V → TC04S'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'XBF-TC04S',term:'0V'},label:'0V → TC04S'},
+      {kind:'connect',from:{type:'TC-K',term:'+'},to:{type:'XBF-TC04S',term:'CH0+'},label:'K열전대 + → CH0+'},
+      {kind:'connect',from:{type:'TC-K',term:'-'},to:{type:'XBF-TC04S',term:'CH0-'},label:'K열전대 - → CH0-'},
+      {kind:'connect',from:{type:'TC-K',term:'SH'},to:{type:'TB-PE-10',term:'1'},label:'차폐 → PE 단자대'}
+    ]
+  },
+  {
+    id:'g18', title:'18. 학원 제어반 HMI·MD02 실제 전원/통신',
+    desc:'MDR의 두 +V/−V 접속점을 HMI와 XY-MD02에 나눠 공급하고 HMI COM1 RS485를 XBC 내장 RS485에 연결',
+    needed:['MCCB1P','MDR-100','XBC-DR32H','EXP2-700','XY-MD02'],
+    tips:[
+      '💡 MDR의 +V 두 단자와 −V 두 단자는 각각 내부 공통이므로 HMI와 센서에 나눠 사용 가능합니다.',
+      '💡 XY-MD02 전원만 연결하면 켜지지만, A+/B−를 버스에 연결하지 않으면 데이터 통신은 하지 않습니다.',
+      '💡 이 미션은 설명한 실제 상태대로 HMI↔PLC만 RS485 통신하고 MD02는 전원만 공급합니다.'
+    ],
+    checks:[
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'MDR-100',term:'L'},label:'MCB L → SMPS L'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'MDR-100',term:'N'},label:'MCB N → SMPS N'},
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'XBC-DR32H',term:'L'},label:'MCB L → PLC 본체 L'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'XBC-DR32H',term:'N'},label:'MCB N → PLC 본체 N'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'EXP2-700',term:'V+'},label:'MDR +V1 → HMI +24V'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'EXP2-700',term:'V-'},label:'MDR −V1 → HMI 0V'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+2'},to:{type:'XY-MD02',term:'V+'},label:'MDR +V2 → XY-MD02 V+'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-2'},to:{type:'XY-MD02',term:'V-'},label:'MDR −V2 → XY-MD02 V-'},
+      {kind:'connect',from:{type:'EXP2-700',term:'T+'},to:{type:'XBC-DR32H',term:'485+'},label:'HMI 485+ → PLC 485+'},
+      {kind:'connect',from:{type:'EXP2-700',term:'T-'},to:{type:'XBC-DR32H',term:'485-'},label:'HMI 485− → PLC 485−'}
+    ]
+  },
+  {
+    id:'g19', title:'19. XGB 증설 디지털 I/O 점검',
+    desc:'XBE-DC32A 입력 00과 XBE-RY16A 출력 0을 실제 COM 배선으로 구성하고 시뮬레이션에서 입출력을 확인',
+    needed:['MCCB1P','MDR-100','XBE-DC32A','XBE-RY16A','PB-1C','LAMP-G'],
+    tips:[
+      '💡 입력 모듈 COM을 0V에 연결하면 PB를 통해 +24V가 들어올 때 입력 00이 ON 됩니다.',
+      '💡 릴레이 출력 COM0에는 +24V를 넣고 Q0에서 램프로 전원을 전달합니다.',
+      '💡 시뮬레이션 중 XBE-RY16A의 Q0 단자를 클릭하면 출력 강제 ON/OFF를 확인할 수 있습니다.'
+    ],
+    checks:[
+      {kind:'connect',from:{type:'MCCB1P',term:"L'"},to:{type:'MDR-100',term:'L'},label:'MCB L → SMPS L'},
+      {kind:'connect',from:{type:'MCCB1P',term:"N'"},to:{type:'MDR-100',term:'N'},label:'MCB N → SMPS N'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'XBE-DC32A',term:'COM-A1'},label:'0V → DC32A 입력 COM'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'PB-1C',term:'11'},label:'+24V → PB NO 입력'},
+      {kind:'connect',from:{type:'PB-1C',term:'12'},to:{type:'XBE-DC32A',term:'I00'},label:'PB NO 출력 → 입력 00'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+2'},to:{type:'XBE-RY16A',term:'COM0'},label:'+24V → RY16A COM0'},
+      {kind:'connect',from:{type:'XBE-RY16A',term:'Q0'},to:{type:'LAMP-G',term:'+'},label:'RY16A Q0 → 램프 +'},
+      {kind:'connect',from:{type:'MDR-100',term:'V-2'},to:{type:'LAMP-G',term:'-'},label:'0V → 램프 -'}
+    ]
+  },
+  {
+    id:'g20', title:'20. EOCR 과부하 보호 DOL 모터 기동회로',
+    desc:'3상 주회로를 MC→EOCR CT 관통부→모터 순서로 구성하고, EOCR 95-96 NC를 MC 코일 회로에 직렬 연결',
+    powerProfile:'dc24',
+    needed:['MCCB','EOCR','MOTOR-3P',
+      {type:'PB-1C',role:'startPB',label:'운전 PB',colorOverride:'#0a7'},
+      {type:'PB-1C',role:'stopPB',label:'정지 PB',colorOverride:'#d33'},
+      {type:'MC',role:'mainMC',label:'주 접촉기'}],
+    tips:[
+      '💡 EOCR-3DE/FDE 매뉴얼 기준: A1(+)/A2 전원, 95-96은 정상시 닫힌 트립 NC, 97-98은 트립시 닫히는 NO 접점입니다.',
+      '💡 R/S/T 주회로 도체는 EOCR의 CT 관통부를 지나며, 시뮬레이터에서는 R-IN↔R-OUT처럼 같은 도체로 계산합니다.',
+      '💡 +24V → 정지 NC → EOCR 95-96 → (운전 NO ∥ MC 13-14) → MC A1 순서로 구성합니다.',
+      '⚠ 시뮬레이션 중 EOCR 본체를 클릭하면 TRIP/RESET을 전환합니다. TRIP 시 95-96이 열려 MC가 떨어져야 합니다.'
+    ],
+    checks:[
+      {kind:'connect',from:{type:'MCCB',term:'T1'},to:{type:'MC',role:'mainMC',term:'1L1'},label:'MCCB T1 → MC 1L1'},
+      {kind:'connect',from:{type:'MCCB',term:'T2'},to:{type:'MC',role:'mainMC',term:'3L2'},label:'MCCB T2 → MC 3L2'},
+      {kind:'connect',from:{type:'MCCB',term:'T3'},to:{type:'MC',role:'mainMC',term:'5L3'},label:'MCCB T3 → MC 5L3'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'2T1'},to:{type:'EOCR',term:'R-IN'},label:'MC 2T1 → EOCR R-IN'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'4T2'},to:{type:'EOCR',term:'S-IN'},label:'MC 4T2 → EOCR S-IN'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'6T3'},to:{type:'EOCR',term:'T-IN'},label:'MC 6T3 → EOCR T-IN'},
+      {kind:'connect',from:{type:'EOCR',term:'R-OUT'},to:{type:'MOTOR-3P',term:'U'},label:'EOCR R-OUT → 모터 U'},
+      {kind:'connect',from:{type:'EOCR',term:'S-OUT'},to:{type:'MOTOR-3P',term:'V'},label:'EOCR S-OUT → 모터 V'},
+      {kind:'connect',from:{type:'EOCR',term:'T-OUT'},to:{type:'MOTOR-3P',term:'W'},label:'EOCR T-OUT → 모터 W'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+2'},to:{type:'EOCR',term:'A1'},label:'+24V → EOCR A1(+)'},
+      {kind:'connect',from:{type:'EOCR',term:'A2'},to:{type:'MDR-100',term:'V-2'},label:'EOCR A2 → 0V'},
+      {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'PB-1C',role:'stopPB',term:'21'},label:'+24V → 정지 PB NC(21)'},
+      {kind:'connect',from:{type:'PB-1C',role:'stopPB',term:'22'},to:{type:'EOCR',term:'95'},label:'정지 NC(22) → EOCR 95'},
+      {kind:'connect',from:{type:'EOCR',term:'96'},to:{type:'PB-1C',role:'startPB',term:'11'},label:'EOCR 96 → 운전 PB NO(11)'},
+      {kind:'connect',from:{type:'PB-1C',role:'startPB',term:'12'},to:{type:'MC',role:'mainMC',term:'A1'},label:'운전 NO(12) → MC A1'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'A2'},to:{type:'MDR-100',term:'V-1'},label:'MC A2 → 0V'},
+      {kind:'connect',from:{type:'EOCR',term:'96'},to:{type:'MC',role:'mainMC',term:'13'},label:'EOCR 96 → MC 보조 NO 13'},
+      {kind:'connect',from:{type:'MC',role:'mainMC',term:'14'},to:{type:'MC',role:'mainMC',term:'A1'},label:'MC 보조 NO 14 → A1 (자기유지)'}
+    ]
+  }
+
 ];
+
+/* v2.4 장비팩 미션 — 외부 pack이 설치된 실제 앱에서만 등록 */
+(function registerV24PackMissions(){
+  if(!LIB['SIGNAL-GEN-VI']||!LIB['XBL-C41A']||!LIB['XBF-PD02A'])return;
+  GOALS.push(
+    {
+      id:'g21',title:'21. 0~10V 신호 발생기 → AD04A 실제값',
+      desc:'V/I 신호 발생기의 0~10V 출력을 XBF-AD04A CH0에 연결하고 공학값·RAW 0~16000 변환 확인',
+      needed:['MCCB1P','MDR-100','XBC-DR32H','XBF-AD04A','SIGNAL-GEN-VI'],
+      tips:['💡 CPU와 AD04A를 같은 레일에서 좌→우 순으로 배치하면 XG5000 P 주소가 슬롯별로 자동 생성됩니다.','💡 신호 발생기와 입력 모듈의 범위를 모두 0~10V로 맞추세요.','💡 시뮬 모니터에서 전압, 공학값, RAW 값을 확인하세요.'],
+      checks:[
+        {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'XBF-AD04A',term:'+24V'},label:'+24V → AD04A'},
+        {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'XBF-AD04A',term:'0V'},label:'0V → AD04A'},
+        {kind:'connect',from:{type:'SIGNAL-GEN-VI',term:'OUT+'},to:{type:'XBF-AD04A',term:'CH0+'},label:'신호발생기 OUT+ → AD04A CH0+'},
+        {kind:'connect',from:{type:'SIGNAL-GEN-VI',term:'OUT-'},to:{type:'XBF-AD04A',term:'CH0-'},label:'신호발생기 OUT− → AD04A CH0−'}
+      ]
+    },
+    {
+      id:'g22',title:'22. 4~20mA 압력 트랜스미터',
+      desc:'DC24V 3선식 압력 트랜스미터의 4~20mA 신호를 XBF-AD04A CH1로 입력',
+      needed:['MCCB1P','MDR-100','XBC-DR32H','XBF-AD04A','PRESSURE-TX-420'],
+      tips:['💡 압력 0~10bar가 4~20mA로 변환되고 입력 RAW 0~16000으로 스케일됩니다.','⚠ 전원 PWR+/PWR−와 신호 SIG+/SIG−를 구분하세요.'],
+      checks:[
+        {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'XBF-AD04A',term:'+24V'},label:'+24V → AD04A'},
+        {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'XBF-AD04A',term:'0V'},label:'0V → AD04A'},
+        {kind:'connect',from:{type:'MDR-100',term:'V+2'},to:{type:'PRESSURE-TX-420',term:'PWR+'},label:'+24V → 압력센서 PWR+'},
+        {kind:'connect',from:{type:'MDR-100',term:'V-2'},to:{type:'PRESSURE-TX-420',term:'PWR-'},label:'0V → 압력센서 PWR−'},
+        {kind:'connect',from:{type:'PRESSURE-TX-420',term:'SIG+'},to:{type:'XBF-AD04A',term:'CH1+'},label:'4~20mA SIG+ → AD04A CH1+'},
+        {kind:'connect',from:{type:'PRESSURE-TX-420',term:'SIG-'},to:{type:'XBF-AD04A',term:'CH1-'},label:'4~20mA SIG− → AD04A CH1−'}
+      ]
+    },
+    {
+      id:'g23',title:'23. XBL-C41A 2선식 Modbus RTU · XY-MD02',
+      desc:'XBL-C41A의 송수신 A/B를 2선식으로 브리지하고 XY-MD02 국번 1의 온도·습도 레지스터 읽기',
+      needed:['MCCB1P','MDR-100','XBC-DR32H',
+        {type:'XBL-C41A',role:'modbusMaster',label:'Cnet Modbus 마스터',modbus:{enabled:true,role:'master',slaveId:0,baudRate:9600,dataBits:8,parity:'none',stopBits:1,mode:'2wire',termination:true}},
+        {type:'XY-MD02',role:'tempHumiditySlave',label:'온습도 슬레이브',modbus:{enabled:true,role:'slave',slaveId:1,baudRate:9600,dataBits:8,parity:'none',stopBits:1,mode:'2wire',termination:false}}],
+      tips:['💡 공식 5핀 명칭 기준으로 2선식은 TX+↔RX+, TX−↔RX−를 각각 같은 bus로 묶습니다.','💡 기본 통신값은 9600bps, 8N1, 마스터 1대, XY-MD02 국번 1입니다.','💡 입력 레지스터 1=온도×10, 2=습도×10으로 모니터링합니다.'],
+      checks:[
+        {kind:'connect',from:{type:'MDR-100',term:'V+1'},to:{type:'XY-MD02',role:'tempHumiditySlave',term:'V+'},label:'+24V → XY-MD02 V+'},
+        {kind:'connect',from:{type:'MDR-100',term:'V-1'},to:{type:'XY-MD02',role:'tempHumiditySlave',term:'V-'},label:'0V → XY-MD02 V−'},
+        {kind:'connect',from:{type:'XBL-C41A',role:'modbusMaster',term:'TX+'},to:{type:'XBL-C41A',role:'modbusMaster',term:'RX+'},label:'XBL TX+ ↔ RX+ 2선식 브리지'},
+        {kind:'connect',from:{type:'XBL-C41A',role:'modbusMaster',term:'TX-'},to:{type:'XBL-C41A',role:'modbusMaster',term:'RX-'},label:'XBL TX− ↔ RX− 2선식 브리지'},
+        {kind:'connect',from:{type:'XBL-C41A',role:'modbusMaster',term:'RX+'},to:{type:'XY-MD02',role:'tempHumiditySlave',term:'A+'},label:'XBL A/+ → XY-MD02 A+'},
+        {kind:'connect',from:{type:'XBL-C41A',role:'modbusMaster',term:'RX-'},to:{type:'XY-MD02',role:'tempHumiditySlave',term:'B-'},label:'XBL B/− → XY-MD02 B−'}
+      ]
+    }
+  );
+})();
+
+/* 미션 공통 전원 프로필
+   MDR 출력 또는 XBC 입출력을 사용하는 미션에 실제 AC 인입 경로를 자동 포함한다. */
+const MISSION_POWER_PROFILES={
+  dc24:{
+    needed:['MCCB1P','MDR-100'],
+    checks:[
+      {kind:'connect',profile:'dc24',from:{type:'MCCB1P',term:"L'"},to:{type:'MDR-100',term:'L'},label:'[공통전원] MCB L → MDR L'},
+      {kind:'connect',profile:'dc24',from:{type:'MCCB1P',term:"N'"},to:{type:'MDR-100',term:'N'},label:'[공통전원] MCB N → MDR N'}
+    ]
+  },
+  'dc24-plc':{
+    extends:'dc24',
+    needed:['XBC-DR32H'],
+    checks:[
+      {kind:'connect',profile:'dc24-plc',from:{type:'MCCB1P',term:"L'"},to:{type:'XBC-DR32H',term:'L'},label:'[공통전원] MCB L → XBC 본체 L'},
+      {kind:'connect',profile:'dc24-plc',from:{type:'MCCB1P',term:"N'"},to:{type:'XBC-DR32H',term:'N'},label:'[공통전원] MCB N → XBC 본체 N'}
+    ]
+  }
+};
+function missionCheckKey(check){
+  const endpoint=spec=>`${spec?.type||''}|${spec?.role||''}|${spec?.term||''}`;
+  return [endpoint(check?.from),endpoint(check?.to)].sort().join('~');
+}
+function missionPowerProfileChain(name,out=[]){
+  const profile=MISSION_POWER_PROFILES[name];
+  if(!profile)return out;
+  if(profile.extends)missionPowerProfileChain(profile.extends,out);
+  if(!out.includes(name))out.push(name);
+  return out;
+}
+function applyMissionPowerProfiles(){
+  for(const goal of GOALS){
+    const names=Array.isArray(goal.powerProfile)?goal.powerProfile:[goal.powerProfile].filter(Boolean);
+    if(!names.length)continue;
+    const profileNames=[];
+    for(const name of names)missionPowerProfileChain(name,profileNames);
+    const needed=[...(goal.needed||[])];
+    const checks=[...(goal.checks||[])];
+    const needKeys=new Set(needed.map(missionSpecKey));
+    const checkKeys=new Set(checks.map(missionCheckKey));
+    const profileChecks=[];
+    for(const name of profileNames){
+      const profile=MISSION_POWER_PROFILES[name];
+      for(const item of profile.needed||[]){
+        const key=missionSpecKey(item);
+        if(!needKeys.has(key)){needKeys.add(key);needed.push(item);}
+      }
+      for(const check of profile.checks||[]){
+        const key=missionCheckKey(check);
+        if(!checkKeys.has(key)){checkKeys.add(key);profileChecks.push({...check});}
+      }
+    }
+    goal.needed=needed;
+    goal.checks=[...profileChecks,...checks];
+  }
+}
+applyMissionPowerProfiles();
 
 /* ===================================================================
    mission JSON — requiredNets / forbiddenConnections 검사 기준
@@ -3803,7 +4677,7 @@ function missionForbiddenConnections(goal){
   return list;
 }
 const MISSION_JSON={
-  schemaVersion:1,
+  schemaVersion:2,
   educationalOnly:true,
   notice:'이 HTML은 제어반 결선 연습용 교육 시뮬레이터이며 실제 장비를 제어하지 않는다.',
   missions:GOALS.map(goal=>({
@@ -3828,6 +4702,10 @@ window.MISSION_JSON=MISSION_JSON;
 const S={
   devices:{}, wires:[],
   mode:'select',         // select | wire | pan
+  workspaceView:'panel', // panel | schematic | sequence | io | palletizer
+  diagramLayouts:{schematic:{},sequence:{}}, // 도면별 심볼 위치만 별도 저장, 배선은 S.wires 공유
+  palletizer3d:null,     // v2.6 호환: 기존 3축 팔레타이징 저장 상태
+  automationLab:null,   // v2.7 2축 서보/MPS/공압 실습실 상태 (실제 PLC에는 쓰지 않음)
   boardMode:'panel-layout', // free | panel-layout | distribution | door-panel
   cabinet:null,
   rails:{},
@@ -3871,6 +4749,8 @@ const S={
   placementGhost:null,
   nextId:1,
   goal:null,
+  rackState:{racks:[],unattached:[],errors:[],assignedCount:0},
+  runtimeDiagnostics:{analog:new Map(),modbus:{buses:[],devices:new Map(),portIssues:[]}},
   history:[], future:[],
 };
 
@@ -4060,7 +4940,7 @@ const DEFAULT_MOUNT_BY_CAT={
   wiring:{tags:['din','terminal'],preferredRailType:'DIN35',railOffsetY:null,minClearance:{left:4,right:4,top:10,bottom:10}}
 };
 const DOOR_MOUNT_TYPES=new Set(['PB-1C','PB-NO','PB-NC','EMSTOP','SEL-2P','SEL-3P','LAMP','LAMP-G','LAMP-Y','LAMP-W','BUZZER']);
-const FIELD_FREE_TYPES=new Set(['MOTOR-3P','CYL-SA','CYL-DA','CYL-DA53','SOL-Y','SERVO-MOTOR','LINEAR-RAIL','PROX-NPN','PROX-PNP','ENCODER','PHOTO','PT100','MY-MD02']);
+const FIELD_FREE_TYPES=new Set(['MOTOR-3P','CYL-SA','CYL-DA','CYL-DA53','SOL-Y','SERVO-MOTOR','LINEAR-RAIL','PROX-NPN','PROX-PNP','ENCODER','PHOTO','PT100','PT100-3W','TC-K','XY-MD02','MY-MD02']);
 
 function ensureDeviceMount(type,def){
   if(!def||def.mount)return def?.mount;
@@ -4127,6 +5007,9 @@ function uid(p){return p+(S.nextId++)}
 function captureUndoState(){
   return {
     d:S.devices,w:S.wires,n:S.nextId,j:S.jumpers,
+    workspaceView:S.workspaceView,diagramLayouts:S.diagramLayouts,
+    palletizer3d:window.PLCTrainerPalletizer3D?.exportState?.()||S.palletizer3d||null,
+    automationLab:window.PLCTrainerAutomationLabs?.exportState?.()||S.automationLab||null,
     boardMode:S.boardMode,cabinet:S.cabinet,rails:S.rails,ducts:S.ducts,doorPanel:S.doorPanel,
     panelConfig:S.panelConfig,
     terminalCalibration:S.terminalCalibration||{}
@@ -4135,6 +5018,10 @@ function captureUndoState(){
 function restoreUndoState(x){
   S.devices=x.d;S.wires=x.w;S.nextId=x.n;
   if(x.j)S.jumpers=x.j;
+  S.workspaceView=x.workspaceView||'panel';
+  S.diagramLayouts=x.diagramLayouts||{schematic:{},sequence:{}};
+  S.palletizer3d=x.palletizer3d||null;
+  S.automationLab=x.automationLab||null;
   if(x.boardMode)S.boardMode=x.boardMode;
   if(x.cabinet!==undefined)S.cabinet=x.cabinet;
   if(x.rails)S.rails=x.rails;
@@ -4155,6 +5042,10 @@ function restoreUndoState(x){
   applyTerminalCalibrationToRegistry(S.terminalCalibration);
   persistTerminalCalibration();
   markTerminalSnapDirty();
+  for(const dev of Object.values(S.devices||{}))ensureDeviceRuntimeDefaults(dev);
+  reconcileRackState();
+  window.PLCTrainerPalletizer3D?.importState?.(S.palletizer3d);
+  window.PLCTrainerAutomationLabs?.importState?.(S.automationLab);
 }
 function snapshot(){
   S.history.push(JSON.stringify(captureUndoState()));
@@ -5003,9 +5894,118 @@ function routePanelWire(p1,p2,wire,excludeIds){
   return routeOrtho(p1,p2,offA,offB,wire?.waypoints,ids);
 }
 
+const PROJECT_SCHEMA_VERSION=9;
+const DEVICE_TYPE_ALIASES={
+  'MY-MD02':'XY-MD02'
+};
+function migrateDeviceTypes(devices={}){
+  const out=devices||{};
+  for(const dev of Object.values(out)){
+    if(!dev||!dev.type)continue;
+    const next=DEVICE_TYPE_ALIASES[dev.type];
+    if(next&&LIB[next]){
+      dev.legacyType=dev.legacyType||dev.type;
+      dev.type=next;
+    }
+  }
+  return out;
+}
+function canonicalDeviceType(type){
+  return DEVICE_TYPE_ALIASES[type]||type;
+}
+function defaultDeviceRuntimeConfig(type){
+  const def=LIB[type]||{};
+  const out={runtime:{}};
+  if(def.rackModule||def.rack?.role==='module')out.rackStatus='unattached';
+  if(def.modbusDefaults)out.runtime.modbus=(window.PLCTrainerModbus||window.PLCModbusRuntime)?.normalizeConfig?.({},def.modbusDefaults)||{...def.modbusDefaults};
+  if(def.analogChannels?.length){
+    out.runtime.analog={channels:{}};
+    for(const ch of def.analogChannels){
+      const source=def.analogSource||{};
+      const range=ch.range||ch.ranges?.[0]||source.defaultRange||'0~10V';
+      out.runtime.analog.channels[String(ch.channel)]={range,dataType:ch.dataType||'0~4000',engineeringMin:source.engineeringMin??0,engineeringMax:source.engineeringMax??100,engineeringValue:source.defaultEngineeringValue??50,unit:source.unit||'%'};
+    }
+  }
+  if(def.driveModel==='ig5a'||type==='IG5A')out.runtime.drive={targetHz:60,maxHz:60,accelSec:5,decelSec:10,motorPoles:4,ratedCurrentA:2.5,commandSource:'terminal'};
+  if(def.sensorKind)out.runtime.sensor={kind:def.sensorKind,temperatureC:25,humidityRH:50,processValue:50,wireBreak:false};
+  return out;
+}
+function mergeRuntimeDefaults(target,defaults){
+  if(!defaults||typeof defaults!=='object')return target;
+  for(const [key,value] of Object.entries(defaults)){
+    if(value&&typeof value==='object'&&!Array.isArray(value)){
+      if(!target[key]||typeof target[key]!=='object'||Array.isArray(target[key]))target[key]={};
+      mergeRuntimeDefaults(target[key],value);
+    }else if(target[key]==null)target[key]=structuredClone(value);
+  }
+  return target;
+}
+function ensureDeviceRuntimeDefaults(dev){
+  if(!dev?.type)return dev;
+  const def=LIB[dev.type]||{};
+  const defaults=defaultDeviceRuntimeConfig(dev.type);
+  if(!dev.runtime)dev.runtime={};
+  mergeRuntimeDefaults(dev.runtime,defaults.runtime||{});
+  if(defaults.rackStatus&&dev.rackStatus==null)dev.rackStatus=defaults.rackStatus;
+  if(dev.analogConfig){
+    dev.runtime.analog=dev.runtime.analog||{channels:{}};dev.runtime.analog.channels=dev.runtime.analog.channels||{};
+    for(const [ch,cfg] of Object.entries(dev.analogConfig))dev.runtime.analog.channels[ch]={...(dev.runtime.analog.channels[ch]||{}),...cfg};
+  }
+  if(dev.modbus)dev.runtime.modbus={...(dev.runtime.modbus||{}),...dev.modbus};
+  if(dev.driveConfig)dev.runtime.drive={...(dev.runtime.drive||{}),...dev.driveConfig,targetHz:dev.driveConfig.targetHz??dev.driveConfig.commandHz??dev.runtime.drive?.targetHz};
+  if(dev.temperatureC!=null||dev.humidityRh!=null){
+    dev.runtime.sensor=dev.runtime.sensor||{kind:def.sensorKind||'GENERIC'};
+    if(dev.temperatureC!=null)dev.runtime.sensor.temperatureC=Number(dev.temperatureC);
+    if(dev.humidityRh!=null)dev.runtime.sensor.humidityRH=Number(dev.humidityRh);
+  }
+  window.PLCTrainerAnalog?.ensureDeviceRuntime?.(dev,def);
+  if(def.sensorKind)window.PLCTrainerAnalog?.ensureSensorRuntime?.(dev,def.sensorKind);
+  if(def.modbusDefaults)dev.runtime.modbus=(window.PLCTrainerModbus||window.PLCModbusRuntime)?.normalizeConfig?.(dev.runtime.modbus||{},def.modbusDefaults)||dev.runtime.modbus;
+  if(def.driveModel==='ig5a'||dev.type==='IG5A')window.PLCTrainerDrive?.ensureRuntime?.(dev);
+  return dev;
+}
+
+function canonicalTerminalId(type,term){
+  const canonical=canonicalDeviceType(type);
+  return LIB[canonical]?.terminalAliases?.[term]||term;
+}
+function migrateWireEndpoints(wires=[],devices={}){
+  for(const wire of wires||[]){
+    for(const side of ['from','to']){
+      const ep=wire?.[side]; if(!ep)continue;
+      const type=devices[ep.dev]?.type;
+      if(type)ep.term=canonicalTerminalId(type,ep.term);
+    }
+  }
+  return wires||[];
+}
+function migrateJumpers(jumpers=[],devices={}){
+  for(const j of jumpers||[]){
+    const type=devices[j.deviceId]?.type;
+    if(type&&Array.isArray(j.terms))j.terms=j.terms.map(t=>canonicalTerminalId(type,t));
+  }
+  return jumpers||[];
+}
+function migrateCalibrationEntry(type,entry){
+  const canonical=canonicalDeviceType(type);
+  const n=normalizeCalibEntry(entry);
+  const aliases=LIB[canonical]?.terminalAliases||{};
+  const patches={};
+  for(const [term,patch] of Object.entries(n.patches||{}))patches[aliases[term]||term]=patch;
+  return {
+    patches,
+    removed:(n.removed||[]).map(t=>aliases[t]||t),
+    added:(n.added||[]).map(t=>({...t,id:aliases[t.id]||t.id}))
+  };
+}
+
 function serializeState(){
   return {
+    schemaVersion:PROJECT_SCHEMA_VERSION,
     d:S.devices,w:S.wires,n:S.nextId,goal:S.goal,pan:S.pan,
+    workspaceView:S.workspaceView||'panel',diagramLayouts:S.diagramLayouts||{schematic:{},sequence:{}},
+    palletizer3d:window.PLCTrainerPalletizer3D?.exportState?.()||S.palletizer3d||null,
+    automationLab:window.PLCTrainerAutomationLabs?.exportState?.()||S.automationLab||null,
     color:S.color,autoColor:S.autoColor,
     boardMode:S.boardMode,cabinet:S.cabinet,rails:S.rails,ducts:S.ducts,doorPanel:S.doorPanel,
     panelConfig:S.panelConfig||{rows:3,cols:1,door:true},
@@ -5015,7 +6015,14 @@ function serializeState(){
   };
 }
 function applyLoadedState(x){
-  S.devices=x.d||{}; S.wires=x.w||[]; S.nextId=x.n||1; S.goal=x.goal||null;
+  x=x||{};
+  S.devices=migrateDeviceTypes(x.d||{}); for(const dev of Object.values(S.devices))ensureDeviceRuntimeDefaults(dev); S.wires=migrateWireEndpoints(x.w||[],S.devices); S.nextId=x.n||1; S.goal=x.goal||null;
+  S.workspaceView=x.workspaceView||'panel';
+  S.diagramLayouts=x.diagramLayouts||{schematic:{},sequence:{}};
+  S.palletizer3d=x.palletizer3d||null;
+  S.automationLab=x.automationLab||null;
+  if(!S.diagramLayouts.schematic)S.diagramLayouts.schematic={};
+  if(!S.diagramLayouts.sequence)S.diagramLayouts.sequence={};
   if(x.color)S.color=x.color;
   S.autoColor=!!x.autoColor;
   if(x.pan)S.pan=x.pan;
@@ -5024,13 +6031,14 @@ function applyLoadedState(x){
   S.rails=x.rails||{};
   S.ducts=x.ducts||{};
   S.doorPanel=x.doorPanel||null;
-  S.jumpers=x.jumpers||[];
+  S.jumpers=migrateJumpers(x.jumpers||[],S.devices);
   // 프로젝트 JSON 보정 + 로컬 보정 병합 (프로젝트 우선)
   const localCal=loadPersistedTerminalCalibration();
   const merged={...localCal,...(x.terminalCalibration||{})};
   const normalized={};
   for(const [type,entry] of Object.entries(merged)){
-    normalized[type]=normalizeCalibEntry(entry);
+    const canonical=canonicalDeviceType(type);
+    normalized[canonical]=migrateCalibrationEntry(canonical,entry);
   }
   S.terminalCalibration=normalized;
   applyTerminalCalibrationToRegistry(S.terminalCalibration);
@@ -5041,6 +6049,9 @@ function applyLoadedState(x){
   syncColorSwatches();
   syncBoardModeUI();
   clearSelection();
+  reconcileRackState();
+  window.PLCTrainerPalletizer3D?.importState?.(S.palletizer3d);
+  window.PLCTrainerAutomationLabs?.importState?.(S.automationLab);
 }
 
 function selectedDeviceIds(){
@@ -6171,6 +7182,7 @@ function beginTerminalCalibrationDrag(devId,termId,e){
 }
 
 function renderDevices(){
+  reconcileRackState();
   elDev.innerHTML=''; elTerm.innerHTML='';
   for(const id in S.devices){
     const dev=S.devices[id]; const def=LIB[dev.type]; if(!def)continue;
@@ -6183,7 +7195,13 @@ function renderDevices(){
       +(def.image?' image-device':'')
       +(dev.locked?' locked':'')
       +(SIM.on && SIM.pressed.has(id)?' pressed':'')
-      +(SIM.on && SIM.coilState.get(id)?' coil-on':''));
+      +(SIM.on && SIM.coilState.get(id)?' coil-on':'')
+      +(SIM.on && SIM.openSwitches?.has(id)?' sim-open':'')
+      +(SIM.on && SIM.tripped?.has(id)?' tripped':'')
+      +(SIM.on && SIM.driveState?.get(id)?.running?' drive-running':'')
+      +(SIM.on && SIM.motorState?.get(id)?.running?' motor-running':'')
+      +(SIM.on && dev.interlockGroup && SIM.interlockConflicts?.has(dev.interlockGroup)?' interlock-fault':'')
+      +(SIM.on && def.powerSupply && SIM.devicePower?.get(id)===false?' power-off':''));
     // 본체: 스케일된 크기로 회전 transform (좌상단 = dev.x,dev.y)
     let bodyT;
     if(rot===0)      bodyT = `translate(${dev.x},${dev.y})`;
@@ -6209,6 +7227,20 @@ function renderDevices(){
       img.setAttribute('width',box.w*s); img.setAttribute('height',box.h*s);
       img.setAttribute('preserveAspectRatio','none');
       g.appendChild(img);
+      if(def.overlayLabel){
+        const ob=document.createElementNS(SVGNS,'rect');
+        ob.setAttribute('class','device-overlay-bg');
+        ob.setAttribute('x',6*s); ob.setAttribute('y',6*s);
+        ob.setAttribute('width',Math.min(sw-12*s,Math.max(92*s,(def.label.length*8+18)*s)));
+        ob.setAttribute('height',22*s); ob.setAttribute('rx',4*s);
+        g.appendChild(ob);
+        const ot=document.createElementNS(SVGNS,'text');
+        ot.setAttribute('class','device-overlay-label');
+        ot.setAttribute('x',12*s); ot.setAttribute('y',21*s);
+        ot.setAttribute('font-size',12*s);
+        ot.textContent=def.label;
+        g.appendChild(ot);
+      }
     } else {
     const drawDef=s===1?def:{...def,w:sw,h:sh};
     const customSkin = def.skin==='exp2-rear' ? drawExp2RearSkin(g,drawDef) : false;
@@ -6283,6 +7315,43 @@ function renderDevices(){
       g.appendChild(sub);
     }
     }
+    }
+    // 미션 역할 배지: 같은 타입 장비가 여러 대일 때 정/역·운전/정지 역할을 명확히 표시
+    if(dev.instanceLabel){
+      const textValue=String(dev.instanceLabel);
+      const bw=Math.min(sw-12*s,Math.max(58*s,(textValue.length*7+18)*s));
+      const bx=Math.max(6*s,sw-bw-6*s), by=6*s;
+      const rb=document.createElementNS(SVGNS,'rect');
+      rb.setAttribute('class','device-role-bg');
+      rb.setAttribute('x',bx);rb.setAttribute('y',by);rb.setAttribute('width',bw);rb.setAttribute('height',20*s);rb.setAttribute('rx',4*s);
+      g.appendChild(rb);
+      const rt=document.createElementNS(SVGNS,'text');
+      rt.setAttribute('class','device-role-label');
+      rt.setAttribute('x',bx+bw/2);rt.setAttribute('y',by+14*s);rt.setAttribute('font-size',10*s);
+      rt.textContent=textValue;
+      const title=document.createElementNS(SVGNS,'title');
+      title.textContent=`미션 역할: ${textValue}${dev.role?` (${dev.role})`:''}`;
+      rt.appendChild(title);g.appendChild(rt);
+    }
+    const rackText=window.PLCRackRuntime?.badge?.(dev)||'';
+    if(rackText){
+      const error=dev.rackStatus==='slot-overflow';
+      const textValue=String(rackText);
+      const bw=Math.min(sw-12*s,Math.max(64*s,(textValue.length*6.2+14)*s));
+      const by=(def.image&&def.overlayLabel?32:6)*s;
+      const rb=document.createElementNS(SVGNS,'rect');
+      rb.setAttribute('class','device-rack-bg'+(error?' error':''));rb.setAttribute('x',6*s);rb.setAttribute('y',by);rb.setAttribute('width',bw);rb.setAttribute('height',18*s);rb.setAttribute('rx',3*s);g.appendChild(rb);
+      const rt=document.createElementNS(SVGNS,'text');rt.setAttribute('class','device-rack-label');rt.setAttribute('x',6*s+bw/2);rt.setAttribute('y',by+12.5*s);rt.setAttribute('font-size',9*s);rt.textContent=textValue;g.appendChild(rt);
+    }
+    if(SIM.on&&SIM.driveState?.get(id)&&def.image){
+      const st=SIM.driveState.get(id);const dt=document.createElementNS(SVGNS,'text');dt.setAttribute('x',sw/2);dt.setAttribute('y',58*s);dt.setAttribute('text-anchor','middle');dt.setAttribute('font-size',12*s);dt.setAttribute('font-weight','800');dt.setAttribute('fill',st.fault?'#f44':st.running?'#0f0':'#ddd');dt.textContent=st.fault?'FAULT':`${st.frequencyHz?.toFixed?.(1)??0}Hz ${st.direction||'stop'}`;g.appendChild(dt);
+    }
+    if(SIM.on&&SIM.analogValueState?.size){
+      const analog=[...SIM.analogValueState.entries()].find(([key])=>key.startsWith(id+'.CH'))?.[1];
+      if(analog&&analog.quality!=='unused'){
+        const at=document.createElementNS(SVGNS,'text');at.setAttribute('x',sw/2);at.setAttribute('y',sh-20*s);at.setAttribute('text-anchor','middle');at.setAttribute('font-size',10*s);at.setAttribute('font-weight','800');at.setAttribute('fill',analog.ready?'#0b5':'#d33');
+        at.textContent=analog.signalValue==null?analog.quality:`${Number(analog.signalValue).toFixed(2)}${analog.signalUnit||''} · RAW ${analog.rawValue??'-'}`;g.appendChild(at);
+      }
     }
     // 고정 배지 (우상단 근처)
     if(dev.locked){
@@ -6362,9 +7431,11 @@ function renderDevices(){
       const termR=(t.r || (termList.length>32 ? 7.2 : 8.5))*s;
       const hitR=terminalHitRadius(def,t)*s;
       const polName=POL[t.pol]?.name||t.pol||'';
+      const plcAddress=(window.PLCTrainerRack||window.PLCRackRuntime)?.terminalAddress?.(dev,t.id)||'';
+      const addressHint=plcAddress?`\nXG5000 주소: ${plcAddress}`:'';
       const tipText=isPlug
-        ? `${def.label}\n커넥터 핀: ${t.label}\n타입: ${polName}\n(HDMI처럼 커넥터에 케이블 장착)`
-        : `${def.label}\n단자: ${t.label}\n타입: ${polName}\n${POL_HINT[t.pol]||''}`;
+        ? `${def.label}\n커넥터 핀: ${t.label}\n타입: ${polName}${addressHint}\n(HDMI처럼 커넥터에 케이블 장착)`
+        : `${def.label}\n단자: ${t.label}\n타입: ${polName}${addressHint}\n${POL_HINT[t.pol]||''}`;
       // 히트 영역
       const hit=document.createElementNS(SVGNS, isPlug?'rect':'circle');
       hit.setAttribute('class', isPlug?'plug-pin-hit terminal terminal-hit':'terminal terminal-hit');
@@ -6384,7 +7455,9 @@ function renderDevices(){
       let termCls=(isPlug?'plug-pin terminal':'terminal')+
         (S.pending && S.pending.dev===id && S.pending.term===t.id?' pending':'')+
         (highlightedTerms.has(id+'.'+t.id)?' highlight':'')+
-        (SIM.on && SIM.liveTerms.has(id+'.'+t.id)?' live':'');
+        (SIM.on && SIM.liveTerms.has(id+'.'+t.id)?' live':'')+
+        (SIM.on && SIM.ioState?.get(id+'.'+t.id)?' io-on':'')+
+        (SIM.on && SIM.forcedOutputs?.has(id+'.'+t.id)?' output-forced':'');
       if(S.boardMode==='distribution' && S.distribution.activeBus){
         termCls += canConnectBusToTerm(S.distribution.activeBus,id,t.id)?' term-bus-ok':' term-bus-bad';
       }
@@ -7211,6 +8284,7 @@ function render(){
   renderNetlist();
   renderStats();
   const jc=$('#jcounter'); if(jc)jc.textContent=(S.jumpers||[]).length;
+  if(window.PLCTrainerMultiView?.renderActive)window.PLCTrainerMultiView.renderActive();
 }
 
 function applyTransform(){
@@ -7285,7 +8359,7 @@ function buildNets(){
       for(let i=1;i<all.length;i++)union(all[0],all[i]);
     }
     if(def.netHints){
-      for(const [a,b] of def.netHints) union(key(id,a),key(id,b));
+      for(const [a,b] of def.netHints)union(key(id,a),key(id,b));
     }
   }
   // 점퍼 브릿지 union
@@ -7356,9 +8430,11 @@ function activeMissionJson(){
 }
 function netHasTermSpec(net,spec){
   return net.members.some(m=>{
-    const devType=S.devices[m.dev]?.type;
+    const dev=S.devices[m.dev];
+    const devType=dev?.type;
     if(spec.dev && m.dev!==spec.dev)return false;
     if(spec.type && devType!==spec.type)return false;
+    if(spec.role && dev?.role!==spec.role)return false;
     return m.term===spec.term;
   });
 }
@@ -7366,8 +8442,10 @@ function netHasEveryTermSpec(net,specs){
   return specs.every(spec=>netHasTermSpec(net,spec));
 }
 function termSpecText(spec){
-  const type=spec.type||S.devices[spec.dev]?.type||spec.dev||'?';
-  return `${type}.${spec.term}`;
+  const dev=spec.dev?S.devices[spec.dev]:null;
+  const type=spec.type||dev?.type||spec.dev||'?';
+  const role=spec.role||dev?.role;
+  return `${type}${role?`[${role}]`:''}.${spec.term}`;
 }
 function validateForbiddenRule(rule,nets){
   for(const net of nets){
@@ -7415,6 +8493,233 @@ function validateMissionJson(nets){
   });
   mission.forbiddenConnections.forEach(rule=>validateForbiddenRule(rule,nets));
 }
+function terminalWireIds(devId,termId){
+  return S.wires.filter(w=>(w.from.dev===devId&&w.from.term===termId)||(w.to.dev===devId&&w.to.term===termId)).map(w=>w.id);
+}
+function terminalIsWired(devId,termId){
+  return terminalWireIds(devId,termId).length>0;
+}
+function netForDeviceTerm(nets,devId,termId){
+  return nets.find(n=>n.members.some(m=>m.dev===devId&&m.term===termId))||null;
+}
+function netHasExternalDcSource(net,pol,excludeDev){
+  if(!net)return false;
+  return net.members.some(m=>{
+    if(m.dev===excludeDev)return false;
+    const def=LIB[S.devices[m.dev]?.type]; if(!def)return false;
+    const ps=def.powerSupply;
+    if(pol==='DC+' && ps?.dcPos?.includes(m.term))return true;
+    if(pol==='DC-' && ps?.dcNeg?.includes(m.term))return true;
+    if(def.label?.includes('iG5A') && pol==='DC+' && m.term==='24')return true;
+    if(def.label?.includes('iG5A') && pol==='DC-' && (m.term==='CM'||m.term==='CM2'))return true;
+    return false;
+  });
+}
+function netHasAcSource(net,pol){
+  if(!net)return false;
+  return net.members.some(m=>{
+    const type=S.devices[m.dev]?.type;
+    if(type==='MCCB1P')return pol==='AC-L'?m.term==='L':m.term==='N';
+    if(type==='MCCB'&&pol==='AC-L')return ['L1','L2','L3'].includes(m.term);
+    return false;
+  });
+}
+function validateDeviceFunctionalRules(nets){
+  const strictPowerMission=['g-field','g1','g12','g14','g15','g16','g17','g18'].includes(S.goal);
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type]; if(!def)continue;
+    const deviceWireIds=S.wires.filter(w=>w.from.dev===id||w.to.dev===id).map(w=>w.id);
+
+    // SMPS/전원공급장치: DC 출력을 사용하면 AC L/N 입력 경로가 필요하다.
+    if(def.powerSupply){
+      const dcTerms=[...(def.powerSupply.dcPos||[]),...(def.powerSupply.dcNeg||[])];
+      const outputUsed=dcTerms.some(t=>terminalIsWired(id,t));
+      if(outputUsed){
+        const ln=netForDeviceTerm(nets,id,def.powerSupply.acL);
+        const nn=netForDeviceTerm(nets,id,def.powerSupply.acN);
+        const lOk=netHasAcSource(ln,'AC-L');
+        const nOk=netHasAcSource(nn,'AC-N');
+        if(!lOk||!nOk){
+          pushValidationIssue({
+            category:strictPowerMission?'function':'quality',
+            msg:`${def.label}: AC L/N 유효 입력 없이 DC 출력을 사용하고 있습니다.`,
+            dev:id,wires:deviceWireIds,
+            members:`${def.powerSupply.acL}/${def.powerSupply.acN} → ${(def.powerSupply.dcPos||[]).join(',')}/${(def.powerSupply.dcNeg||[]).join(',')}`
+          });
+        }
+      }
+    }
+
+    // PLC 본체 AC 전원은 부분 결선 또는 전원 미션에서 L/N을 함께 확인한다.
+    if(def.mainPower){
+      const lTouched=terminalIsWired(id,def.mainPower.acL);
+      const nTouched=terminalIsWired(id,def.mainPower.acN);
+      if(lTouched||nTouched||strictPowerMission){
+        const ln=netForDeviceTerm(nets,id,def.mainPower.acL);
+        const nn=netForDeviceTerm(nets,id,def.mainPower.acN);
+        if(!netHasAcSource(ln,'AC-L')||!netHasAcSource(nn,'AC-N')){
+          pushValidationIssue({
+            category:strictPowerMission?'function':'quality',
+            msg:`${def.label}: 본체 AC 전원 L/N 경로가 완성되지 않았습니다. 입력부 24V/24G와 본체 L/N을 구분하세요.`,
+            dev:id,wires:deviceWireIds
+          });
+        }
+      }
+    }
+
+    // DC 외부전원 모듈/HMI/센서는 신호 또는 한쪽 전원을 사용하면 +/0V 양쪽을 확인한다.
+    for(const pair of def.powerPairs||[]){
+      const excluded=new Set([pair.pos,pair.neg,'PE','FG']);
+      const signalUsed=S.wires.some(w=>{
+        if(w.from.dev===id)return !excluded.has(w.from.term);
+        if(w.to.dev===id)return !excluded.has(w.to.term);
+        return false;
+      });
+      const touched=terminalIsWired(id,pair.pos)||terminalIsWired(id,pair.neg);
+      if(!signalUsed&&!touched)continue;
+      const pn=netForDeviceTerm(nets,id,pair.pos);
+      const nn=netForDeviceTerm(nets,id,pair.neg);
+      const pOk=netHasExternalDcSource(pn,'DC+',id);
+      const nOk=netHasExternalDcSource(nn,'DC-',id);
+      if(!pOk||!nOk){
+        pushValidationIssue({
+          category:'function',
+          msg:`${def.label}: 외부 DC 전원 ${pair.pos}/${pair.neg} 연결이 완성되지 않았습니다.`,
+          dev:id,wires:deviceWireIds,
+          members:`${pair.pos}=${pOk?'+전원 OK':'미공급'}, ${pair.neg}=${nOk?'0V OK':'미공급'}`
+        });
+      }
+    }
+
+    // 디지털 입력은 신호점과 입력 공통을 함께 결선해야 한다.
+    for(const group of def.inputGroups||[]){
+      const used=(group.inputs||[]).filter(t=>terminalIsWired(id,t));
+      if(!used.length)continue;
+      const commonWired=(group.commons||[]).some(t=>terminalIsWired(id,t));
+      if(!commonWired){
+        pushValidationIssue({
+          category:'function',
+          msg:`${def.label}: 입력 ${used.slice(0,4).join(', ')} 사용 중이지만 입력 COM이 연결되지 않았습니다.`,
+          dev:id,wires:used.flatMap(t=>terminalWireIds(id,t))
+        });
+      }
+    }
+
+    // 릴레이/트랜지스터 출력은 해당 출력 그룹 COM이 필요하다.
+    for(const group of def.outputGroups||[]){
+      const used=(group.outputs||[]).filter(t=>terminalIsWired(id,t)||SIM.forcedOutputs?.has(id+'.'+t));
+      if(!used.length)continue;
+      const commonWired=(group.commons||[]).some(t=>terminalIsWired(id,t));
+      if(!commonWired){
+        pushValidationIssue({
+          category:'function',
+          msg:`${def.label}: 출력 ${used.slice(0,4).join(', ')} 사용 중이지만 해당 출력 COM이 연결되지 않았습니다.`,
+          dev:id,wires:used.flatMap(t=>terminalWireIds(id,t))
+        });
+      }
+    }
+
+    // RS-485는 +와 - 두 선을 한 쌍으로 사용한다.
+    for(const [plus,minus] of def.rs485Pairs||[]){
+      const p=terminalIsWired(id,plus), n=terminalIsWired(id,minus);
+      if(p!==n){
+        pushValidationIssue({
+          category:'function',
+          msg:`${def.label}: RS-485 ${plus}/${minus} 중 한 가닥만 연결되었습니다.`,
+          dev:id,wires:[...terminalWireIds(id,plus),...terminalWireIds(id,minus)]
+        });
+      }
+    }
+
+    // 아날로그 채널은 +/−를 채널별로 함께 결선한다.
+    for(const ch of def.analogChannels||[]){
+      const p=terminalIsWired(id,ch.pos), n=terminalIsWired(id,ch.neg);
+      if(p!==n){
+        pushValidationIssue({
+          category:'function',
+          msg:`${def.label} CH${ch.channel}: ${ch.pos}/${ch.neg} 채널 배선이 한쪽만 연결되었습니다.`,
+          dev:id,wires:[...terminalWireIds(id,ch.pos),...terminalWireIds(id,ch.neg)]
+        });
+      }
+    }
+
+    // RTD 3선식은 A/B/b 세 단자를 모두 사용한다.
+    for(const ch of def.rtdChannels||[]){
+      const leads=[ch.A,ch.B,ch.b];
+      const used=leads.filter(t=>terminalIsWired(id,t));
+      if(used.length>0&&used.length<3){
+        pushValidationIssue({
+          category:'function',
+          msg:`${def.label} CH${ch.channel}: PT100 3선식 A/B/b 중 ${used.length}가닥만 연결되었습니다.`,
+          dev:id,wires:used.flatMap(t=>terminalWireIds(id,t))
+        });
+      }
+    }
+  }
+
+  // 서로 다른 장비의 채널을 연결할 때 +/−, RTD A측 역할이 뒤바뀌지 않았는지 net 단위로 검사한다.
+  for(const net of nets){
+    const analogRoles=[];
+    const rtdRoles=[];
+    for(const m of net.members){
+      const def=LIB[S.devices[m.dev]?.type]; if(!def)continue;
+      for(const ch of def.analogChannels||[]){
+        if(m.term===ch.pos)analogRoles.push({role:'+',dev:m.dev,term:m.term,label:def.label});
+        if(m.term===ch.neg)analogRoles.push({role:'-',dev:m.dev,term:m.term,label:def.label});
+      }
+      if(def.sensorKind==='THERMOCOUPLE'){
+        if(m.term==='+')analogRoles.push({role:'+',dev:m.dev,term:m.term,label:def.label});
+        if(m.term==='-')analogRoles.push({role:'-',dev:m.dev,term:m.term,label:def.label});
+      }
+      for(const ch of def.rtdChannels||[]){
+        if(m.term===ch.A)rtdRoles.push({role:'A',dev:m.dev,term:m.term,label:def.label});
+        if(m.term===ch.B||m.term===ch.b)rtdRoles.push({role:'B',dev:m.dev,term:m.term,label:def.label});
+      }
+      if(def.sensorKind==='RTD'){
+        if(m.term==='A')rtdRoles.push({role:'A',dev:m.dev,term:m.term,label:def.label});
+        if(m.term==='B'||m.term==='b')rtdRoles.push({role:'B',dev:m.dev,term:m.term,label:def.label});
+      }
+    }
+    if(analogRoles.some(r=>r.role==='+')&&analogRoles.some(r=>r.role==='-')){
+      pushValidationIssue({
+        category:'function',
+        msg:'아날로그/열전대 +와 −가 같은 net에 혼합되었습니다. 채널 극성을 맞추세요.',
+        wires:[...net.wires],
+        members:analogRoles.map(r=>`${r.label}.${r.term}`).join(' ↔ ')
+      });
+    }
+    if(rtdRoles.some(r=>r.role==='A')&&rtdRoles.some(r=>r.role==='B')){
+      pushValidationIssue({
+        category:'function',
+        msg:'PT100 A측과 B/b측이 같은 net에 혼합되었습니다. A선을 B/b 보상선과 구분하세요.',
+        wires:[...net.wires],
+        members:rtdRoles.map(r=>`${r.label}.${r.term}`).join(' ↔ ')
+      });
+    }
+  }
+
+  // v2.4: 랙 장착, 실제 아날로그 값 경로, Modbus RTU 설정을 공통 런타임으로 검증
+  const rackState=reconcileRackState();
+  for(const item of rackState.unattached||[]){
+    const wired=S.wires.some(w=>w.from.dev===item.id||w.to.dev===item.id);
+    const hard=['slot-overflow','slot-duplicate','rack-not-found'].includes(item.reason);
+    const detail=item.reason==='slot-overflow'?'CPU 허용 슬롯을 초과했습니다.'
+      :item.reason==='slot-duplicate'?'지정 슬롯이 다른 모듈과 중복됩니다.'
+      :item.reason==='rack-not-found'?'지정한 CPU가 없거나 호환되지 않습니다.'
+      :'호환 LS XGB CPU 랙에 장착되지 않았습니다.';
+    pushValidationIssue({category:wired||hard?'function':'quality',msg:`${item.type}: ${detail}`,dev:item.id});
+  }
+  for(const error of rackState.errors||[])pushValidationIssue({category:'function',msg:error.message,dev:error.hostId});
+  if(typeof window!=='undefined'&&(window.PLCTrainerAnalog||window.PLCAnalogRuntime||window.PLCTrainerModbus||window.PLCModbusRuntime)){
+    const runtime=evaluateAdvancedRuntimes(nets,{validation:true});
+    S.runtimeDiagnostics=runtime;
+    const analogApi=window.PLCTrainerAnalog||window.PLCAnalogRuntime;
+    const modbusApi=window.PLCTrainerModbus||window.PLCModbusRuntime;
+    for(const issue of analogApi?.validate?.(runtime.analog)||[])pushValidationIssue(issue);
+    for(const issue of modbusApi?.validate?.(runtime.modbus)||[])pushValidationIssue(issue);
+  }
+}
+
 function validateQualityWarnings(nets){
   const pairCount=new Map();
   for(const w of S.wires){
@@ -7515,9 +8820,11 @@ function validatePanelLayoutRules(){
     const otherType=S.devices[other]?.type;
     const otherDef=LIB[otherType];
     if(otherDef && (otherDef.cat==='plc'||otherDef.cat==='motion') && !tbTypes.has(otherType)){
+      const activeGoal=GOALS.find(g=>g.id===S.goal);
+      const strictTerminalBlock=activeGoal?.wiringPolicy==='terminal-block-required';
       pushValidationIssue({
-        category:'function',
-        msg:`도어 조작판 부품이 내부 단자대 경유 없이 ${otherDef.label}에 직접 배선되었습니다.`,
+        category:strictTerminalBlock?'function':'quality',
+        msg:`도어 조작판 부품이 내부 단자대 경유 없이 ${otherDef.label}에 직접 배선되었습니다.${strictTerminalBlock?' 이 미션은 단자대 경유가 필수입니다.':' 기본 교육 모드에서는 품질 경고로 처리합니다.'}`,
         wires:[w.id],
         members:`${w.from.dev}.${w.from.term} ↔ ${w.to.dev}.${w.to.term}`
       });
@@ -7589,8 +8896,8 @@ function evaluateFieldWorkOrder(nets){
     {
       id:'wire-ac', title:'4. 주전원(AC) 결선',
       tip:'MCCB 2차 → SMPS L/N (차단기 부하측에서 인출)',
-      done: typesConnected('MCCB','T1','MDR-100','L',nets) || typesConnected('MCCB','T1','MDR-100','L1',nets)
-        || typesConnected('MCCB','T2','MDR-100','N',nets)
+      done: typesConnected('MCCB1P',"L'",'MDR-100','L',nets)
+        && typesConnected('MCCB1P',"N'",'MDR-100','N',nets)
     },
     {
       id:'wire-dc', title:'5. DC 24V 배전',
@@ -7739,6 +9046,7 @@ function validateFieldPracticeRules(nets){
 
 function validate(){
   lastErrors=new Set(); lastIssues=[];
+  reconcileRackState();
   const nets=buildNets();
   lastNets=nets;
   // 기존 와이어에 선번/선경 자동 보강
@@ -7758,6 +9066,7 @@ function validate(){
     if(pols.has('AC-N') && pols.has('PE')) bad.push('AC-N과 PE가 같은 net (PE는 별도여야 함)');
     if(pols.has('DC+') && pols.has('DC-')) bad.push('DC+와 DC-가 같은 net (전원 단락!)');
     if(pols.has('AC-L') && pols.has('AC-N')) bad.push('AC-L과 AC-N이 같은 net (전원 단락!)');
+    if(pols.has('RS485+') && pols.has('RS485-')) bad.push('RS485 A/+와 B/-가 같은 net (통신선 단락/통신 불가)');
     // 양방향 호환성 페어 검사
     const arr=[...pols];
     for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){
@@ -7766,12 +9075,17 @@ function validate(){
       }
     }
     if(bad.length){
-      for(const wid of net.wires)lastErrors.add(wid);
       const memDesc=net.members.map(m=>{
         const lbl=LIB[S.devices[m.dev]?.type]?.label||'';
         return `${lbl}.${m.label||m.term}`;
       }).slice(0,4).join(' ↔ ');
-      const category=bad.some(msg=>msg.includes('단락')||msg.includes('위험')||msg.includes('극성 불일치'))?'danger':'quality';
+      const hasPowerDanger=bad.some(msg=>
+        msg.includes('감전')||msg.includes('전원 단락')||msg.includes('DC+와 DC-')||
+        msg.includes('AC상이')||msg.includes('AC-L과 AC-N')||msg.includes('AC-N과 PE')
+      );
+      const hasSignalFailure=bad.some(msg=>msg.includes('RS485')||msg.includes('RTD')||msg.includes('아날로그'));
+      const category=hasPowerDanger?'danger':hasSignalFailure?'function':'quality';
+      if(category==='danger')for(const wid of net.wires)lastErrors.add(wid);
       pushValidationIssue({category, msg:bad.join(' / '), members:memDesc, wires:[...net.wires]});
     }
   }
@@ -7790,6 +9104,8 @@ function validate(){
   }
   // 3) 미션 JSON(requiredNets / forbiddenConnections) 검사
   validateMissionJson(nets);
+  // 3b) 장비별 전원·공통·통신쌍·채널 완전성 검사
+  validateDeviceFunctionalRules(nets);
   // 4) 품질 경고(중복/무효 와이어 등)
   validateQualityWarnings(nets);
   // 4b) 제어반 배치/도어 배선 규칙
@@ -7810,16 +9126,11 @@ function validate(){
 }
 
 function isConnected(a,b,nets){
-  // a={type,term} or {dev,term}, b 같음
+  // a/b={type,role?,term} 또는 {dev,term}
   function findTerm(spec){
-    if(spec.dev) return spec;
-    // type으로 첫 번째 일치 부품
-    for(const id in S.devices){
-      if(S.devices[id].type===spec.type){
-        return {dev:id,term:spec.term};
-      }
-    }
-    return null;
+    if(spec.dev)return spec;
+    const id=findMissionDeviceId(spec);
+    return id?{dev:id,term:spec.term}:null;
   }
   const A=findTerm(a), B=findTerm(b);
   if(!A||!B)return false;
@@ -7903,6 +9214,61 @@ function renderNetlist(){
   });
 }
 
+function reconcileRackState(){
+  if(typeof window==='undefined'||!window.PLCRackRuntime){
+    S.rackState={racks:[],unattached:[],errors:[],assignedCount:0};
+    return S.rackState;
+  }
+  S.rackState=window.PLCRackRuntime.reconcile(S.devices,LIB);
+  return S.rackState;
+}
+function rackBindingText(binding){
+  if(!binding)return '';
+  const io=[];
+  if(binding.inputs?.length)io.push(`${binding.inputs[0].address} (${binding.inputs.length}DI)`);
+  if(binding.outputs?.length)io.push(`${binding.outputs[0].address} (${binding.outputs.length}DO)`);
+  if(binding.uPrefix)io.push(`${binding.uPrefix}.*`);
+  return `${binding.pRange||''}${io.length?` · ${io.join(' / ')}`:''}`;
+}
+function updateRackMonitor(){
+  const el=$('#rack-monitor');if(!el)return;
+  const state=reconcileRackState();
+  if(!state.racks.length&&!state.unattached.length){el.className='box muted';el.textContent='LS XGB CPU 또는 증설 모듈을 배치하면 슬롯과 XG5000 P 주소가 표시됩니다.';return;}
+  el.className='box';let html='';
+  for(const rack of state.racks){
+    const hostLabel=LIB[S.devices[rack.hostId]?.type]?.label||rack.hostId;
+    html+=`<div class="rack-row"><b>${hostLabel}</b> · ${rack.family} · ${rack.modules.length}/${rack.maxSlots} slots`;
+    if(!rack.modules.length)html+='<div class="muted">CPU 오른쪽 같은 레일에 증설 모듈을 배치하세요.</div>';
+    else html+='<div>'+rack.modules.map(m=>`<span class="rack-module">S${m.slot} ${m.type} ${rackBindingText(m.ioBinding)}</span>`).join('')+'</div>';
+    if(rack.errors.length)html+=`<div class="rack-error">${rack.errors.join('<br>')}</div>`;
+    html+='</div>';
+  }
+  for(const item of state.unattached){
+    const reason=item.reason==='slot-overflow'?'슬롯 초과':item.reason==='slot-duplicate'?'슬롯 중복':item.reason==='rack-not-found'?'지정 CPU 없음/비호환':'호환 CPU 랙 미장착';
+    html+=`<div class="rack-row rack-error">⚠ ${item.type}: ${reason}</div>`;
+  }
+  el.innerHTML=html;
+}
+function runtimeDevicePoweredForValidation(id,def,nets){
+  const rackRequired=!!(def?.rackModule||def?.rack?.role==='module');
+  if(rackRequired&&S.devices[id]?.rackStatus!=='attached')return false;
+  if(def?.mainPower){
+    return netHasAcSource(netForDeviceTerm(nets,id,def.mainPower.acL),'AC-L')&&netHasAcSource(netForDeviceTerm(nets,id,def.mainPower.acN),'AC-N');
+  }
+  if(def?.powerPairs?.length){
+    return def.powerPairs.every(pair=>netHasExternalDcSource(netForDeviceTerm(nets,id,pair.pos),'DC+',id)&&netHasExternalDcSource(netForDeviceTerm(nets,id,pair.neg),'DC-',id));
+  }
+  return true;
+}
+function evaluateAdvancedRuntimes(nets,{validation=false}={}){
+  const powered=(id,def)=>validation?runtimeDevicePoweredForValidation(id,def,nets):simDevicePowered(id,def);
+  const analogApi=window.PLCTrainerAnalog||window.PLCAnalogRuntime;
+  const modbusApi=window.PLCTrainerModbus||window.PLCModbusRuntime;
+  const analog=analogApi?analogApi.evaluate({devices:S.devices,library:LIB,nets,netFor:simNetFor,powered}):new Map();
+  const modbus=modbusApi?modbusApi.evaluate({devices:S.devices,library:LIB,nets,netFor:simNetFor,powered}):{buses:[],devices:new Map(),portIssues:[]};
+  return {analog,modbus};
+}
+
 function renderStats(){
   const el=$('#stats');
   const dn=Object.keys(S.devices).length;
@@ -7942,26 +9308,75 @@ function updateSimMonitor(){
     return;
   }
   let html = '';
-  // Timers
+  const powerRows=[];
+  for(const [id,on] of SIM.devicePower||[]){
+    const label=LIB[S.devices[id]?.type]?.label||id;
+    powerRows.push(`<span style="color:${on?'#8f8':'#f88'}">${label}:${on?'ON':'OFF'}</span>`);
+  }
+  if(powerRows.length)html+=`<div style="color:#fc8">⚡ 장비전원</div><div>${powerRows.slice(0,8).join(' · ')}${powerRows.length>8?' …':''}</div>`;
+
+  if(SIM.commState?.size){
+    const rows=[];
+    for(const [id,st] of SIM.commState){
+      const label=LIB[S.devices[id]?.type]?.label||id;
+      rows.push(`<span style="color:${st.ready?'#8f8':st.powered?'#fc8':'#f88'}">${label}:${st.ready?'READY':st.powered?'배선대기':'전원OFF'}</span>`);
+    }
+    html+=`<div style="color:#b9f;margin-top:3px">↔ RS-485</div><div>${rows.slice(0,8).join(' · ')}${rows.length>8?' …':''}</div>`;
+  }
+
+  if(SIM.modbusState?.buses?.length){
+    html+='<div style="color:#c8a2ff;margin-top:3px">🛰 Modbus RTU</div>';
+    for(const bus of SIM.modbusState.buses.slice(0,4))html+=`<div style="color:${bus.ready?'#8f8':'#fc8'}">${bus.ready?'READY':bus.reason} · ${bus.members.join(' ↔ ')} · IDs[${(bus.slaveIds||bus.slaves?.map(s=>s.address)||[]).join(',')}]</div>`;
+    for(const [id,st] of [...(SIM.modbusState.devices||new Map())].slice(0,4)){
+      const eng=st.registers?.engineering;
+      if(eng&&Object.keys(eng).length)html+=`<div class="runtime-value">${missionDeviceDisplayName(id)}: T=${eng.temperatureC}°C RH=${eng.humidityRH??eng.humidityRh}% · IR1=${st.registers.inputRegisters?.[1]} IR2=${st.registers.inputRegisters?.[2]}</div>`;
+    }
+  }
+
+  if(SIM.signalState?.size){
+    const all=[...SIM.signalState.entries()].filter(([,st])=>st.quality!=='unused');
+    const ready=all.filter(([,st])=>st.ready);
+    const pending=all.filter(([,st])=>!st.ready&&st.wired);
+    html+=`<div style="color:#9df;margin-top:3px">📈 아날로그/온도 채널</div>`;
+    html+=`<div>READY ${ready.length}/${all.length}${pending.length?` · 전원대기 ${pending.length}`:''}</div>`;
+    for(const [key,st] of [...(SIM.analogValueState||new Map())].filter(([,v])=>v.quality!=='unused').slice(0,6)){
+      const signal=st.signalValue==null?st.quality:`${Number(st.signalValue).toFixed(3)}${st.signalUnit||''}`;
+      const engineering=st.engineeringValue==null?'':` → ${Number(st.engineeringValue).toFixed(2)}${st.engineeringUnit||''}`;
+      const sensor=st.temperatureC==null?'':` · ${Number(st.temperatureC).toFixed(1)}°C`;
+      html+=`<div class="runtime-value" style="color:${st.ready?'#9df':'#f99'}">${key}: ${signal}${engineering}${sensor} · RAW ${st.rawValue??'-'} · ${st.quality}</div>`;
+    }
+  }
+
+  const ioOn=[...(SIM.ioState||new Map())].filter(([,on])=>on).map(([k])=>k);
+  if(ioOn.length)html+=`<div style="color:#8f8;margin-top:3px">● I/O ON: ${ioOn.slice(0,8).join(', ')}${ioOn.length>8?' …':''}</div>`;
+  if(SIM.forcedOutputs?.size)html+=`<div style="color:#fd6">⚙ 강제출력: ${[...SIM.forcedOutputs].slice(0,8).join(', ')}</div>`;
+  if(SIM.openSwitches?.size)html+=`<div style="color:#f88">⛔ OPEN: ${[...SIM.openSwitches].map(id=>LIB[S.devices[id]?.type]?.label||id).join(', ')}</div>`;
+  if(SIM.tripped?.size)html+=`<div style="color:#f66">🚨 TRIP: ${[...SIM.tripped].map(id=>missionDeviceDisplayName(id)).join(', ')}</div>`;
+  if(SIM.interlockConflicts?.size)html+=`<div style="color:#fa6">🔒 동시여자 차단: ${[...SIM.interlockConflicts].join(', ')}</div>`;
+  if(SIM.driveState?.size){
+    const rows=[...SIM.driveState].map(([id,st])=>`${missionDeviceDisplayName(id)}:${st.fault?'FAULT':`${String(st.direction||'stop').toUpperCase()} ${Number(st.frequencyHz||0).toFixed(1)}Hz ${st.speedRpm||0}rpm ${Number(st.currentA||0).toFixed(2)}A`}`);
+    html+=`<div style="color:#9cf;margin-top:3px">🔄 인버터: ${rows.join(' · ')}</div>`;
+  }
+  if(SIM.motorState?.size){
+    const rows=[...SIM.motorState].map(([id,st])=>`${missionDeviceDisplayName(id)}:${st.running?`${String(st.direction).toUpperCase()} ${Number(st.frequencyHz||0).toFixed(1)}Hz ${st.speedRpm||0}rpm`:'STOP'}`);
+    html+=`<div style="color:#8df">⚙ 모터: ${rows.join(' · ')}</div>`;
+  }
+
   if(SIM.timerStarted && SIM.timerStarted.size){
-    html += '<div style="color:#fc8">⏱ 타이머</div>';
+    html += '<div style="color:#fc8;margin-top:3px">⏱ 타이머</div>';
     for(const [id, start] of SIM.timerStarted){
       const elapsed = ((Date.now()-start)/1000).toFixed(1);
       const preset = (SIM.timerSet/1000).toFixed(0);
       html += `<div>${id}: ${elapsed}s / ${preset}s</div>`;
     }
   }
-  // Cylinders
   if(SIM.cylState && SIM.cylState.size){
-    html += '<div style="color:#8f8;margin-top:2px">🔩 실린더</div>';
-    for(const [id, st] of SIM.cylState){
-      html += `<div>${id}: ${st.toUpperCase()}</div>`;
-    }
+    html += '<div style="color:#8f8;margin-top:3px">🔩 실린더</div>';
+    for(const [id, st] of SIM.cylState)html += `<div>${id}: ${st.toUpperCase()}</div>`;
   }
-  // Live terms sample (first few)
   if(SIM.liveTerms && SIM.liveTerms.size){
     const sample = [...SIM.liveTerms].slice(0,6).join(', ');
-    html += `<div style="color:#8cf;margin-top:2px">⚡ LIVE: ${sample}${SIM.liveTerms.size>6?'...':''}</div>`;
+    html += `<div style="color:#8cf;margin-top:3px">⚡ LIVE: ${sample}${SIM.liveTerms.size>6?'...':''}</div>`;
   }
   el.innerHTML = html || '<span style="color:#888">동작 중...</span>';
 }
@@ -7970,12 +9385,12 @@ function generateTrainerReport(){
   const goal = S.goal ? GOALS.find(g=>g.id===S.goal) : null;
   const devices = Object.entries(S.devices).map(([id,d])=>{
     const def=LIB[d.type]||{};
-    return {id, type:d.type, label:def.label||d.type, x:d.x|0, y:d.y|0 };
+    return {id, type:d.type, role:d.role||null, label:d.instanceLabel||def.label||d.type, baseLabel:def.label||d.type, x:d.x|0, y:d.y|0 };
   });
   const wires = (S.wires||[]).map(w=>{
     const fd = S.devices[w.from.dev]; const td = S.devices[w.to.dev];
-    const fl = (fd && LIB[fd.type] && LIB[fd.type].label) || w.from.dev;
-    const tl = (td && LIB[td.type] && LIB[td.type].label) || w.to.dev;
+    const fl = fd ? (fd.instanceLabel||LIB[fd.type]?.label||w.from.dev) : w.from.dev;
+    const tl = td ? (td.instanceLabel||LIB[td.type]?.label||w.to.dev) : w.to.dev;
     return {
       tag: w.tag||'',
       gauge: w.gauge||'',
@@ -8024,11 +9439,15 @@ function generateTrainerReport(){
       errorCount: (typeof lastErrors !== 'undefined' && lastErrors) ? lastErrors.size : 0,
       issues: (typeof lastIssues !== 'undefined' && lastIssues) ? lastIssues.slice(0,10) : []
     },
+    rack: structuredClone(S.rackState||{racks:[],unattached:[],errors:[]}),
     simulation: {
       on: !!(SIM && SIM.on),
       liveTerms: (SIM && SIM.liveTerms) ? [...SIM.liveTerms] : [],
       cyl: (SIM && SIM.cylState) ? Object.fromEntries(SIM.cylState) : {},
-      timers: (SIM && SIM.timerStarted) ? Object.fromEntries(SIM.timerStarted) : {}
+      timers: (SIM && SIM.timerStarted) ? Object.fromEntries(SIM.timerStarted) : {},
+      analog: (SIM && SIM.analogValueState) ? Object.fromEntries(SIM.analogValueState) : {},
+      modbus: (SIM && SIM.modbusState) ? {buses:SIM.modbusState.buses||[],devices:Object.fromEntries(SIM.modbusState.devices||[])} : {},
+      drives: (SIM && SIM.driveState) ? Object.fromEntries(SIM.driveState) : {}
     },
     calibration: {
       types: (S.terminalCalibration) ? Object.keys(S.terminalCalibration).length : 0,
@@ -8088,31 +9507,41 @@ function exportTrainerReport(){
 
 // Hook live updates (called from simulate / validate / wire ops)
 function refreshTrainerUI(){
+  try{ updateRackMonitor(); }catch(e){}
   try{ updateMissionCoach(); }catch(e){}
   try{ updateSimMonitor(); }catch(e){}
   try{ updateFieldWorkOrderUI(); }catch(e){}
   try{ updateFieldQualityUI(); }catch(e){}
+  try{ (window.PLCTrainerAutomationLabs||window.PLCTrainerPalletizer3D)?.renderActive?.(); }catch(e){}
 }
 
-function autoPlaceGoalDevices(types){
+function autoPlaceGoalDevices(items){
+  const specs=(items||[]).map(normalizeMissionDeviceSpec).filter(spec=>spec?.type);
   const placed=[];
+  const create=(spec,x,y)=>{
+    const existing=findMissionDeviceId(spec);
+    if(existing){applyMissionDeviceMetadata(existing,spec);return null;}
+    const id=addDevice(spec.type,x,y,missionDeviceExtra(spec));
+    if(id)applyMissionDeviceMetadata(id,spec);
+    return id;
+  };
   if(isPanelConstrained()){
     ensureDefaultPanelLayout();
-    for(const t of types){
+    for(const spec of specs){
+      const t=spec.type;
       const def=LIB[t];
       if(!def||def.hidden)continue;
-      // 이미 같은 타입이 있으면 스킵
-      if(Object.values(S.devices).some(d=>d.type===t))continue;
+      if(findMissionDeviceId(spec))continue;
       const mount=ensureDeviceMount(t,def)||{tags:['free']};
       let id=null;
       if((mount.tags||[]).includes('door') && S.doorPanel){
         const dp=S.doorPanel;
         for(let sy=dp.y+20; sy<dp.y+dp.h-def.h && !id; sy+=40){
           for(let sx=dp.x+20; sx<dp.x+dp.w-def.w && !id; sx+=30){
-            const p=getPlacementOnAllowedRail(t,{x:sx+def.w/2,y:sy+def.h/2});
-            if(p.ok){
-              id=addDevice(t,p.x,p.y);
-              if(id){S.devices[id].railId=p.railId;S.devices[id].slotX=p.slotX;}
+            const pos=getPlacementOnAllowedRail(t,{x:sx+def.w/2,y:sy+def.h/2});
+            if(pos.ok){
+              id=create(spec,pos.x,pos.y);
+              if(id){S.devices[id].railId=pos.railId;S.devices[id].slotX=pos.slotX;}
             }
           }
         }
@@ -8122,16 +9551,15 @@ function autoPlaceGoalDevices(types){
           if(id)break;
           for(let sx=rail.x; sx<=rail.x+rail.w-def.w; sx+=20){
             const mid={x:sx+def.w/2,y:rail.y+(rail.h||32)/2};
-            const p=getPlacementOnAllowedRail(t,mid);
-            if(p.ok){
-              id=addDevice(t,p.x,p.y);
-              if(id){S.devices[id].railId=p.railId;S.devices[id].slotX=p.slotX;break;}
+            const pos=getPlacementOnAllowedRail(t,mid);
+            if(pos.ok){
+              id=create(spec,pos.x,pos.y);
+              if(id){S.devices[id].railId=pos.railId;S.devices[id].slotX=pos.slotX;break;}
             }
           }
         }
       }else{
-        const id2=addDevice(t,200+placed.length*40,980);
-        id=id2;
+        id=create(spec,200+placed.length*40,980);
       }
       if(id)placed.push(id);
     }
@@ -8143,23 +9571,20 @@ function autoPlaceGoalDevices(types){
   let minX=80, maxY=0;
   const existing=Object.values(S.devices);
   if(existing.length){
-    minX=Math.max(60, Math.min(...existing.map(d=>d.x)));
+    minX=Math.max(60,Math.min(...existing.map(d=>d.x)));
     maxY=Math.max(...existing.map(d=>{
       const wh=deviceWH(d);
       return d.y+wh.h;
     }));
   }
   let x=minX, y=maxY+80, rowH=0;
-  for(const t of types){
+  for(const spec of specs){
+    const t=spec.type;
     const def=LIB[t];
-    if(!def||def.hidden)continue;
-    const w=def.w, h=def.h;
-    if(x+w>rowLimit && rowH>0){
-      x=minX;
-      y+=rowH+margin;
-      rowH=0;
-    }
-    const id=addDevice(t,x,y);
+    if(!def||def.hidden||findMissionDeviceId(spec))continue;
+    const w=def.w,h=def.h;
+    if(x+w>rowLimit && rowH>0){x=minX;y+=rowH+margin;rowH=0;}
+    const id=create(spec,x,y);
     if(id)placed.push(id);
     x+=w+margin;
     rowH=Math.max(rowH,h);
@@ -8204,7 +9629,11 @@ function renderGoals(){
       if(undoneCount>0){
         stepHtml+=`<button class="auto-wire-btn" data-goal="${g.id}" style="margin-top:6px;width:100%;padding:6px;background:#2a4060;color:#fff;border:1px solid #5a8;border-radius:3px;cursor:pointer;font-size:11px">🔧 남은 ${undoneCount}개 자동 결선</button>`;
       }
-      if(allDone)stepHtml+=`<div class="goal-step done" style="margin-top:4px"><b>🎉 미션 클리어!</b></div>`;
+      if(allDone){
+        const blockers=lastIssues.filter(i=>i.category==='danger'||i.category==='function');
+        if(blockers.length===0)stepHtml+=`<div class="goal-step done" style="margin-top:4px"><b>🎉 미션 클리어!</b></div>`;
+        else stepHtml+=`<div class="goal-step next" style="margin-top:4px"><b>단계 연결 완료 · 안전/기능 오류 ${blockers.length}건을 먼저 해결하세요.</b></div>`;
+      }
     }
     div.innerHTML=`<h4>${g.title}</h4><div class="muted">${g.desc}</div>${stepHtml}`;
     div.addEventListener('click',e=>{
@@ -8215,11 +9644,12 @@ function renderGoals(){
       }
       S.goal=(S.goal===g.id?null:g.id);
       if(S.goal && !div.dataset.placed){
-        const needed=GOALS.find(x=>x.id===S.goal).needed;
-        const have=new Set(Object.values(S.devices).map(d=>d.type));
-        const toAdd=needed.filter(t=>!have.has(t));
+        const activeGoal=GOALS.find(x=>x.id===S.goal);
+        const needed=missionNeededSpecs(activeGoal);
+        const toAdd=needed.filter(spec=>!findMissionDeviceId(spec));
         if(toAdd.length){
-          if(confirm(`이 미션에 필요한 부품 ${toAdd.length}개를 자동 배치할까요?\n${toAdd.join(', ')}`)){
+          const names=toAdd.map(missionDeviceSpecLabel);
+          if(confirm(`이 미션에 필요한 부품 ${toAdd.length}개를 자동 배치할까요?\n${names.join(', ')}`)){
             snapshot();
             autoPlaceGoalDevices(toAdd);
           }
@@ -8260,12 +9690,12 @@ function autoWireGoal(goalId){
   let added=0;
   for(const c of goal.checks){
     if(c._done)continue;
-    // 부품 인스턴스 찾기 (없으면 추가)
+    // 역할까지 일치하는 부품 인스턴스 찾기 (없으면 생성)
     function ensure(spec){
-      for(const id in S.devices){
-        if(S.devices[id].type===spec.type)return id;
-      }
-      return addDevice(spec.type);
+      const found=findMissionDeviceId(spec);
+      if(found)return applyMissionDeviceMetadata(found,spec);
+      const id=addDevice(spec.type,undefined,undefined,missionDeviceExtra(spec));
+      return applyMissionDeviceMetadata(id,spec);
     }
     const fromId=ensure(c.from), toId=ensure(c.to);
     // 이미 같은 net이면 스킵
@@ -8290,7 +9720,8 @@ function autoWireGoal(goalId){
     added++;
   }
   render();
-  status(`🔧 자동 결선 완료: ${added}개 와이어 추가됨`);
+  validate();
+  status(`🔧 자동 결선 완료: ${added}개 와이어 추가됨 · 검증 결과를 갱신했습니다.`);
 }
 
 /* ===================================================================
@@ -8311,101 +9742,373 @@ const SIM = {
   on: false,
   pressed: new Set(),       // 현재 눌려있는 PB의 dev id
   toggled: new Set(),       // 토글 상태 (셀렉터, 리미트)
+  openSwitches: new Set(),  // MCCB/퓨즈 개방 상태
+  forcedOutputs: new Set(), // PLC/증설 출력 수동 강제 (dev.term)
   selPos: {},               // 셀렉터 위치 dev -> 'A'|'M'
   energized: new Set(),     // 활성 net root id 집합
   liveTerms: new Set(),     // 활성 단자 (dev.term)
+  ioState: new Map(),       // 디지털 I/O ON 상태 (dev.term -> bool)
+  devicePower: new Map(),   // 장비별 유효 전원 상태
+  commState: new Map(),     // 장비별 RS-485 물리 연결/전원 상태
+  signalState: new Map(),   // 아날로그/RTD/열전대 채널 준비 상태
+  analogValueState: new Map(), // v2.4 실제 신호값·RAW·공학값
+  modbusState: {buses:[],devices:new Map(),portIssues:[]}, // Modbus RTU 버스/레지스터 상태
+  lastScanAt: 0,
   coilState: new Map(),     // 부품별 코일 활성 여부 (dev id -> bool)
   timerStarted: new Map(),  // 타이머 시작 시각 (dev id -> ts)
   timerSet: 3000,           // 기본 3초
   cylState: new Map(),      // 실린더 위치 ('mid'|'extend'|'retract')
+  tripped: new Set(),       // EOCR 등 보호계전기 트립 상태
+  interlockConflicts: new Set(), // 동시 여자 차단된 인터록 그룹
+  driveState: new Map(),    // 인버터 운전 상태
+  motorState: new Map(),    // 모터 운전/방향 상태
 };
+
+function simNetFor(nets,dev,term){
+  const key=dev+'.'+term;
+  return nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===key))||null;
+}
+function simNetPols(net){
+  return new Set((net?.members||[]).map(m=>m.pol).filter(Boolean));
+}
+function setSimNetFlag(nets,dev,term,flag){
+  const net=simNetFor(nets,dev,term);
+  if(net)net[flag]=true;
+  return net;
+}
+function markSimulationSources(nets){
+  SIM.energized=new Set();
+  SIM.liveTerms=new Set();
+  SIM.devicePower=new Map();
+  for(const net of nets){
+    net._acL=false; net._acN=false; net._dcPos=false; net._dcNeg=false;
+    net._pos=false; net._neg=false;
+  }
+
+  // 차단기 1차측은 제어반 외부에서 들어오는 전원 인입점으로 취급한다.
+  for(const [id,dev] of Object.entries(S.devices)){
+    const type=dev.type;
+    if(type==='MCCB1P'){
+      setSimNetFlag(nets,id,'L','_acL');
+      setSimNetFlag(nets,id,'N','_acN');
+    }else if(type==='MCCB'){
+      for(const t of ['L1','L2','L3'])setSimNetFlag(nets,id,t,'_acL');
+    }
+  }
+
+  // AC 입력이 유효한 전원공급장치만 DC 출력을 활성화한다.
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type];
+    const ps=def?.powerSupply;
+    if(!ps)continue;
+    const ln=simNetFor(nets,id,ps.acL);
+    const nn=simNetFor(nets,id,ps.acN);
+    const powered=!!(ln&&nn&&ln!==nn&&ln._acL&&nn._acN);
+    SIM.devicePower.set(id,powered);
+    if(powered){
+      for(const t of ps.dcPos||[])setSimNetFlag(nets,id,t,'_dcPos');
+      for(const t of ps.dcNeg||[])setSimNetFlag(nets,id,t,'_dcNeg');
+    }
+  }
+
+  // 인버터 내부 24V는 주회로 두 상 이상이 공급될 때만 활성화한다.
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type];
+    if(!def?.label?.includes('iG5A'))continue;
+    const phaseNets=['R','S','T'].map(t=>simNetFor(nets,id,t)).filter(Boolean);
+    const livePhases=new Set(phaseNets.filter(n=>n._acL).map(n=>n.id));
+    const powered=livePhases.size>=2;
+    SIM.devicePower.set(id,powered);
+    if(powered){
+      setSimNetFlag(nets,id,'24','_dcPos');
+      setSimNetFlag(nets,id,'CM','_dcNeg');
+      setSimNetFlag(nets,id,'CM2','_dcNeg');
+    }
+  }
+
+  // AC 본체전원 또는 DC 보조전원이 필요한 장비의 전원상태 계산.
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type]; if(!def)continue;
+    if(def.mainPower){
+      const l=simNetFor(nets,id,def.mainPower.acL);
+      const n=simNetFor(nets,id,def.mainPower.acN);
+      SIM.devicePower.set(id,!!(l&&n&&l!==n&&l._acL&&n._acN));
+    }
+    if(Array.isArray(def.powerPairs)&&def.powerPairs.length){
+      const ok=def.powerPairs.every(pair=>{
+        const p=simNetFor(nets,id,pair.pos);
+        const n=simNetFor(nets,id,pair.neg);
+        return !!(p&&n&&p!==n&&p._dcPos&&n._dcNeg);
+      });
+      SIM.devicePower.set(id,ok);
+    }
+  }
+
+  for(const net of nets){
+    net._pos=!!net._dcPos;
+    net._neg=!!net._dcNeg;
+    if(net._acL||net._acN||net._dcPos||net._dcNeg){
+      SIM.energized.add(net.id);
+      for(const m of net.members)SIM.liveTerms.add(m.dev+'.'+m.term);
+    }
+  }
+  return nets;
+}
+function rackHostPresentFor(def){
+  if(def?.rack?.role!=='module')return false;
+  const family=def.rack.family;
+  return Object.values(S.devices||{}).some(dev=>{
+    const host=LIB[dev.type]?.rack;
+    return host?.role==='host'&&(!family||host.family===family);
+  });
+}
+function simDeviceRequiresPower(def){
+  return !!(def?.mainPower || (def?.powerPairs&&def.powerPairs.length));
+}
+function simDevicePowered(id,def){
+  // 랙 장착과 외부전원은 서로 다른 조건이다. 외부 24V 단자가 있는 모듈은
+  // CPU에 장착되어 있어도 +24V/0V가 실제로 공급되어야 값이 유효하다.
+  const dev=S.devices[id]||{};
+  const rackKnown=(def?.rackModule||def?.rack?.role==='module')&&Object.prototype.hasOwnProperty.call(dev,'rackStatus');
+  if(rackKnown&&dev.rackStatus!=='attached')return false;
+  if(simDeviceRequiresPower(def))return SIM.devicePower.get(id)===true;
+  return true;
+}
+function updateSimIoState(nets){
+  SIM.ioState=new Map();
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type]; if(!def)continue;
+    const powered=simDevicePowered(id,def);
+    for(const group of def.inputGroups||[]){
+      const commonNets=(group.commons||[]).map(t=>simNetFor(nets,id,t)).filter(Boolean);
+      const commonAtNeg=commonNets.some(n=>n._dcNeg);
+      const commonAtPos=commonNets.some(n=>n._dcPos);
+      for(const term of group.inputs||[]){
+        const n=simNetFor(nets,id,term);
+        const on=!!(powered&&n&&((commonAtNeg&&n._dcPos)||(commonAtPos&&n._dcNeg)));
+        SIM.ioState.set(id+'.'+term,on);
+      }
+    }
+    for(const group of def.outputGroups||[]){
+      for(const term of group.outputs||[]){
+        SIM.ioState.set(id+'.'+term,!!(powered&&SIM.forcedOutputs.has(id+'.'+term)));
+      }
+    }
+  }
+}
+function externalMemberMatches(net,excludeDev,predicate){
+  return !!net?.members?.some(m=>m.dev!==excludeDev&&predicate(m,LIB[S.devices[m.dev]?.type]||{}));
+}
+function updateSimCommunicationState(nets){
+  SIM.commState=new Map();
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type]; if(!def?.rs485Pairs?.length)continue;
+    const powered=simDevicePowered(id,def);
+    const ports=[];
+    for(const [plus,minus] of def.rs485Pairs){
+      const pn=simNetFor(nets,id,plus), nn=simNetFor(nets,id,minus);
+      const plusPeer=externalMemberMatches(pn,id,(m,d)=>d.terminals?.find(t=>t.id===m.term)?.pol==='RS485+');
+      const minusPeer=externalMemberMatches(nn,id,(m,d)=>d.terminals?.find(t=>t.id===m.term)?.pol==='RS485-');
+      const wired=!!(pn&&nn&&pn.id!==nn.id&&plusPeer&&minusPeer);
+      ports.push({plus,minus,powered,wired,ready:powered&&wired});
+    }
+    SIM.commState.set(id,{powered,ports,ready:ports.some(p=>p.ready)});
+  }
+}
+function analogRoleForMember(m){
+  const def=LIB[S.devices[m.dev]?.type]; if(!def)return null;
+  for(const ch of def.analogChannels||[]){
+    if(m.term===ch.pos)return {role:'+',direction:ch.direction,channel:ch.channel,device:m.dev};
+    if(m.term===ch.neg)return {role:'-',direction:ch.direction,channel:ch.channel,device:m.dev};
+  }
+  if(def.sensorKind==='THERMOCOUPLE'&&m.term==='+')return {role:'+',direction:'sensor',channel:0,device:m.dev};
+  if(def.sensorKind==='THERMOCOUPLE'&&m.term==='-')return {role:'-',direction:'sensor',channel:0,device:m.dev};
+  return null;
+}
+function updateSimSignalState(nets){
+  SIM.signalState=new Map();
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type]; if(!def)continue;
+    const powered=simDevicePowered(id,def);
+    for(const ch of def.analogChannels||[]){
+      const pn=simNetFor(nets,id,ch.pos), nn=simNetFor(nets,id,ch.neg);
+      const posPeers=(pn?.members||[]).map(analogRoleForMember).filter(r=>r&&r.device!==id&&r.role==='+');
+      const negPeers=(nn?.members||[]).map(analogRoleForMember).filter(r=>r&&r.device!==id&&r.role==='-');
+      const counterpart=ch.direction==='output'
+        ? posPeers.some(r=>r.direction==='input')&&negPeers.some(r=>r.direction==='input')
+        : posPeers.some(r=>r.direction==='output'||r.direction==='sensor')&&negPeers.some(r=>r.direction==='output'||r.direction==='sensor');
+      const wired=!!(pn&&nn&&pn.id!==nn.id&&counterpart);
+      SIM.signalState.set(`${id}.CH${ch.channel}`,{kind:'analog',powered,wired,ready:powered&&wired,direction:ch.direction});
+    }
+    for(const ch of def.rtdChannels||[]){
+      const an=simNetFor(nets,id,ch.A), bn=simNetFor(nets,id,ch.B), b2n=simNetFor(nets,id,ch.b);
+      const aPeer=externalMemberMatches(an,id,(m,d)=>d.sensorKind==='RTD'&&m.term==='A');
+      const bPeer=externalMemberMatches(bn,id,(m,d)=>d.sensorKind==='RTD'&&(m.term==='B'||m.term==='b'));
+      const b2Peer=externalMemberMatches(b2n,id,(m,d)=>d.sensorKind==='RTD'&&(m.term==='B'||m.term==='b'));
+      const wired=!!(an&&bn&&b2n&&an.id!==bn.id&&an.id!==b2n.id&&aPeer&&bPeer&&b2Peer);
+      SIM.signalState.set(`${id}.CH${ch.channel}`,{kind:'rtd',powered,wired,ready:powered&&wired,direction:'input'});
+    }
+  }
+}
+function outputGroupForTerminal(def,termId){
+  return (def?.outputGroups||[]).find(g=>(g.outputs||[]).includes(termId))||null;
+}
+
+function simCoilPowered(nets,id,pos,neg){
+  const a=simNetFor(nets,id,pos), b=simNetFor(nets,id,neg);
+  return !!(a&&b&&a!==b&&a._pos&&b._neg);
+}
+function computeCoilCandidates(nets){
+  const next=new Map();
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type]; if(!def)continue;
+    if(def.controlsContacts){
+      let on=false;
+      for(const cc of def.controlsContacts||[]){
+        const [pos,neg]=cc.coil||[];
+        if(pos&&neg)on=on||simCoilPowered(nets,id,pos,neg);
+      }
+      next.set(id,on);
+    }else if(def.label?.includes('타이머')||def.label?.includes('플리커')){
+      next.set(id,simCoilPowered(nets,id,'2','7'));
+    }else if(def.label?.includes('MY2N')){
+      next.set(id,simCoilPowered(nets,id,'13','14'));
+    }
+  }
+  return next;
+}
+function resolveInterlockedCoils(candidate,previous=new Map()){
+  const resolved=new Map(candidate);
+  const groups=new Map();
+  for(const [id,dev] of Object.entries(S.devices)){
+    if(!dev.interlockGroup||!resolved.has(id))continue;
+    if(!groups.has(dev.interlockGroup))groups.set(dev.interlockGroup,[]);
+    groups.get(dev.interlockGroup).push(id);
+  }
+  SIM.interlockConflicts=new Set();
+  for(const [group,ids] of groups){
+    const active=ids.filter(id=>resolved.get(id)===true);
+    if(active.length<=1)continue;
+    SIM.interlockConflicts.add(group);
+    const held=active.filter(id=>previous.get(id)===true);
+    if(held.length===1){
+      for(const id of active)resolved.set(id,id===held[0]);
+    }else{
+      for(const id of active)resolved.set(id,false);
+    }
+  }
+  return resolved;
+}
+function updateSimTimerState(previous,next){
+  for(const [id,on] of next){
+    const def=LIB[S.devices[id]?.type];
+    if(!(def?.label?.includes('타이머')||def?.label?.includes('플리커')))continue;
+    if(on&&!previous.get(id)&&!SIM.timerStarted.has(id))SIM.timerStarted.set(id,Date.now());
+    if(!on)SIM.timerStarted.delete(id);
+  }
+}
+function updateAdvancedAnalogState(nets){
+  if(!(window.PLCTrainerAnalog||window.PLCAnalogRuntime)){SIM.analogValueState=new Map();return;}
+  const runtime=evaluateAdvancedRuntimes(nets);
+  SIM.analogValueState=runtime.analog;
+  for(const [key,value] of SIM.analogValueState){
+    const base=SIM.signalState.get(key)||{};
+    SIM.signalState.set(key,{...base,...value});
+  }
+}
+function updateModbusRuntimeState(nets){
+  if(!(window.PLCTrainerModbus||window.PLCModbusRuntime)){SIM.modbusState={buses:[],devices:new Map(),portIssues:[]};return;}
+  SIM.modbusState=evaluateAdvancedRuntimes(nets).modbus;
+}
+function updateSimDriveState(nets){
+  const previous=SIM.driveState||new Map();
+  const next=new Map();
+  const now=Date.now();
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type];
+    if(!(dev.type==='IG5A'||def?.label?.includes('iG5A')))continue;
+    const powered=SIM.devicePower.get(id)===true;
+    const cm=simNetFor(nets,id,'CM');
+    const p1=simNetFor(nets,id,'P1');
+    const p2=simNetFor(nets,id,'P2');
+    const forward=!!(powered&&cm&&p1&&cm.id===p1.id);
+    const reverse=!!(powered&&cm&&p2&&cm.id===p2.id);
+    const conflict=forward&&reverse;
+    const command={powered,forward,reverse,conflict,running:powered&&!conflict&&(forward||reverse),direction:conflict?'conflict':forward?'forward':reverse?'reverse':'stop'};
+    const driveRuntime=(typeof window!=='undefined'?(window.PLCTrainerDrive||window.PLCDriveRuntime):(globalThis.PLCTrainerDrive||globalThis.PLCDriveRuntime));
+    const driveParams={...(dev.runtime?.drive||{}),...(dev.driveConfig||{}),targetHz:dev.driveConfig?.commandHz??dev.runtime?.drive?.targetHz};
+    const prev=previous.get(id)||{currentHz:0,direction:'stop',lastAtMs:now-200};
+    next.set(id,driveRuntime?driveRuntime.step(prev,command,driveParams,now):{...command,currentHz:command.running?Number(driveParams.targetHz??60):0,frequencyHz:command.running?Number(driveParams.targetHz??60):0,speedRpm:0});
+  }
+  SIM.driveState=next;
+}
+function updateSimMotorState(nets){
+  SIM.motorState=new Map();
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type];
+    if(!def?.motorPhases?.length)continue;
+    const phaseNets=def.motorPhases.map(term=>simNetFor(nets,id,term));
+    const direct=phaseNets.every(Boolean)
+      && new Set(phaseNets.map(n=>n.id)).size===phaseNets.length
+      && phaseNets.every(n=>n._acL);
+    let state={running:direct,direction:direct?'forward':'stop',source:direct?'line':'none'};
+    if(!direct){
+      for(const [driveId,drive] of SIM.driveState||[]){
+        const driveNets=['U','V','W'].map(term=>simNetFor(nets,driveId,term));
+        if(driveNets.every(Boolean)&&phaseNets.every(Boolean)
+          && driveNets.every((net,i)=>net.id===phaseNets[i].id)){
+          state={running:drive.running,direction:drive.direction,source:driveId,conflict:drive.conflict,frequencyHz:drive.frequencyHz||0,speedRpm:drive.speedRpm||0,currentA:drive.currentA||0,fault:drive.fault||null};
+          break;
+        }
+      }
+    }
+    SIM.motorState.set(id,state);
+  }
+}
+function updateSimCylinderState(nets){
+  for(const [id,dev] of Object.entries(S.devices)){
+    const def=LIB[dev.type]; if(!def?.polarityCritical||!def.label?.includes('실린더'))continue;
+    let aOn=false,bOn=false;
+    for(const [pos,neg] of def.polarityCritical){
+      const on=simCoilPowered(nets,id,pos,neg);
+      if(pos.startsWith('A')||pos==='SOL+'||pos==='A1')aOn=aOn||on;
+      if(pos.startsWith('B')||pos==='B1')bOn=bOn||on;
+    }
+    if(aOn)SIM.cylState.set(id,'extend');
+    else if(bOn)SIM.cylState.set(id,'retract');
+    else if(def.label.includes('단동'))SIM.cylState.set(id,'retract');
+  }
+}
 
 function simulate(){
   if(!SIM.on)return;
-  const dyn = computeDynamicState();
-  // dynamic state(누른 PB / 코일 활성 등)에 따라 net 다시 계산
-  const nets = buildNetsWithSim(dyn);
-  // 각 net이 활성인지 판정
-  SIM.energized = new Set();
-  SIM.liveTerms = new Set();
-  for(const net of nets){
-    let hasPosSrc=false, hasNegSrc=false;
-    for(const m of net.members){
-      // 전원 소스: SMPS의 V+/V-, 인버터 24, MCCB 통과한 AC
-      const def=LIB[S.devices[m.dev]?.type]; if(!def)continue;
-      if(def.cat==='power' && (m.term==='V+1'||m.term==='V+2')) hasPosSrc=true;
-      if(def.cat==='power' && (m.term==='V-1'||m.term==='V-2')) hasNegSrc=true;
-      // 인버터 내부 24V
-      if(def.label?.includes('iG5A') && m.term==='24') hasPosSrc=true;
-      if(def.label?.includes('iG5A') && m.term==='CM') hasNegSrc=true;
-    }
-    if(hasPosSrc) net._pos=true;
-    if(hasNegSrc) net._neg=true;
-    // 양 극성 모두 있으면 단락 net (사실상 활성), 한쪽만 있으면 그 극성으로 활성화
-    if(hasPosSrc || hasNegSrc){
-      SIM.energized.add(net.id);
-      for(const m of net.members) SIM.liveTerms.add(m.dev+'.'+m.term);
-    }
-  }
-  // 코일 활성 상태 갱신 (다음 시뮬 사이클에 접점 반영)
-  SIM.coilState = new Map();
-  for(const id in S.devices){
-    const def=LIB[S.devices[id].type]; if(!def)continue;
-    if(def.controlsContacts){
-      for(const cc of def.controlsContacts){
-        const [pos,neg]=cc.coil;
-        const k1=id+'.'+pos, k2=id+'.'+neg;
-        const netA = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k1));
-        const netB = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k2));
-        const on = netA && netB && netA._pos && netB._neg;
-        SIM.coilState.set(id, on);
-        if(def.label?.includes('타이머')||def.label?.includes('플리커')){
-          if(on && !SIM.timerStarted.has(id)) SIM.timerStarted.set(id, Date.now());
-          if(!on) SIM.timerStarted.delete(id);
-        }
-      }
-    } else if(def.label?.includes('타이머')||def.label?.includes('플리커')){
-      /* AH3-N/H3CR 8핀 표준 코일 핀 2(+)/7(-) */
-      const k1=id+'.2', k2=id+'.7';
-      const netA = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k1));
-      const netB = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k2));
-      const on = netA && netB && netA._pos && netB._neg;
-      SIM.coilState.set(id, on);
-      if(on && !SIM.timerStarted.has(id)) SIM.timerStarted.set(id, Date.now());
-      if(!on) SIM.timerStarted.delete(id);
-    } else if(def.label?.includes('MY2N')){
-      const k1=id+'.13', k2=id+'.14';
-      const netA = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k1));
-      const netB = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k2));
-      const on = netA && netB && netA._pos && netB._neg;
-      SIM.coilState.set(id, on);
-    }
-  }
-  // 실린더 상태
-  for(const id in S.devices){
-    const def=LIB[S.devices[id].type]; if(!def?.polarityCritical)continue;
-    if(def.label?.includes('실린더')){
-      // A 코일 net 활성 → 전진, B 코일 net 활성 → 후진
-      let aOn=false, bOn=false;
-      for(const [pos,neg] of def.polarityCritical){
-        const k1=id+'.'+pos, k2=id+'.'+neg;
-        const netA = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k1));
-        const netB = nets.find(n=>n.members.some(m=>m.dev+'.'+m.term===k2));
-        const on = netA && netB && netA._pos && netB._neg;
-        if(pos.startsWith('A')||pos==='SOL+'||pos==='A1') aOn = aOn || on;
-        if(pos.startsWith('B')||pos==='B1') bOn = bOn || on;
-      }
-      if(aOn) SIM.cylState.set(id,'extend');
-      else if(bOn) SIM.cylState.set(id,'retract');
-      // 단동: A 꺼지면 자동 복귀
-      else if(def.label.includes('단동')) SIM.cylState.set(id,'retract');
-    }
-  }
+  reconcileRackState();
+  SIM.lastScanAt=Date.now();
+  // 접점 상태는 직전 스캔의 코일 상태를 사용하고, 이번 스캔 말에 코일을 갱신한다.
+  const preDyn=computeDynamicState({includeForcedOutputs:false});
+  const preNets=buildNetsWithSim(preDyn);
+  markSimulationSources(preNets);
+  const dyn=computeDynamicState({includeForcedOutputs:true});
+  const nets=buildNetsWithSim(dyn);
+  markSimulationSources(nets);
+  updateSimIoState(nets);
+  updateSimCommunicationState(nets);
+  updateSimSignalState(nets);
+  updateAdvancedAnalogState(nets);
+  updateModbusRuntimeState(nets);
+  updateSimDriveState(nets);
+
+  const previousCoils=new Map(SIM.coilState);
+  const candidates=computeCoilCandidates(nets);
+  SIM.coilState=resolveInterlockedCoils(candidates,previousCoils);
+  updateSimTimerState(previousCoils,SIM.coilState);
+  updateSimCylinderState(nets);
+  updateSimMotorState(nets);
+
   renderDevices();
   renderWires();
   refreshTrainerUI();
-  // 타이머가 있으면 다음 사이클 예약
-  if(SIM.timerStarted.size) requestAnimationFrame(()=>{ if(SIM.on) simulate(); });
+  if(SIM.timerStarted.size)requestAnimationFrame(()=>{if(SIM.on)simulate();});
 }
 
 /* 시뮬용 net 빌드: 동적 접점 상태 반영 */
@@ -8422,7 +10125,11 @@ function buildNetsWithSim(dyn){
       for(let i=1;i<all.length;i++)union(all[0],all[i]);
     }
     if(def.netHints){
-      for(const [a,b] of def.netHints) union(key(id,a),key(id,b));
+      const switched=new Set((def.simSwitchPairs||[]).map(([a,b])=>[a,b].sort().join('|')));
+      for(const [a,b] of def.netHints){
+        if(switched.has([a,b].sort().join('|')))continue;
+        union(key(id,a),key(id,b));
+      }
     }
     /* 동적 접점: PB·셀렉터·리미트·MC·릴레이·타이머 */
     const dynLinks = dyn[id] || [];
@@ -8446,7 +10153,7 @@ function buildNetsWithSim(dyn){
 }
 
 /* 부품의 동적 접점 상태 반환 */
-function computeDynamicState(){
+function computeDynamicState({includeForcedOutputs=true}={}){
   const dyn={};
   for(const id in S.devices){
     const def=LIB[S.devices[id].type]; if(!def)continue;
@@ -8484,6 +10191,11 @@ function computeDynamicState(){
       if(!SIM.toggled.has(id)){
         links.push(['11','12']); links.push(['21','22']);
       }
+    }
+    /* 보호계전기 접점: 정상시 95-96, 트립시 97-98/경보 접점 */
+    if(def.tripContact){
+      const pairs=SIM.tripped?.has(id)?(def.tripContact.trip||[]):(def.tripContact.normal||[]);
+      for(const pair of pairs)links.push(pair);
     }
     /* 코일 활성 부품 (MC/MY2N/Timer) */
     if(def.controlsContacts && SIM.coilState.get(id)){
@@ -8530,6 +10242,22 @@ function computeDynamicState(){
         links.push(['1','4']); links.push(['8','5']);
       }
     }
+    /* MCCB/퓨즈는 시뮬레이션에서 실제 개폐 가능. 정적 검증에서는 netHints로 통과한다. */
+    if(def.simSwitchPairs && !SIM.openSwitches.has(id)){
+      for(const pair of def.simSwitchPairs)links.push(pair);
+    }
+    /* PLC/증설 출력 수동 강제: 릴레이·싱크·소스 출력의 공통단자와 접점을 닫는다. */
+    if(includeForcedOutputs && def.outputGroups){
+      for(const group of def.outputGroups){
+        const powered=simDevicePowered(id,def) && (group.power||def.outputsRequireDevicePower ? SIM.devicePower.get(id)===true : true);
+        if(!powered)continue;
+        const common=(group.commons||[])[0];
+        if(!common)continue;
+        for(const term of group.outputs||[]){
+          if(SIM.forcedOutputs.has(id+'.'+term))links.push([term,common]);
+        }
+      }
+    }
     if(links.length) dyn[id]=links;
   }
   return dyn;
@@ -8541,7 +10269,7 @@ function startSim(){
   document.getElementById('b-simulate').textContent='⏸ 시뮬중';
   // 모든 부품에 시뮬 클래스 부여 (PB 클릭 인터랙션)
   document.body.classList.add('sim-mode');
-  status('▶ 시뮬레이션 시작 — PB는 마우스 클릭, 셀렉터/리미트는 더블클릭으로 토글');
+  status('▶ 시뮬레이션 시작 — PB·차단기·퓨즈 클릭, PLC 출력 단자 클릭=강제 ON/OFF');
   simulate();
   refreshTrainerUI();
   SIM._loop = setInterval(()=>{ if(SIM.on) simulate(); }, 200);
@@ -8553,8 +10281,11 @@ function stopSim(){
   document.getElementById('b-simulate').textContent='▶ 시뮬';
   document.body.classList.remove('sim-mode');
   SIM.energized=new Set(); SIM.liveTerms=new Set(); SIM.coilState=new Map();
-  SIM.timerStarted=new Map(); SIM.cylState=new Map();
+  SIM.ioState=new Map(); SIM.devicePower=new Map(); SIM.commState=new Map(); SIM.signalState=new Map(); SIM.analogValueState=new Map(); SIM.modbusState={buses:[],devices:new Map(),portIssues:[]}; SIM.forcedOutputs=new Set(); SIM.openSwitches=new Set();
+  SIM.timerStarted=new Map(); SIM.cylState=new Map(); SIM.tripped=new Set();
+  SIM.interlockConflicts=new Set(); SIM.driveState=new Map(); SIM.motorState=new Map();
   renderDevices(); renderWires();
+  refreshTrainerUI();
   status('시뮬레이션 종료');
 }
 
@@ -8564,7 +10295,7 @@ function tidyLayout(){
   if(!ids.length)return;
   snapshot();
   // 카테고리 순서: 전원 → PLC → HMI → 모션 → 스위치/릴레이 → 센서 → 액추에이터 → 배선
-  const ROW_ORDER = ['power','plc','hmi','motion','switch','sensor','actuator','wiring'];
+  const ROW_ORDER = ['power','plc','hmi','motion','switch','sensor','pneumatic','actuator','wiring'];
   const rows = {};
   let lockedSkip=0;
   for(const id of ids){
@@ -8638,6 +10369,7 @@ function exportPNG(){
 function addDevice(type,x,y,extra={}){
   if(!LIB[type]||LIB[type].hidden)return null;
   const id=uid('d');
+  const runtimeDefaults=defaultDeviceRuntimeConfig(type);
   S.devices[id]={
     type,
     x:x??(200+Math.random()*200),
@@ -8646,6 +10378,7 @@ function addDevice(type,x,y,extra={}){
     rot:0,
     scale:1,
     locked:false,
+    ...runtimeDefaults,
     ...extra
   };
   return id;
@@ -8736,6 +10469,7 @@ const CATS=[
   ['motion','⚙ 모션/서보'],
   ['switch','🔘 스위치/릴레이'],
   ['sensor','👁 센서'],
+  ['pneumatic','💨 공압'],
   ['actuator','⚙ 액추에이터'],
   ['wiring','🔌 배선/접지'],
 ];
@@ -8959,10 +10693,37 @@ elSvg.addEventListener('mousedown',e=>{
   }
   // 시뮬 모드: 부품 클릭 = 인터랙션
   if(SIM.on){
+    const termEl=e.target.closest?.('.terminal, .terminal-hit');
+    if(termEl?.dataset?.id && termEl?.dataset?.term){
+      const id=termEl.dataset.id, term=termEl.dataset.term;
+      const def=LIB[S.devices[id]?.type];
+      const group=outputGroupForTerminal(def,term);
+      if(def?.manualForceOutputs && group){
+        const key=id+'.'+term;
+        if(SIM.forcedOutputs.has(key))SIM.forcedOutputs.delete(key); else SIM.forcedOutputs.add(key);
+        simulate();
+        status(`${def.label}.${term} 출력 강제 ${SIM.forcedOutputs.has(key)?'ON':'OFF'} · 시뮬 종료 시 해제`);
+        e.stopPropagation(); e.preventDefault();
+        return;
+      }
+    }
     const g=e.target.closest('.device');
     if(g){
       const id=g.dataset.id;
       const def=LIB[S.devices[id].type];
+      if(def?.simTripDevice){
+        if(SIM.tripped.has(id))SIM.tripped.delete(id); else SIM.tripped.add(id);
+        simulate();
+        status(`${def.label}: ${SIM.tripped.has(id)?'TRIP · 95-96 OPEN':'RESET · 95-96 CLOSED'}`);
+        e.stopPropagation(); e.preventDefault();
+        return;
+      }
+      if(def?.simSwitch){
+        if(SIM.openSwitches.has(id))SIM.openSwitches.delete(id); else SIM.openSwitches.add(id);
+        simulate();
+        status(`${def.label}: ${SIM.openSwitches.has(id)?'개방/OFF':'투입/정상'}`);
+        return;
+      }
       if(def?.label?.includes('푸시버튼')){
         SIM.pressed.add(id);
         simulate();
@@ -9386,6 +11147,32 @@ function ctxMenuSep(menu){
   menu.appendChild(s);
 }
 
+function openDeviceConfig(devId){
+  const dev=S.devices[devId],def=LIB[dev?.type];
+  if(!dev||!def)return status('설정할 장비를 선택하세요.');
+  const api=window.PLCTrainerDeviceConfig;
+  if(!api)return status('장비 설정 모듈을 불러오지 못했습니다.');
+  if(!api.isConfigurable?.(dev,def))return status('이 장비에는 변경 가능한 런타임 설정이 없습니다.');
+  ensureDeviceRuntimeDefaults(dev);
+  reconcileRackState();
+  const before=JSON.stringify(captureUndoState());
+  api.open({
+    devId,device:dev,definition:def,
+    assignment:S.rackState?.assignments?.[devId]||{rackId:dev.rackHostId,slot:dev.rackSlot,pRange:dev.ioBinding?.pRange,uPrefix:dev.ioBinding?.uPrefix},
+    analogApi:window.PLCTrainerAnalog||window.PLCAnalogRuntime,
+    modbusApi:window.PLCTrainerModbus||window.PLCModbusRuntime,
+    driveApi:window.PLCTrainerDrive||window.PLCDriveRuntime,
+    onSave:()=>{
+      S.history.push(before);if(S.history.length>50)S.history.shift();S.future=[];
+      ensureDeviceRuntimeDefaults(dev);reconcileRackState();render();validate();if(SIM.on)simulate();
+      status(`${def.label} 설정 저장됨`);
+    }
+  });
+}
+function configureAnalogRuntime(devId){openDeviceConfig(devId);}
+function configureModbusRuntime(devId){openDeviceConfig(devId);}
+function configureDriveRuntime(devId){openDeviceConfig(devId);}
+
 function showDeviceContextMenu(px,py,devId,def,ctx={}){
   document.querySelectorAll('.ctx-menu').forEach(x=>x.remove());
   const menu=document.createElement('div');
@@ -9397,6 +11184,13 @@ function showDeviceContextMenu(px,py,devId,def,ctx={}){
   title.textContent=def.label+(ctx.termId?` · ${ctx.termId}`:'');
   title.style.cssText='font-weight:700;color:#9cf;margin-bottom:6px;padding:0 4px';
   menu.appendChild(title);
+
+  const configApi=window.PLCTrainerDeviceConfig;
+  if(configApi?.isConfigurable?.(S.devices[devId],def)){
+    const runtimeHead=document.createElement('div');runtimeHead.textContent='장비 런타임';runtimeHead.style.cssText='font-weight:700;color:#8f8;margin:4px 0 2px;padding:0 4px;font-size:10px';menu.appendChild(runtimeHead);
+    ctxMenuItem(menu,'⚙ 랙·값·통신·운전 설정',()=>openDeviceConfig(devId),{accent:true});
+    ctxMenuSep(menu);
+  }
 
   /* ===== 단자 편집 ===== */
   const termHead=document.createElement('div');
@@ -9851,6 +11645,7 @@ $('#b-fullscreen').onclick=()=>{
   if(!document.fullscreenElement){document.documentElement.requestFullscreen?.();}
   else{document.exitFullscreen?.();}
 };
+$('#b-device-config').onclick=()=>{const ids=selectedDeviceIds();if(ids.length!==1)return status('설정할 장비 1개를 선택하세요.');openDeviceConfig(ids[0]);};
 $('#b-simulate').onclick=()=>{ if(SIM.on)stopSim(); else startSim(); };
 $('#b-tidy').onclick=tidyLayout;
 $('#b-rotate').onclick=()=>{
@@ -10023,7 +11818,9 @@ $('#b-clear').onclick=()=>{
   if(!confirm('전체 삭제하시겠어요? (작업장 저장본도 같이 비웁니다. 단자 보정은 유지됩니다.)'))return;
   snapshot();
   S.devices={};S.wires=[];S.jumpers=[];S.pending=null;clearSelection();
-  S.goal=null;
+  S.goal=null;S.diagramLayouts={schematic:{},sequence:{}};S.workspaceView='panel';S.palletizer3d=null;S.automationLab=null;
+  window.PLCTrainerPalletizer3D?.importState?.(null);
+  window.PLCTrainerAutomationLabs?.importState?.({activeLab:'servo2',labs:{}});
   localStorage.removeItem(LSK);
   applyRailConfig({rows:S.panelConfig?.rows||3, cols:S.panelConfig?.cols||1, door:S.panelConfig?.door!==false, keepDevices:false},{silent:true});
   // 빈 작업장 (데모 장비 자동 배치 없음)
@@ -10093,7 +11890,7 @@ function seedDemoDevices(){
     placeOnDoor('SEL-2P', dp.x+40, dp.y+580);
   }
   // 필드 센서 (자유 배치) — 데모 호출 시에만 배치
-  addDevice('MY-MD02', 3200, 280);
+  addDevice('XY-MD02', 3200, 280);
   addDevice('ENCODER', 3450, 260);
 }
 
@@ -10108,7 +11905,7 @@ document.querySelectorAll('#right h3').forEach(h=>{
 });
 
 S.devices={}; S.wires=[]; S.jumpers=[]; S.nextId=1;
-S.goal=null;
+S.goal=null; S.workspaceView='panel'; S.diagramLayouts={schematic:{},sequence:{}}; S.palletizer3d=null; S.automationLab=null;
 S.boardMode='panel-layout';
 S.panelConfig={rows:3,cols:1,door:true};
 applyRailConfig({rows:3,cols:1,door:true,keepDevices:false},{silent:true,keepMode:true});
@@ -10153,5 +11950,16 @@ window.addEventListener('resize',()=>requestAnimationFrame(()=>{
 }));
 status('빈 작업장 준비됨 — 좌측 부품을 배치하세요 · F=화면맞춤 · K=고정 · L/R=패널');
 </script>
+<script src="assets/vendor/three.min.js"></script>
+<script src="src/runtime/palletizer-runtime.js"></script>
+<script src="src/runtime/servo2-runtime.js"></script>
+<script src="src/runtime/mps-runtime.js"></script>
+<script src="src/runtime/pneumatic-runtime.js"></script>
+<script src="src/ui/multiview-core.js"></script>
+<script src="src/ui/multiview-ui.js"></script>
+<script src="src/ui/palletizer-3d.js"></script>
+<script src="src/ui/sov-editor-engine.js"></script>
+<script src="src/ui/automation-labs.js"></script>
+<script type="module" src="src/ui/imported-models.js"></script>
 </body>
 </html>

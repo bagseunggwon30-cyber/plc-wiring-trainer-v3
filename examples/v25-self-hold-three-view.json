@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 7,
+  "d": {
+    "d1": {"type":"MCCB1P","x":120,"y":120,"rot":0,"scale":1,"locked":false},
+    "d2": {"type":"MDR-100","x":420,"y":100,"rot":0,"scale":1,"locked":false},
+    "d3": {"type":"PB-1C","role":"stopButton","label":"정지 PB","x":820,"y":120,"rot":0,"scale":1,"locked":false,"colorOverride":"#d33"},
+    "d4": {"type":"PB-1C","role":"startButton","label":"운전 PB","x":1080,"y":120,"rot":0,"scale":1,"locked":false,"colorOverride":"#0a7"},
+    "d5": {"type":"MC","role":"mainMC","label":"K1 MC","x":1380,"y":100,"rot":0,"scale":1,"locked":false}
+  },
+  "w": [
+    {"id":"w1","from":{"dev":"d1","term":"L'"},"to":{"dev":"d2","term":"L"},"color":"#a52","tag":"W001","gauge":"2.5㎟","colorGroup":"power"},
+    {"id":"w2","from":{"dev":"d1","term":"N'"},"to":{"dev":"d2","term":"N"},"color":"#36c","tag":"W002","gauge":"2.5㎟","colorGroup":"power"},
+    {"id":"w3","from":{"dev":"d2","term":"V+1"},"to":{"dev":"d3","term":"21"},"color":"#d33","tag":"W003","gauge":"1.5㎟","colorGroup":"power"},
+    {"id":"w4","from":{"dev":"d3","term":"22"},"to":{"dev":"d4","term":"11"},"color":"#222","tag":"W004","gauge":"0.75㎟","colorGroup":"signal"},
+    {"id":"w5","from":{"dev":"d4","term":"12"},"to":{"dev":"d5","term":"A1"},"color":"#0a0","tag":"W005","gauge":"0.75㎟","colorGroup":"signal"},
+    {"id":"w6","from":{"dev":"d3","term":"22"},"to":{"dev":"d5","term":"13"},"color":"#222","tag":"W006","gauge":"0.75㎟","colorGroup":"signal"},
+    {"id":"w7","from":{"dev":"d5","term":"14"},"to":{"dev":"d5","term":"A1"},"color":"#222","tag":"W007","gauge":"0.75㎟","colorGroup":"signal"},
+    {"id":"w8","from":{"dev":"d5","term":"A2"},"to":{"dev":"d2","term":"V-1"},"color":"#36c","tag":"W008","gauge":"1.5㎟","colorGroup":"power"}
+  ],
+  "n": 20,
+  "goal": "g7",
+  "pan": {"x":0,"y":0,"k":0.7},
+  "workspaceView": "panel",
+  "diagramLayouts": {
+    "schematic": {
+      "d1":{"x":90,"y":90},"d2":{"x":440,"y":90},"d3":{"x":90,"y":420},"d4":{"x":440,"y":420},"d5":{"x":800,"y":360}
+    },
+    "sequence": {
+      "d3::no":{"x":420,"y":300},"d3::nc":{"x":180,"y":150},
+      "d4::no":{"x":420,"y":150},"d4::nc":{"x":180,"y":300},
+      "d5::coil":{"x":760,"y":150},"d5::aux-no":{"x":420,"y":270},"d5::aux-nc":{"x":760,"y":300},
+      "d5::main-1":{"x":1020,"y":150},"d5::main-2":{"x":1020,"y":270},"d5::main-3":{"x":1020,"y":390},
+      "d1::power":{"x":120,"y":500},"d2::power":{"x":470,"y":500}
+    }
+  },
+  "color": "#d33",
+  "autoColor": true,
+  "boardMode": "free",
+  "cabinet": null,
+  "rails": {},
+  "ducts": {},
+  "doorPanel": null,
+  "panelConfig": {"rows":3,"cols":1,"door":true},
+  "jumpers": [],
+  "terminalCalibration": {},
+  "missionSchema": 4
+}
