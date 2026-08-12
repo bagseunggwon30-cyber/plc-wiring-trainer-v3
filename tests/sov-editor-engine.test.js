@@ -151,6 +151,22 @@ test('terminal-panel wires stay close to their terminal holes without changing t
   engine.dispose();
 });
 
+test('interactive 3D labs can opt into raycastable solid electric cables', () => {
+  const scene = new THREE.Scene();
+  const engine = Editor.create({ three: THREE, scene, lab: 'workbench3d', solidElectricWires: true, wireRadius: .006 });
+  makeModule(engine, scene, 'left', 'workbench3d', [0, 0, 0]);
+  makeModule(engine, scene, 'right', 'workbench3d', [2, 0, 0]);
+  scene.updateMatrixWorld(true);
+  engine.setMode(Editor.MODES.WIRE);
+  const cable = engine.connect({ moduleId: 'left', anchorId: 'E' }, { moduleId: 'right', anchorId: 'E' });
+  assert.equal(cable.visual.isMesh, true);
+  assert.equal(cable.visual.userData.sovEditorVisual, 'cable');
+  assert.equal(cable.visual.geometry.type, 'TubeGeometry');
+  assert.equal(cable.visual.userData.sovWireRadius, .006);
+  assert.ok(cable.visual.geometry.getAttribute('position').count > 30);
+  engine.dispose();
+});
+
 test('transparent terminal-hole hit targets remain raycastable without drawing floating markers', () => {
   const target = Editor.createAnchorHitTarget({ three: THREE, radius: .02 });
   const scene = new THREE.Scene(); scene.add(target); scene.updateMatrixWorld(true);

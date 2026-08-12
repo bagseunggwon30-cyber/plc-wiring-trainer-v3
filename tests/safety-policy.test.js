@@ -7,6 +7,12 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const xgSimFunctionPanel = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'plc-runtime', 'xgsim-function-test-panel.ts'), 'utf8');
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+
+test('ordinary start does not require the optional XG-SIM build toolchain', () => {
+  assert.equal(packageJson.scripts.start, 'npm run build:renderer && electron .');
+  assert.equal(packageJson.scripts['start:xgsim'], 'npm run build:xgsim-host && npm run build:renderer && electron .');
+});
 
 test('Electron keeps the renderer isolated and exposes only bounded report/XG-SIM bridges', () => {
   assert.match(main, /contextIsolation:\s*true/);

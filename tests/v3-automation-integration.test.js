@@ -43,9 +43,30 @@ test('renderer build copies local automation scripts, vendor modules, manifest, 
     "'src/ui'",
     "'assets/vendor'",
     "'assets/imported/sov-kdp'",
+    "'assets/models/ls-electric'",
     "'assets/devices/gpt-expansion'"
   ]) assert.ok(vite.includes(token), token);
   assert.match(vite, /assetsInlineLimit\(filePath\)[\s\S]*?\/\\\.glb\$\/i\.test\(filePath\)[\s\S]*?return false/);
+  assert.match(importedModels, /new URL\('\.\.\/\.\.\/assets\/imported\/sov-kdp\/manifest\.json', import\.meta\.url\)/);
+  assert.match(importedModels, /fetch\(manifestUrl\)/);
+  assert.match(importedModels, /l7sa004a-production-v3\.glb/);
+});
+
+test('optimized L7SA004A GLB is web-sized and carries the four CN1 wiring anchors', () => {
+  const file = path.join(root, 'assets', 'models', 'ls-electric', 'l7sa004a-production-v3.glb');
+  const data = fs.readFileSync(file);
+  assert.equal(data.toString('ascii', 0, 4), 'glTF');
+  assert.ok(data.length < 6 * 1024 * 1024, `GLB is ${data.length} bytes`);
+  const jsonLength = data.readUInt32LE(12);
+  const document = JSON.parse(data.subarray(20, 20 + jsonLength).toString('utf8').trimEnd());
+  const names = new Set((document.nodes || []).map(node => node.name));
+  for (const name of ['TERM_CN1_09_PF_POS', 'TERM_CN1_10_PF_NEG', 'TERM_CN1_11_PR_POS', 'TERM_CN1_12_PR_NEG']) assert.ok(names.has(name), name);
+  assert.equal(names.has('Studio_Floor'), false);
+  assert.equal((document.meshes || []).length, 56);
+  for (const image of document.images || []) {
+    assert.match(image.uri || '', /^data:image\/png;base64,/);
+    assert.equal(image.bufferView, undefined);
+  }
 });
 
 test('selecting a workspace view closes the advanced-tools overlay', () => {
@@ -72,9 +93,9 @@ test('imported SoV GLBs use CSP-safe inlined WebP textures and match the asset m
   }
 });
 
-test('WebP model textures use the DOM texture loader when ImageBitmap decoding is unavailable', () => {
+test('inlined model textures use the DOM texture loader when ImageBitmap decoding is unavailable', () => {
   assert.match(importedModels, /new globalThis\.THREE\.LoadingManager\(\)/);
-  assert.match(importedModels, /addHandler\(\/\^data:image\\\/webp\/i, webpTextureLoader\)/);
+  assert.match(importedModels, /addHandler\(\/\^data:image\\\/\(\?:png\|jpe\?g\|webp\)\/i, webpTextureLoader\)/);
 });
 
 test('3D equipment gallery exposes every selective model and lazy-loads only the selected asset', () => {

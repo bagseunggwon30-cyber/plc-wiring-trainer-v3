@@ -2,21 +2,29 @@ import { GLTFLoader } from '../../assets/vendor/GLTFLoader.js';
 
 // The embedded browser exposes createImageBitmap, so GLTFLoader selects its
 // ImageBitmapLoader by default. Some offline Chromium builds cannot decode
-// WebP through that path even though ordinary DOM images work. Route only the
-// inlined WebP textures through TextureLoader; geometry and other resources
+// image data through that path even though ordinary DOM images work. Route
+// inlined PNG/JPEG/WebP textures through TextureLoader; other resources
 // keep GLTFLoader's normal path.
 const manager = new globalThis.THREE.LoadingManager();
 const webpTextureLoader = new globalThis.THREE.TextureLoader(manager);
-manager.addHandler(/^data:image\/webp/i, webpTextureLoader);
+manager.addHandler(/^data:image\/(?:png|jpe?g|webp)/i, webpTextureLoader);
 const loader = new GLTFLoader(manager);
 const cache = new Map();
 const requested = new Set();
 const loaded = new Set();
 const failed = new Map();
-const manifestUrl = '../../assets/imported/sov-kdp/manifest.json';
+// Keep the asset path literal inside new URL so Vite rewrites it relative to
+// the emitted module instead of resolving a runtime string from the JS chunk.
+const manifestUrl = new URL('../../assets/imported/sov-kdp/manifest.json', import.meta.url);
+const localAssets = Object.freeze({
+  'l7sa004a-production-v3.glb': Object.freeze({
+    url: new URL('../../assets/models/ls-electric/l7sa004a-production-v3.glb', import.meta.url),
+    sourceProduct: 'User-authored Blender 5.2 · L7SA004A production v3',
+  }),
+});
 
 function loadRaw(filename) {
-  const resolved = new URL(`../../assets/imported/sov-kdp/models/${filename}`, import.meta.url).href;
+  const resolved = localAssets[filename]?.url.href || new URL(`../../assets/imported/sov-kdp/models/${filename}`, import.meta.url).href;
   requested.add(filename);
   if (!cache.has(resolved)) {
     cache.set(resolved, new Promise((resolve, reject) => {
@@ -49,7 +57,7 @@ async function loadModel(filename, options = {}) {
   const root = cloneMaterials(source.clone(true));
   root.name = options.name || filename.replace(/\.glb$/i, '');
   root.userData.importedAsset = true;
-  root.userData.sourceProduct = 'SoV-KDP 1.1.9K';
+  root.userData.sourceProduct = localAssets[filename]?.sourceProduct || 'SoV-KDP 1.1.9K';
   if (Number.isFinite(options.scale)) root.scale.setScalar(options.scale);
   if (Array.isArray(options.position)) root.position.set(...options.position);
   if (Array.isArray(options.rotation)) root.rotation.set(...options.rotation);
@@ -57,7 +65,7 @@ async function loadModel(filename, options = {}) {
 }
 
 async function loadManifest() {
-  const response = await fetch(new URL(manifestUrl, import.meta.url));
+  const response = await fetch(manifestUrl);
   if (!response.ok) throw new Error(`Asset manifest HTTP ${response.status}`);
   return response.json();
 }

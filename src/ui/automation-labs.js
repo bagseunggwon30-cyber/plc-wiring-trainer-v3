@@ -305,6 +305,9 @@
 
   function createServoScene() {
     const data = baseScene('servo2'), root = data.proxyRoot;
+    // The LS drive bodies are taller than the former flat terminal cards; keep
+    // both the real equipment front and the motion rig inside the default view.
+    data.orbit = { yaw: 360, pitch: 10.67, scale: 1.08 }; data.target.set(0, .91, .02);
     const frame = material(0x77848b, .72, .3), rail = material(0xc5d0d6, .85, .18), blue = material(0x1b75a7, .4, .35), dark = material(0x1a252c, .5, .45);
     box(root, [10, .32, 6.2], [0, .3, 0], dark); for (const x of [-4.6, 4.6]) for (const z of [-2.6, 2.6]) box(root, [.25, 1.1, .25], [x, -.25, z], frame);
     box(root, [8.8, .22, .4], [0, 1.03, 1.2], frame); box(root, [8.5, .1, .2], [0, 1.2, 1.2], rail);
@@ -398,9 +401,26 @@
     const engine = window.PLCTrainerSovEditorEngine;
     if (!engine?.create) return;
     A.editorMarkers = { servo2: [], mps: [], pneumatic: [], discrete: [] };
+    A.editorSocketCues = { servo2: null, mps: null, pneumatic: null, discrete: null };
     A.editorModules = { servo2: new Map(), mps: new Map(), pneumatic: new Map(), discrete: new Map() };
     for (const lab of ['servo2', 'mps', 'pneumatic', 'discrete']) {
-      const editor = engine.create({ three: Three, lab, scene: A.scenes[lab].scene, gridSize: .025, tubeRadius: .003 });
+      const editor = engine.create({
+        three: Three,
+        lab,
+        scene: A.scenes[lab].scene,
+        gridSize: .025,
+        tubeRadius: .003,
+        solidElectricWires: true,
+        wireRadius: .0042
+      });
+      const cue = new Three.Group(); cue.name = `${lab}-banana-plug-hover-cue`; cue.visible = false;
+      const cueShell = new Three.Mesh(
+        new Three.SphereGeometry(.018, 14, 10),
+        new Three.MeshStandardMaterial({ color: 0x52f0a5, emissive: 0x52f0a5, emissiveIntensity: .9, roughness: .28, transparent: true, opacity: .9, depthTest: false })
+      );
+      const cueTip = new Three.Mesh(new Three.SphereGeometry(.007, 10, 8), new Three.MeshBasicMaterial({ color: 0x10232c, depthTest: false }));
+      cueTip.position.z = .014; cue.add(cueShell, cueTip); cue.userData.shell = cueShell; cue.renderOrder = 40;
+      A.scenes[lab].scene.add(cue); A.editorSocketCues[lab] = cue;
       editor.on('change', event => {
         if (lab === 'servo2' && ['connection-create', 'connection-delete'].includes(event.reason)) { syncServoTopology(); updateUi(true); }
         if (lab === 'discrete') syncDiscreteTopology();
@@ -415,15 +435,16 @@
     const editor = A.editors[lab];
     if (!editor || editor.modules.has(id) || !object) return;
     const anchors = anchorSpecs.map((spec, index) => {
-      const anchorId = spec.id || String(index), terminalTarget = spec.hitObject || window.PLCTrainerSovEditorEngine.createAnchorHitTarget({
+      const anchorId = spec.id || String(index), terminalTarget = window.PLCTrainerSovEditorEngine.createAnchorHitTarget({
         three: Three,
-        radius: spec.hitRadius || .012,
+        radius: spec.hitRadius == null ? (spec.kind === 'air' ? .028 : .024) : Math.max(.001, spec.hitRadius),
         name: `${id}-${spec.tag || index}-terminal-hole`
       });
-      if (!spec.hitObject) { terminalTarget.position.fromArray(spec.position); object.add(terminalTarget); }
+      terminalTarget.position.fromArray(spec.position); object.add(terminalTarget);
       terminalTarget.userData.sovAnchor = { moduleId: id, anchorId, kind: spec.kind };
       terminalTarget.userData.sovPickEnabled = false;
       terminalTarget.userData.sovTerminalSurface = !!spec.hitObject;
+      terminalTarget.userData.sovPhysicalTerminal = spec.hitObject || null;
       A.editorMarkers[lab].push(terminalTarget);
       return {
         id: anchorId,
@@ -554,21 +575,71 @@
       pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1); raycaster.setFromCamera(pointer, scene.camera); return raycaster.ray;
     };
     const activeEditor = () => A.editors[A.activeLab];
-    const pickAnchorTarget = () => raycaster.intersectObjects(
-      (A.editorMarkers[A.activeLab] || []).filter(target => target.userData.sovPickEnabled),
-      false
-    )[0]?.object || null;
+    const activeTargets = () => (A.editorMarkers[A.activeLab] || []).filter(target => target.userData.sovPickEnabled);
+    const pickAnchorTarget = event => {
+      const targets = activeTargets(), direct = raycaster.intersectObjects(targets, false)[0]?.object;
+      if (direct || !event) return direct || null;
+      const scene = A.scenes[A.activeLab], rect = canvas.getBoundingClientRect(), world = new Three.Vector3(), projected = new Three.Vector3();
+      let nearest = null, nearestDistance = 30;
+      for (const target of targets) {
+        target.getWorldPosition(world); projected.copy(world).project(scene.camera);
+        if (projected.z < -1 || projected.z > 1) continue;
+        const x = rect.left + (projected.x + 1) * rect.width / 2, y = rect.top + (1 - projected.y) * rect.height / 2;
+        const distance = Math.hypot(event.clientX - x, event.clientY - y);
+        if (distance < nearestDistance) { nearest = target; nearestDistance = distance; }
+      }
+      return nearest;
+    };
+    const anchorStatus = (editor, ref) => {
+      if (!ref) return { valid: false, message: '' };
+      const anchor = editor.anchors.get(`${ref.moduleId}::${ref.anchorId}`);
+      if (!anchor) return { valid: false, message: '등록되지 않은 단자' };
+      if (anchor.connectionId) return { valid: false, message: '이미 결선된 단자' };
+      const pending = editor.pendingConnection?.anchor;
+      if (pending === anchor) return { valid: false, message: '시작 단자와 동일함' };
+      if (pending && pending.kind !== anchor.kind) return { valid: false, message: '결선 종류가 다름' };
+      return { valid: true, message: pending ? '연결 가능 · 클릭하여 결선' : '빈 단자 · 클릭하여 시작' };
+    };
+    const showSocketCue = (editor, point, status, visible = true) => {
+      const cue = A.editorSocketCues[A.activeLab]; if (!cue) return;
+      cue.visible = visible; if (!visible || !point) return;
+      cue.position.copy(point); cue.scale.setScalar(status.valid ? 1 : 1.18);
+      const color = status.valid ? 0x52f0a5 : 0xff5f55;
+      cue.userData.shell.material.color.setHex(color); cue.userData.shell.material.emissive.setHex(color);
+    };
+    const pickConnectionVisual = (event, editor) => {
+      const visuals = [...editor.connections.values()].map(connection => connection.visual);
+      const direct = raycaster.intersectObjects(visuals, true)[0]?.object;
+      if (direct) return direct;
+      const scene = A.scenes[A.activeLab], rect = canvas.getBoundingClientRect(), local = new Three.Vector3(), world = new Three.Vector3(), projected = new Three.Vector3();
+      let nearest = null, nearestDistance = 14;
+      for (const visual of visuals) {
+        const positions = visual.geometry?.getAttribute?.('position'); if (!positions) continue;
+        const step = Math.max(1, Math.floor(positions.count / 72));
+        for (let index = 0; index < positions.count; index += step) {
+          local.fromBufferAttribute(positions, index); world.copy(local); visual.localToWorld(world); projected.copy(world).project(scene.camera);
+          if (projected.z < -1 || projected.z > 1) continue;
+          const x = rect.left + (projected.x + 1) * rect.width / 2, y = rect.top + (1 - projected.y) * rect.height / 2;
+          const distance = Math.hypot(event.clientX - x, event.clientY - y);
+          if (distance < nearestDistance) { nearest = visual; nearestDistance = distance; }
+        }
+      }
+      return nearest;
+    };
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0 || A.activeLab === 'palletizer3d') return;
       const editor = activeEditor(), ray = rayFromEvent(event); if (!editor || !ray) return;
       if (editor.mode === 'WIRE' || editor.mode === 'AIR') {
-        const ref = pickAnchorTarget()?.userData?.sovAnchor;
+        const target = pickAnchorTarget(event), ref = target?.userData?.sovAnchor, status = anchorStatus(editor, ref);
         if (!ref) return;
-        event.preventDefault(); if (editor.pendingConnection) editor.completeConnection(ref); else editor.beginConnection(ref); schedule(); updateEditorUi(); persist(); return;
+        event.preventDefault();
+        if (!status.valid) { showSocketCue(editor, editor.anchorWorldPosition(ref), status); canvas.title = `${ref.moduleId} · ${ref.anchorId} · ${status.message}`; return; }
+        if (editor.pendingConnection) editor.completeConnection(ref); else editor.beginConnection(ref);
+        schedule(); updateEditorUi(); persist(); return;
       }
       if (editor.mode === 'DELETE_WIRE') {
-        const visuals = [...editor.connections.values()].map(connection => connection.visual), hit = raycaster.intersectObjects(visuals, true)[0];
-        if (hit?.object?.userData?.connectionId) { event.preventDefault(); editor.deleteLink(hit.object.userData.connectionId); schedule(); persist(true); } return;
+        const visual = pickConnectionVisual(event, editor);
+        if (visual?.userData?.connectionId) { event.preventDefault(); editor.deleteLink(visual.userData.connectionId); schedule(); persist(true); } return;
       }
       if (editor.mode === 'MOVE' || editor.mode === 'DELETE_MODULE') {
         const objects = [...A.editorModules[A.activeLab].values()], hit = raycaster.intersectObjects(objects, true)[0]; let picked = hit?.object;
@@ -584,9 +655,11 @@
       if (A.editorDrag?.editor === editor) { editor.updateMove(ray); schedule(); return; }
       let anchorTarget = null;
       if (editor.mode === 'WIRE' || editor.mode === 'AIR') {
-        anchorTarget = pickAnchorTarget(); const ref = anchorTarget?.userData?.sovAnchor;
-        canvas.style.cursor = ref ? 'crosshair' : 'default';
-        canvas.title = ref ? `${ref.moduleId} · ${ref.anchorId}` : '';
+        anchorTarget = pickAnchorTarget(event); const ref = anchorTarget?.userData?.sovAnchor, status = anchorStatus(editor, ref);
+        canvas.style.cursor = ref ? (status.valid ? 'crosshair' : 'not-allowed') : 'default';
+        canvas.title = ref ? `${ref.moduleId} · ${ref.anchorId} · ${status.message}` : '';
+        if (ref) showSocketCue(editor, editor.anchorWorldPosition(ref), status);
+        else if (!editor.pendingConnection) showSocketCue(editor, null, status, false);
       } else { canvas.style.cursor = 'default'; canvas.title = ''; }
       if (editor.pendingConnection) {
         const ref = anchorTarget?.userData?.sovAnchor;
@@ -597,10 +670,14 @@
           const plane = new Three.Plane().setFromNormalAndCoplanarPoint(normal.negate(), start);
           hit = ray.intersectPlane(plane, new Three.Vector3());
         }
-        if (hit) { editor.updateConnectionPreview(hit); schedule(); }
+        if (hit) {
+          editor.updateConnectionPreview(hit);
+          if (!ref) showSocketCue(editor, hit, { valid: true }, true);
+          schedule();
+        }
       }
     });
-    canvas.addEventListener('pointerleave', () => { canvas.style.cursor = 'default'; canvas.title = ''; });
+    canvas.addEventListener('pointerleave', () => { canvas.style.cursor = 'default'; canvas.title = ''; const cue = A.editorSocketCues[A.activeLab]; if (cue) cue.visible = false; });
     const endMove = event => { if (!A.editorDrag || (event.pointerId != null && event.pointerId !== A.editorDrag.pointerId)) return; A.editorDrag.editor.endMove(); A.editorDrag = null; schedule(); persist(true); };
     canvas.addEventListener('pointerup', endMove); canvas.addEventListener('pointercancel', endMove); canvas.addEventListener('lostpointercapture', endMove);
   }
@@ -619,6 +696,7 @@
       if (lab === 'servo2') {
         for (const connection of editor.connections.values()) connection.visual.visible = !isLegacyServoPlaceholder(connection);
       }
+      if (A.editorSocketCues?.[lab] && (editor.mode === 'CONTROL' || (lab !== A.activeLab))) A.editorSocketCues[lab].visible = false;
       editor.connectionRoot.visible = editor.mode !== 'CONTROL';
     }
   }
@@ -722,29 +800,92 @@
     sprite.scale.set(width, height, 1); sprite.renderOrder = 18; sprite.userData.panelLabel = { text, texture }; return sprite;
   }
 
+  function mountL7SA004AModel(group, model, targetHeight, frontZ) {
+    model.name = 'l7sa004a-production-v3-optimized';
+    // Blender's product camera looks toward the -Y face. After glTF's Y-up
+    // conversion that face points away from this lab's +Z front convention.
+    model.rotation.y += Math.PI;
+    model.updateMatrixWorld(true);
+    const initialBounds = new Three.Box3().setFromObject(model), initialSize = new Three.Vector3(); initialBounds.getSize(initialSize);
+    model.scale.multiplyScalar(targetHeight / Math.max(initialSize.y, .001)); model.updateMatrixWorld(true);
+    const fittedBounds = new Three.Box3().setFromObject(model), center = new Three.Vector3(); fittedBounds.getCenter(center);
+    model.position.x -= center.x; model.position.y -= fittedBounds.min.y; model.position.z += frontZ - fittedBounds.max.z;
+    group.add(model); group.updateWorldMatrix(true, true); model.updateWorldMatrix(true, true);
+    const finalBounds = new Three.Box3().setFromObject(model), finalSize = new Three.Vector3(); finalBounds.getSize(finalSize);
+    return { model, dimensions: { width: finalSize.x, height: finalSize.y, depth: finalSize.z } };
+  }
+
+  function importedTerminalPosition(group, model, name) {
+    const node = model?.getObjectByName?.(name); if (!node) return null;
+    group.updateWorldMatrix(true, true); node.updateWorldMatrix(true, false);
+    return group.worldToLocal(node.getWorldPosition(new Three.Vector3()));
+  }
+
   function createPulseTerminalModule(root, profileId, id, title, terminals, position, options = {}) {
-    const group = new Three.Group(); group.name = `${id}-manual-terminal-overlay`; group.position.set(...position); root.add(group);
-    const width = options.width || .18, height = options.height || .17;
-    box(group, [width, height, .025], [0, height / 2, 0], material(options.color || 0x384a55, .32, .38), `${id}-panel`);
-    const titleLabel = createPanelLabel(title, width * .92, .034, { border: options.accent || '#65b8dd' }); titleLabel.position.set(0, height - .022, .018); group.add(titleLabel);
+    const group = new Three.Group(); group.name = `${id}-three-dimensional-equipment`; group.position.set(...position); root.add(group);
+    const modelKind = options.modelKind || 'terminal-panel';
+    const drive = modelKind === 'l7sa004a', controller = modelKind === 'xbf-pd02a';
+    const width = options.width || (drive ? .105 : .19), height = options.height || (drive ? .225 : .19), depth = options.depth || (drive ? .145 : .105);
+    const importedDrive = drive && options.importedModel;
+    const bodyMaterial = material(drive ? 0xe1e3df : 0xd1d8d8, .28, .5), sideMaterial = material(drive ? 0xaeb4b2 : 0x87979c, .55, .34);
+    const faceMaterial = material(drive ? 0x20272a : 0xe2e7e6, .2, .48), connectorMaterial = material(0x20282c, .35, .35), metalMaterial = material(0xcbd6da, .82, .18);
+    let importedModelInfo = null;
+    if (importedDrive) importedModelInfo = mountL7SA004AModel(group, options.importedModel, height, depth / 2);
+    else {
+      box(group, [width, height, depth], [0, height / 2, 0], bodyMaterial, `${id}-housing`);
+      box(group, [width * .94, height * .92, .014], [0, height / 2, depth / 2 + .007], faceMaterial, `${id}-front-cover`);
+      box(group, [.009, height * .96, depth * .94], [-width / 2 - .004, height / 2, 0], sideMaterial, `${id}-left-chassis`);
+      box(group, [.009, height * .96, depth * .94], [width / 2 + .004, height / 2, 0], sideMaterial, `${id}-right-chassis`);
+    }
+    if (drive && !importedDrive) {
+      // L7SA004A 38×169×173 mm 비례의 슬림 서보 드라이브: 표시창, 키패드, CN1/엔코더·모터 커넥터와 방열 슬롯.
+      box(group, [width * .72, .038, .008], [0, height - .04, depth / 2 + .017], material(0x10181d, .2, .28), `${id}-display-bezel`);
+      const display = createPanelLabel('rdy', width * .5, .021, { background: '#071014', border: '#3d5964', color: '#8cf5dc', font: 'bold 42px Consolas, monospace' });
+      display.position.set(0, height - .04, depth / 2 + .023); group.add(display);
+      for (let index = 0; index < 4; index += 1) cylinder(group, .0052, .004, [-.025 + index * .017, height - .075, depth / 2 + .019], material(index === 0 ? 0x53e590 : 0x738087, .15, .35, { emissive: index === 0 ? 0x174b32 : 0x000000 }), 'z');
+      for (let index = 0; index < 7; index += 1) box(group, [.004, .052, depth * .72], [-width / 2 - .010, .045 + index * .023, 0], sideMaterial, `${id}-heatsink-fin-${index}`);
+      box(group, [width * .72, .049, .016], [0, .112, depth / 2 + .018], connectorMaterial, `${id}-cn1`);
+      const cn1 = createPanelLabel('CN1  I/O', width * .62, .018, { background: '#172125', border: '#73878c', color: '#dce8ea', font: 'bold 28px Consolas, monospace' }); cn1.position.set(0, .13, depth / 2 + .028); group.add(cn1);
+      box(group, [width * .34, .028, .018], [-width * .22, .025, depth / 2 + .018], material(0x315d79, .28, .42), `${id}-encoder-connector`);
+      box(group, [width * .34, .028, .018], [width * .22, .025, depth / 2 + .018], material(0x386a52, .28, .42), `${id}-motor-connector`);
+    } else if (controller) {
+      // XBF-PD02A 전면은 RUN/X_AXIS/Y_AXIS LED와 Smart Link용 외부 배선 커넥터를 가진 확장 모듈이다.
+      box(group, [width * .9, .022, .01], [0, height - .034, depth / 2 + .018], material(0x12689a, .35, .38), `${id}-ls-blue-band`);
+      const ledNames = ['RUN', 'X', 'Y'];
+      ledNames.forEach((name, index) => {
+        cylinder(group, .006, .005, [-.044 + index * .044, height - .066, depth / 2 + .019], material(index === 0 ? 0x49e88a : 0x25383f, .12, .36, { emissive: index === 0 ? 0x174b32 : 0 }), 'z');
+        const ledLabel = createPanelLabel(name, .033, .012, { background: 'rgba(0,0,0,0)', border: 'rgba(0,0,0,0)', color: '#30434b', font: 'bold 32px Consolas, monospace' }); ledLabel.position.set(-.044 + index * .044, height - .082, depth / 2 + .025); group.add(ledLabel);
+      });
+      box(group, [width * .78, .073, .018], [0, .066, depth / 2 + .018], connectorMaterial, `${id}-smart-link-connector`);
+      for (let index = 0; index < 2; index += 1) box(group, [.012, .084, .015], [(index ? 1 : -1) * width * .43, .066, depth / 2 + .016], sideMaterial, `${id}-connector-latch-${index}`);
+    }
+    const titleLabel = createPanelLabel(title, width * .9, .026, { background: drive ? '#20282c' : '#165f89', border: options.accent || '#65b8dd', color: '#f4fafb', font: 'bold 34px Consolas, monospace' });
+    titleLabel.position.set(0, importedDrive ? height + .019 : height - .014, depth / 2 + .027); group.add(titleLabel);
     const columns = terminals.length > 4 ? 4 : terminals.length, rows = Math.ceil(terminals.length / columns), anchors = [];
+    const l7AnchorNames = { 'PF+': 'TERM_CN1_09_PF_POS', 'PF-': 'TERM_CN1_10_PF_NEG', 'PR+': 'TERM_CN1_11_PR_POS', 'PR-': 'TERM_CN1_12_PR_NEG' };
     terminals.forEach((terminal, index) => {
       const row = Math.floor(index / columns), column = index % columns;
-      const x = columns === 1 ? 0 : -width * .35 + width * .70 * column / (columns - 1);
-      const y = height - .065 - row * (rows > 1 ? .055 : 0);
+      const importedPosition = importedDrive ? importedTerminalPosition(group, importedModelInfo.model, l7AnchorNames[terminal.anchorId]) : null;
+      const x = importedPosition?.x ?? (columns === 1 ? 0 : -width * .31 + width * .62 * column / (columns - 1));
+      const y = importedPosition?.y ?? (drive ? .101 - row * .03 : .081 - row * (rows > 1 ? .035 : 0));
+      const z = importedPosition?.z ?? (depth / 2 + .034);
       const plus = terminal.polarity === '+';
-      const terminalSurface = cylinder(group, .011, .012, [x, y, .022], material(plus ? 0xb94939 : 0x315c92, .72, .25), 'z');
-      const label = createPanelLabel(`${terminal.terminal} ${terminal.signal}`, width / Math.max(columns, 3) * .92, .022, { color: plus ? '#ffb3a6' : '#a9d0ff', border: plus ? '#9a4237' : '#355f90', font: 'bold 28px Consolas, monospace' });
-      label.position.set(x, y - .024, .021); group.add(label);
+      const terminalSurface = cylinder(group, importedDrive ? .0023 : drive ? .0065 : .0072, importedDrive ? .0014 : .009, [x, y, importedDrive ? z + .0007 : depth / 2 + .024], metalMaterial, 'z');
+      cylinder(group, importedDrive ? .00125 : drive ? .0036 : .0041, importedDrive ? .0018 : .011, [x, y, importedDrive ? z + .0013 : depth / 2 + .029], material(plus ? 0x8c2f27 : 0x244a70, .1, .42), 'z');
+      const label = createPanelLabel(importedDrive ? `${terminal.terminal.replace('CN1-', '')} ${terminal.signal}` : `${terminal.terminal} ${terminal.signal}`, importedDrive ? .029 : width / Math.max(columns, 3) * .96, importedDrive ? .009 : .014, { background: 'rgba(14,22,26,.96)', color: plus ? '#ffb3a6' : '#a9d0ff', border: plus ? '#9a4237' : '#355f90', font: 'bold 25px Consolas, monospace' });
+      const pinNumber = Number(String(terminal.terminal).split('-').pop());
+      label.position.set(importedDrive ? x + (pinNumber % 2 ? -.019 : .019) : x, importedDrive ? y : y - .014, importedDrive ? z + .004 : depth / 2 + .034); group.add(label);
       anchors.push({
         id: terminal.anchorId,
         tag: `${terminal.terminal} ${terminal.signal}`,
         kind: 'electric',
-        position: [x, y, .028],
+        position: [x, y, importedDrive ? z + .002 : depth / 2 + .034],
+        hitRadius: importedDrive ? .0032 : undefined,
         hitObject: terminalSurface,
-        metadata: { routing: { style: 'terminal-panel' } }
+        metadata: { routing: { style: importedDrive ? 'cn1-pin' : 'terminal-panel' } }
       });
     });
+    group.userData.equipmentModel = { profileId, modelKind, model: title, dimensions: importedModelInfo?.dimensions || { width, height, depth }, terminals: terminals.length, sourceAsset: importedDrive ? 'l7sa004a-production-v3.glb' : null, evidence: controller ? 'LS-XBF-PD02A-OFFICIAL-PRODUCT-PAGE' : importedDrive ? 'USER-BLENDER-5.2-L7SA004A-PRODUCTION-V3' : drive ? 'LS-XDL-L7S-CATALOG' : 'TRAINING-OVERLAY' };
     registerEditorModule('servo2', id, group, anchors, false);
     return group;
   }
@@ -756,7 +897,7 @@
     });
   }
 
-  function loadServoPulsePanels() {
+  async function loadServoPulsePanels() {
     const scene = A.scenes.servo2, parts = scene?.parts;
     if (!parts || parts.pulseRoots) return;
     parts.pulseRoots = {};
@@ -766,10 +907,20 @@
       const sources = uniquePulseTerminals(map.pairs.flatMap(pair => pair.source));
       const xTargets = uniquePulseTerminals(map.pairs.filter(pair => pair.axis === 'X').flatMap(pair => pair.target));
       const yTargets = uniquePulseTerminals(map.pairs.filter(pair => pair.axis === 'Y').flatMap(pair => pair.target));
-      createPulseTerminalModule(root, profileId, map.controller.moduleId, map.controller.model, sources, [-.25, 0, 0], { width: .21, accent: profileId === 'ls' ? '#4db9e8' : '#e25e5e' });
-      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.X, `${map.amplifier.model} X`, xTargets, [.035, 0, 0], { width: .17, accent: '#e6a64d' });
-      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.Y, `${map.amplifier.model} Y`, yTargets, [.265, 0, 0], { width: .17, accent: '#e6a64d' });
-      const evidence = createPanelLabel(`${map.evidence.manualId} · 교육용 단자 오버레이`, .46, .026, { color: '#9fc5d8', border: '#456477', font: '26px Consolas, monospace' });
+      let l7AxisX = null, l7AxisY = null;
+      if (profileId === 'ls' && window.PLCTrainerImportedModels) {
+        try {
+          [l7AxisX, l7AxisY] = await Promise.all([
+            window.PLCTrainerImportedModels.loadModel('l7sa004a-production-v3.glb', { name: 'L7SA004A-axis-x' }),
+            window.PLCTrainerImportedModels.loadModel('l7sa004a-production-v3.glb', { name: 'L7SA004A-axis-y' })
+          ]);
+        } catch (error) { console.warn('Optimized L7SA004A model could not be loaded; using the procedural fallback', error); }
+      }
+      createPulseTerminalModule(root, profileId, map.controller.moduleId, map.controller.model, sources, [-.25, 0, 0], { modelKind: profileId === 'ls' ? 'xbf-pd02a' : 'terminal-panel', width: .19, height: .19, depth: .105, accent: profileId === 'ls' ? '#4db9e8' : '#e25e5e' });
+      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.X, `${map.amplifier.model} X`, xTargets, [.035, 0, 0], { modelKind: profileId === 'ls' ? 'l7sa004a' : 'terminal-panel', importedModel: l7AxisX, width: profileId === 'ls' ? .105 : .17, height: profileId === 'ls' ? .225 : .17, depth: profileId === 'ls' ? .145 : .025, accent: '#e6a64d' });
+      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.Y, `${map.amplifier.model} Y`, yTargets, [.265, 0, 0], { modelKind: profileId === 'ls' ? 'l7sa004a' : 'terminal-panel', importedModel: l7AxisY, width: profileId === 'ls' ? .105 : .17, height: profileId === 'ls' ? .225 : .17, depth: profileId === 'ls' ? .145 : .025, accent: '#e6a64d' });
+      const evidenceText = profileId === 'ls' && l7AxisX && l7AxisY ? `${map.evidence.manualId} · Blender v3 최적화 · CN1 실핀 결선` : `${map.evidence.manualId} · 교육용 단자 오버레이`;
+      const evidence = createPanelLabel(evidenceText, .46, .026, { color: '#9fc5d8', border: '#456477', font: '26px Consolas, monospace' });
       evidence.position.set(0, -.028, .02); root.add(evidence);
       parts.pulseRoots[profileId] = root;
     }
@@ -993,7 +1144,7 @@
       ], false);
       A.scenes.servo2.proxyRoot.visible = false;
     }, { authoredCoordinates: true });
-    loadServoPulsePanels();
+    void loadServoPulsePanels();
     void loadServoNetworkAssets();
     addImported('mps', 'mps-complete-station.glb', null, [-.106, .79, -.102], [0, 0, 0], 1, ({ model }) => {
       A.scenes.mps.parts.importedPlant = bindMpsImportedPlant(model);
@@ -1566,6 +1717,22 @@
       };
     });
   }
+  function connectionTargetDiagnostics(lab, editor) {
+    const scene = A.scenes[lab], canvas = A.renderer?.domElement, rect = canvas?.getBoundingClientRect?.();
+    if (!scene?.camera || !rect?.width || !rect?.height || !editor) return [];
+    return [...editor.connections.values()].map(connection => {
+      const visual = connection.visual, positions = visual.geometry?.getAttribute?.('position'), points = [];
+      if (positions) {
+        const step = Math.max(1, Math.floor(positions.count / 32)), local = new Three.Vector3(), world = new Three.Vector3();
+        for (let index = 0; index < positions.count; index += step) {
+          local.fromBufferAttribute(positions, index); world.copy(local); visual.localToWorld(world); world.project(scene.camera);
+          if (world.z < -1 || world.z > 1) continue;
+          points.push({ x: Math.round((rect.left + (world.x + 1) * rect.width / 2) * 10) / 10, y: Math.round((rect.top + (1 - world.y) * rect.height / 2) * 10) / 10 });
+        }
+      }
+      return { connectionId: connection.id, visual: visual.userData.sovEditorVisual, points };
+    });
+  }
   function getSceneDiagnostics() {
     const plant = A.scenes.mps?.parts?.importedPlant;
     const servo = A.state?.labs?.servo2, commissioning = servo ? Servo.evaluateCommissioning(servo) : null;
@@ -1573,6 +1740,7 @@
       activeLab: A.activeLab,
       cameraNavigationPreset: A.state?.cameraNavigationPreset || '3ds-max',
       editors: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, { mode: editor.mode, modules: editor.modules.size, connections: editor.connections.size }])),
+      connectionTargets: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, connectionTargetDiagnostics(lab, editor)])),
       terminalTargets: Object.fromEntries(Object.entries(A.editorMarkers).map(([lab, targets]) => [lab, {
         total: targets.length,
         enabled: targets.filter(target => target.userData.sovPickEnabled).length,
@@ -1583,6 +1751,7 @@
       servo2: servo ? {
         profileId: servo.profileId,
         commandInterface: Servo.getProfile(servo).commandInterface,
+        equipmentModels: (A.scenes.servo2?.parts?.pulseRoots?.[servo.profileId]?.children || []).map(object => object.userData?.equipmentModel).filter(Boolean),
         outputsSafe: Object.values(servo.axes).every(axis => !axis.servoOn),
         training: Servo.getTrainingSession(servo),
         commissioning: {

@@ -19,6 +19,7 @@ const STATIC_RUNTIME_DIRECTORIES = [
   'src/ui',
   'assets/vendor',
   'assets/imported/sov-kdp',
+  'assets/models/ls-electric',
   'assets/devices/gpt',
   'assets/devices/gpt-expansion',
   'assets/devices/gpt-v24',

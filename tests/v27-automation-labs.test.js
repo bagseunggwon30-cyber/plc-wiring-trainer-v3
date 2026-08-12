@@ -71,9 +71,19 @@ test('3D wiring targets terminal holes directly without persistent floating sock
   assert.match(ui, /filter\(target => target\.userData\.sovPickEnabled\)/);
   assert.doesNotMatch(ui, /marker\.visible = selectedServoEquipment/);
   assert.match(ui, /hitObject: terminalSurface/);
-  assert.match(ui, /routing: \{ style: 'terminal-panel' \}/);
+  assert.match(ui, /style: importedDrive \? 'cn1-pin' : 'terminal-panel'/);
   assert.match(ui, /editor\.anchorWorldPosition\(ref\)/);
   assert.match(ui, /editor\.anchorWorldPosition\(editor\.pendingConnection\.anchor\)/);
+});
+
+test('LS pulse trainer replaces its fallback housing with the optimized Blender L7SA004A asset', () => {
+  for (const token of ['xbf-pd02a', 'l7sa004a', 'three-dimensional-equipment', 'smart-link-connector', 'heatsink-fin-', 'encoder-connector', 'motor-connector', 'equipmentModels']) assert.match(ui, new RegExp(token));
+  for (const token of ['l7sa004a-production-v3.glb', 'mountL7SA004AModel', 'TERM_CN1_09_PF_POS', 'TERM_CN1_10_PF_NEG', 'TERM_CN1_11_PR_POS', 'TERM_CN1_12_PR_NEG']) assert.match(ui, new RegExp(token));
+  assert.match(ui, /model\.rotation\.y \+= Math\.PI/);
+  assert.match(ui, /dimensions: importedModelInfo\?\.dimensions \|\| \{ width, height, depth \}/);
+  assert.match(ui, /LS-XBF-PD02A-OFFICIAL-PRODUCT-PAGE/);
+  assert.match(ui, /USER-BLENDER-5\.2-L7SA004A-PRODUCTION-V3/);
+  assert.match(ui, /LS-XDL-L7S-CATALOG/);
 });
 
 test('manual lab controls are routed through the currently selected vendor address map', () => {

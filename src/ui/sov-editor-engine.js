@@ -14,12 +14,13 @@
     DELETE_WIRE: 'DELETE_WIRE',
     DELETE_MODULE: 'DELETE_MODULE'
   });
-  const LABS = Object.freeze(['servo2', 'mps', 'pneumatic', 'discrete']);
+  const LABS = Object.freeze(['servo2', 'mps', 'pneumatic', 'discrete', 'workbench3d']);
   const MODE_ALLOWANCES = Object.freeze({
     servo2: Object.freeze([MODES.CONTROL, MODES.WIRE, MODES.DELETE_WIRE]),
     mps: Object.freeze([MODES.CONTROL, MODES.WIRE, MODES.DELETE_WIRE]),
     pneumatic: Object.freeze(Object.values(MODES)),
-    discrete: Object.freeze([MODES.CONTROL, MODES.MOVE, MODES.WIRE, MODES.DELETE_WIRE, MODES.DELETE_MODULE])
+    discrete: Object.freeze([MODES.CONTROL, MODES.MOVE, MODES.WIRE, MODES.DELETE_WIRE, MODES.DELETE_MODULE]),
+    workbench3d: Object.freeze([MODES.CONTROL, MODES.WIRE, MODES.DELETE_WIRE])
   });
   const HOTKEYS = Object.freeze({
     Digit1: MODES.CONTROL, Numpad1: MODES.CONTROL,
@@ -128,6 +129,8 @@
         preview: options.previewColor ?? 0xffd15a
       };
       this.tubeRadius = Math.max(.001, finiteNumber(options.tubeRadius ?? .018, 'tubeRadius'));
+      this.solidElectricWires = options.solidElectricWires === true;
+      this.wireRadius = Math.max(.0005, finiteNumber(options.wireRadius ?? .004, 'wireRadius'));
       this.connectionCounter = 0;
       this.hotkeyDetachers = new Set();
       this.disposed = false;
@@ -252,6 +255,25 @@
     _createVisual(kind, preview = false, options = {}) {
       const color = options.color ?? (preview ? this.colors.preview : this.colors[kind]);
       if (kind === 'electric' || kind === 'optical') {
+        if (this.solidElectricWires) {
+          const start = new this.THREE.Vector3(), end = new this.THREE.Vector3(0, .0001, 0);
+          const geometry = new this.THREE.TubeGeometry(new this.THREE.LineCurve3(start, end), 1, options.radius || this.wireRadius, 8, false);
+          const material = new this.THREE.MeshStandardMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: preview ? .35 : .12,
+            roughness: .38,
+            metalness: .04,
+            transparent: preview,
+            opacity: preview ? .78 : 1,
+            depthWrite: !preview
+          });
+          const cable = new this.THREE.Mesh(geometry, material);
+          cable.userData.sovEditorVisual = 'cable';
+          cable.userData.sovEditorRouting = normalizeRouting(options.routing);
+          cable.userData.sovWireRadius = options.radius || this.wireRadius;
+          return cable;
+        }
         const geometry = new this.THREE.BufferGeometry().setFromPoints(Array.from({ length: 6 }, () => new this.THREE.Vector3()));
         const material = new this.THREE.LineBasicMaterial({ color, transparent: preview, opacity: preview ? .72 : 1 });
         const line = new this.THREE.Line(geometry, material); line.userData.sovEditorVisual = 'line'; line.userData.sovEditorRouting = normalizeRouting(options.routing); return line;
@@ -263,13 +285,20 @@
 
     _updateVisual(visual, worldA, worldB) {
       const a = this._connectionLocal(worldA), b = this._connectionLocal(worldB);
-      if (visual.userData.sovEditorVisual === 'line') {
+      if (visual.userData.sovEditorVisual === 'line' || visual.userData.sovEditorVisual === 'cable') {
         const id = String(visual.userData.connectionId || 'preview'); let hash = 0; for (let index = 0; index < id.length; index += 1) hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
         const terminalPanel = visual.userData.sovEditorRouting?.style === 'terminal-panel';
         const lane = terminalPanel ? hash % 8 : hash % 9;
         const routeY = Math.max(a.y, b.y) + (terminalPanel ? .018 + lane * .002 : .12 + lane * .018);
         const routeZ = Math.max(a.z, b.z) + (terminalPanel ? .010 + lane * .003 : .10 + lane * .024);
         const points = [a, new this.THREE.Vector3(a.x, routeY, a.z), new this.THREE.Vector3(a.x, routeY, routeZ), new this.THREE.Vector3(b.x, routeY, routeZ), new this.THREE.Vector3(b.x, routeY, b.z), b];
+        if (visual.userData.sovEditorVisual === 'cable') {
+          const length = a.distanceTo(b); visual.visible = length > 1e-6;
+          if (!visual.visible) return;
+          const curve = new this.THREE.CatmullRomCurve3(points, false, 'centripetal', .35);
+          const geometry = new this.THREE.TubeGeometry(curve, 30, visual.userData.sovWireRadius || this.wireRadius, 8, false);
+          visual.geometry.dispose?.(); visual.geometry = geometry; visual.geometry.computeBoundingSphere(); return;
+        }
         const position = visual.geometry.getAttribute('position'); points.forEach((point, index) => position.setXYZ(index, point.x, point.y, point.z)); position.needsUpdate = true; visual.geometry.computeBoundingSphere(); visual.visible = true; return;
       }
       const delta = b.clone().sub(a), length = delta.length(); visual.visible = length > 1e-6;
@@ -501,5 +530,5 @@
 
   function create(options) { return new EditorEngine(options); }
 
-  return Object.freeze({ version: '1.1.0', SCHEMA_VERSION, MODES, LABS, MODE_ALLOWANCES, hotkeyAction, editableTarget, normalizeRouting, createAnchorHitTarget, EditorEngine, create });
+  return Object.freeze({ version: '1.2.0', SCHEMA_VERSION, MODES, LABS, MODE_ALLOWANCES, hotkeyAction, editableTarget, normalizeRouting, createAnchorHitTarget, EditorEngine, create });
 });

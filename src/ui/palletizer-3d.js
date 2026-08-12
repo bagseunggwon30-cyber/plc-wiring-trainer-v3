@@ -95,6 +95,29 @@
     box(group,[.62,.58,.62],[0,0,0],P.materials.servo);box(group,[.3,.3,.12],[0,0,.36],P.materials.dark);cylinder(group,.12,.28,[0,0,.57],P.materials.shaft,'z');
     return group;
   }
+  function extrusion(parent,size,position){
+    const group=new Three.Group();group.position.set(...position);parent.add(group);box(group,size,[0,0,0],P.materials.frame);
+    const axis=size.indexOf(Math.max(...size)),groove=.025,edge=.38;
+    if(axis===0){
+      for(const y of [-size[1]*edge,size[1]*edge])for(const z of [-size[2]*edge,size[2]*edge])box(group,[size[0]*.965,groove,groove],[0,y,z],P.materials.groove);
+    }else if(axis===1){
+      for(const x of [-size[0]*edge,size[0]*edge])for(const z of [-size[2]*edge,size[2]*edge])box(group,[groove,size[1]*.965,groove],[x,0,z],P.materials.groove);
+    }else{
+      for(const x of [-size[0]*edge,size[0]*edge])for(const y of [-size[1]*edge,size[1]*edge])box(group,[groove,groove,size[2]*.965],[x,y,0],P.materials.groove);
+    }
+    return group;
+  }
+  function cableChain(parent,start,end,count=14){
+    const group=new Three.Group();group.name='energy-chain';parent.add(group);const a=new Three.Vector3(...start),b=new Three.Vector3(...end);
+    for(let index=0;index<count;index+=1){
+      const t=count===1?0:index/(count-1),point=a.clone().lerp(b,t),link=box(group,[.18,.1,.26],point.toArray(),P.materials.chain);
+      link.name='energy-chain-link';
+    }
+    P.parts.cableChains.push(group);return group;
+  }
+  function safetyPost(parent,x,z,height=2.65){
+    extrusion(parent,[.16,height,.16],[x,.45+height/2,z]);box(parent,[.32,.1,.32],[x,.43,z],P.materials.yellow);
+  }
   function led(parent,position){
     const mesh=new Three.Mesh(new Three.SphereGeometry(.08,16,12),P.materials.ledOff.clone());mesh.position.set(...position);parent.add(mesh);return mesh;
   }
@@ -113,6 +136,8 @@
       frame:material(0x5b6870,.72,.32),rail:material(0xb6c1c8,.82,.2),dark:material(0x1b252c,.55,.45),servo:material(0x394752,.48,.35),
       blue:material(0x176fa3,.4,.35),yellow:material(0xf0bb2f,.25,.48),red:material(0xbf4038,.35,.45),wood:material(0x9a6437,.12,.72),
       box:material(0xd8a14b,.05,.7),jaw:material(0x88969e,.75,.25),sensor:material(0x20282d,.45,.42),
+      shaft:material(0xd6dde1,.92,.16),groove:material(0x242d33,.48,.42),chain:material(0x10171c,.35,.5),
+      guard:material(0x4e9fc1,.12,.55,{transparent:true,opacity:.2,side:Three.DoubleSide}),cabinet:material(0xc3c9c9,.58,.34),
       ledOff:material(0x20313a,.1,.4,{emissive:0x000000}),ghost:material(0x4ec9ff,.05,.45,{transparent:true,opacity:.18})
     };
     const hemi=new Three.HemisphereLight(0xc4e8ff,0x253027,1.45);P.scene.add(hemi);
@@ -124,39 +149,65 @@
 
   function createMachine(){
     const root=new Three.Group();P.scene.add(root);P.parts.machine=root;
-    // table and industrial frame
+    P.parts.cableChains=[];P.parts.detailStats={safetyPosts:0,energyChains:0,linearRails:0,servoMotors:0,gripperComponents:0};
+    // 강성 베이스와 산업용 알루미늄 프로파일 프레임
     box(root,[10.8,.3,6.6],[0,.28,0],P.materials.dark);
-    for(const x of [-5,5])for(const z of [-2.9,2.9])box(root,[.28,1.1,.28],[x,-.3,z],P.materials.frame);
-    for(const x of [-5,5])box(root,[.32,5.05,.32],[x,2.75,2.72],P.materials.frame);
-    box(root,[10.45,.34,.42],[0,5.12,2.72],P.materials.frame);
-    box(root,[9.85,.16,.27],[0,4.78,2.72],P.materials.rail);
-    servo(root,[-5.12,5.13,2.72],Math.PI/2);
+    for(const x of [-5,5])for(const z of [-2.9,2.9])extrusion(root,[.32,1.1,.32],[x,-.3,z]);
+    for(const x of [-5,5])extrusion(root,[.38,5.05,.38],[x,2.75,2.72]);
+    extrusion(root,[10.45,.42,.48],[0,5.12,2.72]);
+    // X축: 이중 리니어 가이드, 랙 커버, 서보와 커플링
+    for(const y of [4.72,4.88]){box(root,[9.86,.095,.13],[0,y,2.48],P.materials.rail);P.parts.detailStats.linearRails+=1;}
+    box(root,[9.82,.18,.12],[0,5.04,2.43],P.materials.dark);
+    servo(root,[-5.12,5.13,2.72],Math.PI/2);P.parts.detailStats.servoMotors+=1;
+    cylinder(root,.09,.34,[-4.75,5.13,2.72],P.materials.shaft,'x');
+    cableChain(root,[-4.2,5.48,2.25],[3.6,5.48,2.25],19);P.parts.detailStats.energyChains+=1;
     // X carriage carries the Y bridge.
     const xCarriage=new Three.Group();root.add(xCarriage);P.parts.xCarriage=xCarriage;
-    box(xCarriage,[.72,.58,.72],[0,4.82,2.72],P.materials.blue);
-    box(xCarriage,[.34,.32,5.8],[0,4.62,0],P.materials.frame);
-    box(xCarriage,[.18,.18,5.55],[0,4.28,0],P.materials.rail);
-    servo(xCarriage,[0,4.62,2.9],0);
+    box(xCarriage,[.82,.66,.82],[0,4.82,2.72],P.materials.blue);
+    box(xCarriage,[.54,.18,.5],[0,4.68,2.46],P.materials.rail);
+    extrusion(xCarriage,[.42,.42,5.8],[0,4.62,0]);
+    for(const x of [-.16,.16]){box(xCarriage,[.09,.13,5.45],[x,4.28,0],P.materials.rail);P.parts.detailStats.linearRails+=1;}
+    box(xCarriage,[.38,.12,5.35],[0,4.45,0],P.materials.dark);
+    servo(xCarriage,[0,4.62,2.9],0);P.parts.detailStats.servoMotors+=1;
+    cylinder(xCarriage,.08,.3,[0,4.62,2.53],P.materials.shaft,'z');
+    cableChain(xCarriage,[.38,4.72,2.15],[.38,4.72,-2.15],14);P.parts.detailStats.energyChains+=1;
     const yCarriage=new Three.Group();xCarriage.add(yCarriage);P.parts.yCarriage=yCarriage;
-    box(yCarriage,[.78,.48,.7],[0,4.3,0],P.materials.blue);
-    box(yCarriage,[.28,4.35,.28],[0,2.45,0],P.materials.frame);
-    box(yCarriage,[.16,3.95,.16],[.2,2.38,0],P.materials.rail);
-    servo(yCarriage,[0,4.08,.05],0);
+    box(yCarriage,[.86,.5,.78],[0,4.3,0],P.materials.blue);
+    extrusion(yCarriage,[.38,4.35,.38],[0,2.45,0]);
+    for(const x of [-.18,.18]){box(yCarriage,[.08,3.95,.12],[x,2.38,.25],P.materials.rail);P.parts.detailStats.linearRails+=1;}
+    cylinder(yCarriage,.055,3.78,[0,2.36,.31],P.materials.shaft,'y');
+    servo(yCarriage,[0,4.08,.05],0);P.parts.detailStats.servoMotors+=1;
+    cableChain(yCarriage,[-.34,3.9,-.25],[-.34,.95,-.25],11);P.parts.detailStats.energyChains+=1;
     const zSlide=new Three.Group();yCarriage.add(zSlide);P.parts.zSlide=zSlide;
-    box(zSlide,[.68,.55,.62],[0,0,0],P.materials.blue);
+    box(zSlide,[.78,.62,.72],[0,0,0],P.materials.blue);
+    box(zSlide,[.52,.16,.5],[0,.18,.1],P.materials.rail);
     const gripper=new Three.Group();gripper.position.y=-.26;zSlide.add(gripper);P.parts.gripper=gripper;
-    box(gripper,[.74,.22,.54],[0,-.05,0],P.materials.dark);
-    const leftJaw=box(gripper,[.12,.55,.16],[-.3,-.37,0],P.materials.jaw),rightJaw=box(gripper,[.12,.55,.16],[.3,-.37,0],P.materials.jaw);
+    cylinder(gripper,.17,.32,[0,-.04,0],P.materials.cabinet,'y');
+    box(gripper,[.82,.16,.58],[0,-.22,0],P.materials.dark);
+    box(gripper,[.62,.14,.4],[0,-.34,0],P.materials.blue);
+    const leftJaw=box(gripper,[.12,.62,.18],[-.3,-.62,0],P.materials.jaw),rightJaw=box(gripper,[.12,.62,.18],[.3,-.62,0],P.materials.jaw);
+    box(leftJaw,[.18,.12,.28],[0,-.27,0],P.materials.dark);box(rightJaw,[.18,.12,.28],[0,-.27,0],P.materials.dark);
     P.parts.jaws=[leftJaw,rightJaw];
-    const held=box(gripper,[.52,.43,.52],[0,-.68,0],P.materials.box);held.visible=false;P.parts.heldBox=held;
+    P.parts.detailStats.gripperComponents=7;
+    const held=box(gripper,[.52,.43,.52],[0,-.92,0],P.materials.box);held.visible=false;P.parts.heldBox=held;
     // target marker and sensors
     const target=box(root,[.7,.08,.7],[mmX(P.state.cell.pick.x),.52,mmY(P.state.cell.pick.y)],P.materials.ghost);P.parts.target=target;
     P.parts.leds={xHome:led(root,[-4.74,4.85,2.35]),xLimit:led(root,[4.74,4.85,2.35]),yHome:led(xCarriage,[.42,4.28,2.52]),yLimit:led(xCarriage,[.42,4.28,-2.52]),zHome:led(yCarriage,[.35,4.2,.32]),zLimit:led(yCarriage,[.35,.55,.32])};
     P.parts.pickGroup=new Three.Group();root.add(P.parts.pickGroup);
     box(P.parts.pickGroup,[1.05,.18,1.0],[mmX(P.state.cell.pick.x),.47,mmY(P.state.cell.pick.y)],P.materials.dark);
+    for(const dx of [-.38,.38])for(const dz of [-.34,.34])cylinder(P.parts.pickGroup,.055,.18,[mmX(P.state.cell.pick.x)+dx,.64,mmY(P.state.cell.pick.y)+dz],P.materials.yellow,'y');
     const pickBox=box(P.parts.pickGroup,[.52,.43,.52],[mmX(P.state.cell.pick.x),.78,mmY(P.state.cell.pick.y)],P.materials.box);P.parts.pickBox=pickBox;
     P.parts.palletGroup=new Three.Group();root.add(P.parts.palletGroup);
     P.parts.placedGroup=new Three.Group();root.add(P.parts.placedGroup);
+    // 설비 안전 영역: 투명 펜스와 제어함만 두고 교실 소품은 사용하지 않는다.
+    const fence=new Three.Group();fence.name='industrial-safety-guard';root.add(fence);
+    for(const [x,z] of [[-5.35,-3.15],[-5.35,3.15],[5.35,-3.15],[5.35,3.15]]){safetyPost(fence,x,z);P.parts.detailStats.safetyPosts+=1;}
+    box(fence,[.04,2.25,5.9],[-5.35,1.78,0],P.materials.guard);box(fence,[10.65,2.25,.04],[0,1.78,3.15],P.materials.guard);
+    const cabinet=new Three.Group();cabinet.name='ls-electric-control-cabinet';root.add(cabinet);
+    box(cabinet,[1.25,2.35,.72],[4.55,1.62,-2.55],P.materials.cabinet);box(cabinet,[1.12,2.12,.04],[4.55,1.62,-2.18],P.materials.dark);
+    box(cabinet,[.32,.16,.08],[4.55,2.27,-2.12],P.materials.blue);cylinder(cabinet,.1,.12,[4.18,2.12,-2.08],P.materials.red,'z');
+    cylinder(cabinet,.055,.48,[4.88,3.02,-2.55],P.materials.dark,'y');
+    for(const [y,mat] of [[3.38,P.materials.red],[3.2,P.materials.yellow],[3.02,P.materials.blue]])cylinder(cabinet,.11,.16,[4.88,y,-2.55],mat,'y');
     rebuildPallet(true);rebuildPlaced(true);
   }
 
@@ -326,6 +377,18 @@
   }
   function readDevice(addr){return Runtime.readDevice(P.state,addr);}
   function writeDevice(addr,value){const result=Runtime.writeDevice(P.state,addr,value);schedule();updateUi(true);persist(true);return result;}
+  function getDiagnostics(){
+    let meshCount=0;P.parts.machine?.traverse?.(object=>{if(object.isMesh)meshCount+=1;});
+    return {
+      initialized:P.initialized,visible:P.visible,meshCount,
+      axes:{x:!!P.parts.xCarriage,y:!!P.parts.yCarriage,z:!!P.parts.zSlide},
+      gripper:{present:!!P.parts.gripper,jaws:P.parts.jaws?.length||0,components:P.parts.detailStats?.gripperComponents||0},
+      linearRails:P.parts.detailStats?.linearRails||0,
+      energyChains:P.parts.detailStats?.energyChains||0,
+      safetyPosts:P.parts.detailStats?.safetyPosts||0,
+      controlCabinet:!!P.parts.machine?.getObjectByName?.('ls-electric-control-cabinet')
+    };
+  }
 
   function init(){
     injectCss();if(!injectUi())return;P.state=loadSavedState();buildMemoryTable();bindUi();
@@ -334,7 +397,7 @@
   }
 
   window.PLCTrainerPalletizer3D={
-    version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,setCameraNavigationPreset,
+    version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,setCameraNavigationPreset,getDiagnostics,
     setProfile:profile=>{const ok=Runtime.setProfile(P.state,profile);if(ok){buildMemoryTable();updateUi(true);persist(true);}return ok;},getProfile:()=>Runtime.getProfile(P.state),
     startAuto:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.autoStart,true);schedule();return result.ok&&result.accepted!==false;},stop:()=>Runtime.writeDevice(P.state,activeProfile().commands.stop,true),home:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.home,true);schedule();return result.ok&&result.accepted!==false;},
     get state(){return P.state;},get visible(){return P.visible;},get cameraNavigationPreset(){return P.cameraNavigationPreset;}

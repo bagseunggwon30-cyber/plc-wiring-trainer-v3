@@ -87,7 +87,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Get-XgSimProjectIdenti
 
 ```powershell
 npm ci
+
+# 결선 작업장과 3D 실습실 실행 (Visual Studio Build Tools 불필요)
 npm start
+
+# 선택 기능인 XG-SIM 공식 인터페이스까지 함께 실행
+# 사전 조건: Visual Studio 2022 Build Tools의 MSBuild와 .NET Framework 4.7.2 targeting pack
+npm run start:xgsim
 
 # 기존 회귀, v3 단위 테스트, 타입 검사, 렌더러/Worker 빌드
 npm run verify
@@ -104,6 +110,8 @@ npm run build
 # 출시 게이트부터 다시 실행한 뒤 공유용 최소 ZIP 생성
 npm run package:share
 ```
+
+`npm start`는 XG-SIM 호스트 실행 파일이 없어도 정상적으로 시작됩니다. 이 경우 결선·검증·3D 실습 기능은 사용할 수 있고, 고급 도구의 XG-SIM 공식 인터페이스 진단만 연결 시 안전하게 차단됩니다.
 
 새 포터블 파일은 `release/결선작업장-<package.json version>-portable.exe`에 생성됩니다. 명령이 성공해도 기존 실행 파일은 자동으로 대체하지 마십시오. 외부 배포에는 별도 코드서명과 훈련 패널 대조 시험이 필요합니다.
 
