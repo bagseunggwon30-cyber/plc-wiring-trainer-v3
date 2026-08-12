@@ -51,7 +51,9 @@ function wire(
 export function createAcademyExp2Md02Template(): WorkshopDocumentV2 {
   const devices = [
     device('academy-ac', 'BOUNDARY-AC', 'boundary:ac-supply', 60, 60),
-    device('academy-ps1', 'MDR-100', 'mean-well:mdr-100-24', 320, 60, { orderCode: 'MDR-100-24' }),
+    // Preserve the AC source lead-out corridor: 40 units of source egress plus
+    // the MDR image routing clearance must not overlap.
+    device('academy-ps1', 'MDR-100', 'mean-well:mdr-100-24', 380, 60, { orderCode: 'MDR-100-24' }),
     device('academy-plc1', 'XBC-DR32H', 'ls-electric:xbc-dr32h', 720, 60, { orderCode: 'XBC-DR32H' }),
     // Keep a vertical wiring corridor between the power/HMI group and PLC.
     // The earlier centered HMI closed this passage and forced long hull routes.

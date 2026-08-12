@@ -79,6 +79,30 @@ test('a commanded relay stays off and reports its exact missing 24G return', () 
   assert.equal(state.solution.issues.some(issue => issue.code === 'LOAD_RETURN_OPEN' && issue.objectId === 'relay1'), true);
 });
 
+test('a P24-to-24G short de-energizes the MDR-powered bench and blocks voltage claims', () => {
+  const state = createPoweredReference();
+  const profile = Discrete.getProfile(state);
+  assert.equal(Discrete.writeDevice(state, profile.outputs.relay1, true).accepted, true);
+  assert.equal(state.effectiveOutputs.relay1, true);
+  Discrete.setConnections(state, state.connections.concat({
+    id: 'fatal-source-short',
+    from: { moduleId: 'power', anchorId: 'P24-18' },
+    to: { moduleId: 'power', anchorId: 'N24-18' }
+  }));
+
+  assert.equal(state.solution.ready, false);
+  assert.equal(state.solution.powerReady, false);
+  assert.equal(state.commandOutputs.relay1, true);
+  assert.equal(state.effectiveOutputs.relay1, false);
+  assert.equal(state.solution.issues.some(issue => issue.code === 'POWER_RAIL_SHORT' && issue.objectId === 'source'), true);
+  assert.deepEqual(Discrete.measureBetween(state, 'source.P24', 'source.N24', 'voltage'), {
+    status: 'BLOCKED',
+    mode: 'voltage',
+    code: 'POWER_RAIL_SHORT',
+    message: 'DC 24V +24V와 24G가 단락되어 전원을 안전 차단했습니다.'
+  });
+});
+
 test('timer and counter advance only through complete physical output branches', () => {
   const state = createPoweredReference({ timerPresetSeconds: 0.1, counterPreset: 2 });
   const profile = Discrete.getProfile(state);
@@ -104,6 +128,49 @@ test('timer and counter advance only through complete physical output branches',
   assert.equal(state.effectiveOutputs.timer, false);
   assert.equal(state.timer.active, false);
   assert.equal(state.solution.issues.some(issue => issue.code === 'LOAD_RETURN_OPEN' && issue.objectId === 'timer'), true);
+});
+
+test('timer completion clears immediately when its powered output branch opens', () => {
+  const state = createPoweredReference({ timerPresetSeconds: 0.1 });
+  const profile = Discrete.getProfile(state);
+
+  Discrete.writeDevice(state, profile.outputs.timer, true);
+  Discrete.tick(state, 0.1);
+  assert.equal(state.timer.active, true);
+  assert.equal(state.timer.done, true);
+  assert.equal(Discrete.readDevice(state, profile.status.timerDone), true);
+
+  Discrete.setConnections(state, withoutConnection(state.connections, 'timer', 'N24'));
+
+  assert.equal(state.effectiveOutputs.timer, false);
+  assert.equal(state.timer.active, false);
+  assert.equal(state.timer.value, 0);
+  assert.equal(state.timer.done, false);
+  assert.equal(Discrete.readDevice(state, profile.status.timerDone), false);
+});
+
+test('counter clears its pulse edge immediately when the powered output branch opens', () => {
+  const state = createPoweredReference({ counterPreset: 1 });
+  const profile = Discrete.getProfile(state);
+
+  Discrete.writeDevice(state, profile.outputs.counter, true);
+  Discrete.tick(state, 0.01);
+  assert.equal(state.counter.value, 1);
+  assert.equal(state.counter.done, true);
+  assert.equal(state.counter.previousPulse, true);
+
+  const completeConnections = state.connections;
+  Discrete.setConnections(state, withoutConnection(completeConnections, 'counter', 'N24'));
+
+  assert.equal(state.effectiveOutputs.counter, false);
+  assert.equal(state.counter.previousPulse, false);
+  assert.equal(state.counter.value, 1);
+  assert.equal(state.counter.done, true);
+
+  Discrete.setConnections(state, completeConnections);
+  Discrete.tick(state, 0.01);
+  assert.equal(state.counter.value, 2);
+  assert.equal(state.counter.done, true);
 });
 
 test('switching vendor profiles safely clears commands, timer, and counter edge state', () => {

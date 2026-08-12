@@ -4849,6 +4849,9 @@ function restoreUndoState(x){
   markTerminalSnapDirty();
   window.PLCTrainerPalletizer3D?.importState?.(S.palletizer3d);
   window.PLCTrainerAutomationLabs?.importState?.(S.automationLab);
+  // Import automation state before showing its view: setVisible() restores the
+  // imported activeLab, while the MultiView DOM must follow this snapshot too.
+  window.PLCTrainerMultiView?.setView?.(S.workspaceView);
 }
 function notifyWorkshopRevision(revision){
   // 편집 함수는 snapshot() 뒤에 실제 상태 변경과 render()를 수행한다.
@@ -9888,17 +9891,30 @@ function renderNetlist(){
   lastNets.forEach((n,i)=>{
     const pols=[...new Set(n.members.map(m=>m.pol).filter(Boolean))];
     const repPol=pols[0]||'NEUTRAL';
-    const c=POL[repPol]?.color||'#666';
+    const colorForPol=pol=>Object.prototype.hasOwnProperty.call(POL,pol)&&POL[pol].color||'#666';
+    const c=colorForPol(repPol);
     const d=document.createElement('div');
     d.style.marginBottom='4px';
     d.style.borderLeft=`3px solid ${c}`;
     d.style.paddingLeft='5px';
     d.style.cursor='pointer';
-    const memList=n.members.map(m=>{
+    const title=document.createElement('b');
+    title.textContent=`NET ${i+1}`;
+    d.appendChild(title);
+    d.appendChild(document.createTextNode(' '));
+    const summary=document.createElement('span');
+    summary.className='muted';
+    summary.textContent=`(${n.wires.length}선, ${pols.join('/')})`;
+    d.appendChild(summary);
+    d.appendChild(document.createElement('br'));
+    n.members.forEach(m=>{
       const lbl=LIB[S.devices[m.dev]?.type]?.label||m.dev;
-      return `<span class="netchip" style="background:${POL[m.pol]?.color||'#666'}">${lbl.split(' ')[0]}.${m.label||m.term}</span>`;
-    }).join('');
-    d.innerHTML=`<b>NET ${i+1}</b> <span class="muted">(${n.wires.length}선, ${pols.join('/')})</span><br>${memList}`;
+      const chip=document.createElement('span');
+      chip.className='netchip';
+      chip.style.background=colorForPol(m.pol);
+      chip.textContent=`${String(lbl).split(' ')[0]}.${m.label||m.term}`;
+      d.appendChild(chip);
+    });
     d.addEventListener('mouseenter',()=>{
       highlightedWires=new Set(n.wires);
       highlightedTerms=new Set(n.members.map(m=>m.dev+'.'+m.term));
@@ -10856,12 +10872,21 @@ function buildPalette(){
   for(const [cat,name] of CATS){
     const h=document.createElement('h3');
     h.textContent=name; h.dataset.cat=cat;
-    h.addEventListener('click',()=>{
+    h.setAttribute('role','button');
+    h.tabIndex=0;
+    h.setAttribute('aria-expanded','true');
+    const toggleCategory=()=>{
       h.classList.toggle('collapsed');
       const collapsed=h.classList.contains('collapsed');
-      $('#palette').querySelectorAll(`.pal[data-cat="${cat}"]`).forEach(p=>{
-        p.style.display=collapsed?'none':'';
-      });
+      h.setAttribute('aria-expanded',String(!collapsed));
+      filterPalette(search.value.toLowerCase(),h);
+    };
+    h.addEventListener('click',toggleCategory);
+    h.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){
+        e.preventDefault();
+        toggleCategory();
+      }
     });
     el.appendChild(h);
     for(const [type,def] of Object.entries(LIB)){
@@ -10870,6 +10895,8 @@ function buildPalette(){
       const d=document.createElement('div');
       d.className='pal'; d.dataset.cat=cat; d.dataset.search=(def.label+' '+(def.sub||'')+' '+type).toLowerCase();
       d.dataset.type=type;
+      d.setAttribute('role','button');
+      d.tabIndex=0;
       d.draggable=true;
       const manualStatus=paletteManualStatus(type);
       d.dataset.manualStatus=manualStatus.kind;
@@ -10937,25 +10964,41 @@ function buildPalette(){
         addDevice(type);
         render(); status(`추가: ${def.label}`);
       });
+      d.addEventListener('keydown',e=>{
+        if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){
+          e.preventDefault();
+          d.click();
+        }
+      });
       el.appendChild(d);
     }
   }
 }
-function filterPalette(q){
-  const items=$('#palette').querySelectorAll('.pal');
-  const heads=$('#palette').querySelectorAll('h3');
-  if(!q){
-    items.forEach(i=>i.style.display='');
-    heads.forEach(h=>h.style.display='');
-    return;
-  }
+function filterPalette(q,focusFallback){
+  const palette=$('#palette');
+  const active=document.activeElement;
+  const activePal=active?.classList?.contains('pal')?active:null;
+  const items=palette.querySelectorAll('.pal');
+  const heads=palette.querySelectorAll('h3');
   const visibleCats=new Set();
   items.forEach(i=>{
-    const m=i.dataset.search.includes(q);
-    i.style.display=m?'':'none';
+    const m=!q||i.dataset.search.includes(q);
     if(m)visibleCats.add(i.dataset.cat);
   });
-  heads.forEach(h=>h.style.display=visibleCats.has(h.dataset.cat)?'':'none');
+  heads.forEach(h=>{
+    const matches=!q||visibleCats.has(h.dataset.cat);
+    const collapsed=h.classList.contains('collapsed');
+    h.style.display=matches?'':'none';
+    items.forEach(i=>{
+      if(i.dataset.cat===h.dataset.cat){
+        i.style.display=matches&&!collapsed?'':'none';
+      }
+    });
+  });
+  if(activePal?.style.display==='none'){
+    const search=palette.querySelector('input[type="text"]');
+    (focusFallback&&focusFallback.style.display!=='none'?focusFallback:search)?.focus();
+  }
 }
 
 /* ===================================================================
@@ -11984,6 +12027,9 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(e.key==='Delete'||e.key==='Backspace'){
+    // Diagram/I-O/automation views own Delete locally. Do not let a stale
+    // panel selection remove shared devices before their handler runs.
+    if(S.workspaceView!=='panel')return;
     if(S.calibration.enabled && S.calibration.active){
       e.preventDefault(); uiDeleteActiveTerminal(); return;
     }

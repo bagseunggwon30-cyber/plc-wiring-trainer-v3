@@ -39,7 +39,7 @@ test('legacy live refresh cannot replace the mounted v3 mission and device setti
 });
 
 test('legacy fallback loading resets mission session state and the V2 shadow first', () => {
-  const fallback = /if \(restored === null\) \{([\s\S]*?)\n\s*return;\n\s*\}/.exec(workflowSource)?.[1] ?? '';
+  const fallback = /if \(restored === null\) \{([\s\S]*?)\r?\n\s*return;\r?\n\s*\}/.exec(workflowSource)?.[1] ?? '';
   const resetIndex = fallback.indexOf('selectedMissionId = null;');
   const missionResetIndex = fallback.indexOf('resetMissionSessionState(bindingsByMission, hintLevelByMission);');
   const shadowClearIndex = fallback.indexOf('bridge.clearV2Shadow();');

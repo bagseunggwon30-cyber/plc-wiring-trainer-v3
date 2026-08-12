@@ -19,6 +19,7 @@ const STATIC_RUNTIME_DIRECTORIES = [
   'src/ui',
   'assets/vendor',
   'assets/imported/sov-kdp',
+  'assets/manual-backed',
   'assets/devices/gpt',
   'assets/devices/gpt-expansion',
   'assets/devices/gpt-v24',
@@ -89,7 +90,15 @@ export default defineConfig({
             throw new Error(`Static runtime directory is missing: ${relativeDirectory}`);
           }
           const target = resolve(__dirname, 'build/renderer', relativeDirectory);
-          cpSync(source, target, { recursive: true, force: true });
+          cpSync(source, target, {
+            recursive: true,
+            force: true,
+            // Blender working files are editable source, not renderer assets.
+            // Keep them in the repository while packaging only manifest/GLBs.
+            filter: relativeDirectory === 'assets/manual-backed'
+              ? sourcePath => !/\.blend\d*$/i.test(sourcePath)
+              : undefined,
+          });
         }
       },
     },

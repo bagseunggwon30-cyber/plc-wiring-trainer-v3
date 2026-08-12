@@ -5,7 +5,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
 
-  const VERSION='3.1.0';
+  const VERSION='3.2.0';
   const EPS=1e-6;
   const AXIS_DEFAULTS={
     X:{min:0,max:600,home:0,homeDirection:-1,maxSpeed:260,accel:700,decel:800,homeSpeed:90,tolerance:.35},
@@ -21,7 +21,13 @@
   const AUTO_STEPS={
     IDLE:0,HOMING:10,MOVE_PICK_XY:20,LOWER_PICK:30,GRIP:40,LIFT_PICK:50,
     MOVE_PLACE_XY:60,LOWER_PLACE:70,RELEASE:80,LIFT_PLACE:90,NEXT:100,
-    COMPLETE:110,PAUSED:120,FAULT:900
+    COMPLETE:110,PAUSED:120,FAULT:900,
+    PROD_SERVO:10,PROD_PREFLIGHT:20,PROD_Z_WAIT:30,PROD_X_WAIT:31,PROD_Y_WAIT:32,
+    PROD_WAIT_PRODUCT:100,PROD_FEED_X:110,PROD_FEED_Y:111,PROD_FEED_WAIT:120,PROD_PICK_Z:130,
+    PROD_VACUUM:140,PROD_LIFT:150,PROD_CALCULATE:160,PROD_PALLET_X:161,PROD_PALLET_Y:162,
+    PROD_PALLET_WAIT:170,PROD_APPROACH:180,PROD_PLACE_Z:181,PROD_RELEASE:190,PROD_RETURN_Z:200,
+    PROD_COUNT_RETURN_X:210,PROD_RETURN_Y:211,PROD_COMPLETE:212,PROD_FULL:220,PROD_NEW_PALLET:230,
+    PROD_STOP:800,PROD_FAULT:900
   };
   // 교육용 기본 주소 이미지다. 실제 PLC 전송이나 제조사 프로젝트 신원 증명에는 사용하지 않는다.
   // 한 상태에는 아래 프로필 중 하나만 활성화되며 프로필을 바꾸면 모든 출력 명령을 안전 해제한다.
@@ -57,6 +63,38 @@
         xNegLimit:'X140',xPosLimit:'X141',yNegLimit:'X142',yPosLimit:'X143',zNegLimit:'X144',zPosLimit:'X145'
       },
       actual:{x:'D1200',y:'D1202',z:'D1204',placed:'D1210',step:'D1211',cycle:'D1212'}
+    },
+    // XBC-DN32UP production contract.  This is deliberately opt-in: the
+    // existing LS/Mitsubishi profiles remain educational simulations.
+    'xgb-production':{
+      id:'xgb-production',vendor:'LS ELECTRIC',family:'XGB XBC-DN32UP / XG5000',addressStyle:'P / M / D',aliases:['xgb-production','xbc-dn32up'],simulationOnly:false,transport:null,
+      commands:{autoStart:'M00123',stop:'M00124',newPallet:'M00125',reset:'M00126',manualOrg:'M00119',servoOn:'M00111',servoOff:'M00122'},
+      inputs:{eStopLoopOk:'P00000',guardLoopOk:'P00001',startPb:'P00002',stopPb:'P00003',resetPb:'P00004',autoEnableKey:'P00005',workPresent:'P00006',palletPresent:'P00007',vacuumOk:'P00008',releaseOk:'P00009',airPressureOk:'P0000A',xDrivePowerOk:'P0000B',yDrivePowerOk:'P0000C',zDrivePowerOk:'P0000D',safetyRelayEdmOk:'P0000E',extStopLoopOk:'P0000F'},
+      setpoints:{x:'D00500',y:'D00502',z:'D00520',speed:'D00540'},
+      status:{
+        // Rev.M2 Network 4: axis outcomes.  Keep the older in-position
+        // names as aliases because the offline model exposes that concept.
+        xHomed:'M00320',yHomed:'M00321',zHomed:'M00322',
+        xBusy:'M00323',yBusy:'M00324',zBusy:'M00325',
+        xDone:'M00326',yDone:'M00327',zDone:'M00328',
+        xInPosition:'M00326',yInPosition:'M00327',zInPosition:'M00328',
+        xError:'M00329',yError:'M00330',zError:'M00331',
+        xDriveReady:'M00332',yDriveReady:'M00333',zDriveReady:'M00334',
+        xServoOn:'M00335',yServoOn:'M00336',zServoOn:'M00337',
+        xPosLimit:'M00338',yPosLimit:'M00339',zPosLimit:'M00340',
+        xNegLimit:'M00341',yNegLimit:'M00342',zNegLimit:'M00343',
+        xHomeSensor:'M00344',yHomeSensor:'M00345',zHomeSensor:'M00346',
+        xDogSensor:'M00347',yDogSensor:'M00348',zDogSensor:'M00349',
+        // Rev.M2 Network 27: PLC-to-HMI status.  autoComplete is retained
+        // solely as a compatibility alias and means pallet-full here.
+        xServoReadyStatus:'M00400',yServoReadyStatus:'M00401',zServoReadyStatus:'M00402',
+        vacuumBreakStatus:'M00403',vacuumOnStatus:'M00404',palletFullStatus:'M00405',
+        alarmStatus:'M00406',buzzerStatus:'M00407',autoRunningStatus:'M00408',
+        autoReadyStatus:'M00409',xPowerPermitStatus:'M00410',yPowerPermitStatus:'M00411',
+        zPowerPermitStatus:'M00412',safetyOkStatus:'M00413',allHomeStatus:'M00414',carryingStatus:'M00415',
+        autoRunning:'M00408',autoComplete:'M00405',fault:'M00406',alarmLatch:'M00103',gripperClosed:'M00404',holding:'M00415'
+      },
+      actual:{x:'D00400',y:'D00430',z:'D00460',placed:'D00556',step:'D00000',cycle:'D00556'}
     }
   };
   const DEVICE_MAP=PROFILES.ls;
@@ -87,7 +125,7 @@
     else if(value&&typeof value==='object')Object.values(value).forEach(item=>flattenAddresses(item,result));
     return result;
   }
-  function mappedAddresses(profile){return new Set(flattenAddresses({commands:profile.commands,setpoints:profile.setpoints,status:profile.status,actual:profile.actual}));}
+  function mappedAddresses(profile){return new Set(flattenAddresses({commands:profile.commands,inputs:profile.inputs,setpoints:profile.setpoints,status:profile.status,actual:profile.actual}));}
   function roleAt(mapping,raw){const key=address(raw);return Object.entries(mapping).find(([,mapped])=>address(mapped)===key)?.[0]||null;}
 
   function createAxis(name,overrides={}){
@@ -117,10 +155,11 @@
         X:createAxis('X',options.axes?.X),Y:createAxis('Y',options.axes?.Y),Z:createAxis('Z',options.axes?.Z)
       },
       cell,
-      gripper:{closed:false,holding:false,workpieceId:null},
+      gripper:{closed:false,holding:false,workpieceId:null},releasedWorkpieceId:null,
       pallet:{placed:[],nextIndex:0},
       auto:{running:false,state:'IDLE',previous:'IDLE',timer:0,cycle:0,message:'대기',fault:null},
-      memory:emptyMemory(),
+      manualOrg:{step:0,previous:0,message:'대기'},
+      memory:emptyMemory(),physicalInputEdges:{},observedStatus:{active:false,values:{}},plcAuthoritative:false,
       events:[]
     };
     initializeMemory(state);
@@ -249,7 +288,7 @@
     index=Math.max(0,Math.trunc(index));
     const perLayer=cols*rows,layer=Math.floor(index/perLayer),inLayer=index%perLayer;
     const row=Math.floor(inLayer/cols),col=inLayer%cols;
-    return {index,row,col,layer,x:p.origin.x+col*p.spacingX,y:p.origin.y+row*p.spacingY,z:p.origin.z+layer*p.layerHeight};
+    return {index,row,col,layer,x:p.origin.x+col*p.spacingX,y:p.origin.y+row*p.spacingY,z:p.origin.z-layer*p.layerHeight};
   }
   function axesReady(state,names=['X','Y','Z']){return names.every(n=>{const a=state.axes[n];return !a.alarm&&!a.busy&&a.inPosition;});}
   function allHomed(state){return Object.values(state.axes).every(a=>a.homed&&!a.alarm);}
@@ -262,8 +301,49 @@
     if(!hit)return false;
     state.auto.running=false;state.auto.fault={axis:hit.name,...hit.alarm};transition(state,'FAULT',`${hit.name}축 ${hit.alarm.message}`);return true;
   }
+  function productionInput(state,name){return !!memoryGet(state,getProfile(state).inputs[name]);}
+  function stoppedProduction(state){return Object.values(state.axes).every(axis=>!axis.busy);}
+  function productionPreflightOk(state){return allHomed(state)&&['eStopLoopOk','guardLoopOk','autoEnableKey','airPressureOk','xDrivePowerOk','yDrivePowerOk','zDrivePowerOk','safetyRelayEdmOk','extStopLoopOk'].every(name=>productionInput(state,name));}
+  function productionResetCauseClear(state){
+    if(!stoppedProduction(state)||!productionPreflightOk(state))return false;
+    const fault=state.auto.fault?.code;
+    if(['VACUUM_TIMEOUT','VACUUM_LOST'].includes(fault)&&!productionInput(state,'vacuumOk'))return false;
+    if(fault==='RELEASE_TIMEOUT'&&productionInput(state,'vacuumOk')&&!productionInput(state,'releaseOk'))return false;
+    if(fault==='PRODUCT_LOST'&&!productionInput(state,'workPresent'))return false;
+    if(fault==='PALLET_MISSING'&&!productionInput(state,'palletPresent'))return false;
+    return true;
+  }
+  function productionFault(state,code,message){
+    state.auto.running=false;state.auto.fault={code,message};Object.keys(state.axes).forEach(name=>stopAxis(state,name));
+    transition(state,'PROD_FAULT',message||code);refreshMemory(state);return false;
+  }
+  function startProductionAuto(state){
+    // Product and pallet are asynchronous process signals and are deliberately
+    // waited for at STEP100; all motion/safety permits must already be true.
+    if(state.auto.state!=='IDLE'||!productionPreflightOk(state))return false;
+    if(!productionInput(state,'workPresent')||!productionInput(state,'palletPresent')){
+      state.auto.running=true;state.auto.fault=null;transition(state,'PROD_WAIT_PRODUCT','제품/팔레트 대기');refreshMemory(state);return true;
+    }
+    state.auto.running=true;state.auto.fault=null;transition(state,'PROD_SERVO','드라이브/서보 확인');refreshMemory(state);return true;
+  }
+  function productionStop(state,reason='PLC 정지 지령'){
+    Object.keys(state.axes).forEach(name=>stopAxis(state,name));state.auto.running=false;transition(state,'PROD_STOP',reason);
+    // In-memory axes acknowledge XSTP synchronously, so XSVOFF follows the stopped state here.
+    setServo(state,null,false);refreshMemory(state);return true;
+  }
+  function resetProduction(state){
+    if(!['PROD_STOP','PROD_FAULT','FAULT'].includes(state.auto.state)||!productionResetCauseClear(state))return false;
+    resetAlarms(state);setServo(state,null,false);state.auto.running=false;state.auto.fault=null;state.auto.timer=0;transition(state,'IDLE','대기');refreshMemory(state);return true;
+  }
+  function requestNewPallet(state){
+    if(getProfile(state).id!=='xgb-production'||state.auto.state!=='PROD_FULL'||!productionInput(state,'palletPresent'))return false;
+    state.auto.running=true;transition(state,'PROD_NEW_PALLET','신규 팔레트 초기화');refreshMemory(state);return true;
+  }
   function startAuto(state){
     if(faultIfAny(state))return false;
+    // The reviewed production ladder permits AUTO only after manual ORG; it
+    // must not quietly energize servos or initiate homing from an unknown pose.
+    if(getProfile(state).id==='xgb-production')return startProductionAuto(state);
     if(state.pallet.nextIndex>=palletCapacity(state)){transition(state,'COMPLETE','팔레트가 가득 찼습니다');return false;}
     setServo(state,null,true);
     state.auto.running=true;state.auto.fault=null;
@@ -295,9 +375,18 @@
     state.gripper.holding=false;state.gripper.workpieceId=null;state.gripper.closed=false;
     addEvent(state,'placed',`${item.id} → ${item.row+1}행 ${item.col+1}열 ${item.layer+1}단`);return true;
   }
+  function placeReleasedWorkpiece(state){
+    if(!state.releasedWorkpieceId)return false;
+    const slot=palletSlot(state,state.pallet.nextIndex);
+    const item={id:state.releasedWorkpieceId,placedAt:Number(state.elapsed.toFixed(3)),...slot};
+    state.pallet.placed.push(item);state.pallet.nextIndex++;state.auto.cycle++;
+    state.releasedWorkpieceId=null;
+    addEvent(state,'placed',`${item.id} → ${item.row+1}행 ${item.col+1}열 ${item.layer+1}단`);return true;
+  }
 
   function tickAuto(state,dt){
     const auto=state.auto;if(!auto.running)return;
+    if(getProfile(state).id==='xgb-production')return tickProductionAuto(state,dt);
     if(faultIfAny(state))return;
     auto.timer+=dt;
     const pick=state.cell.pick,slot=palletSlot(state,state.pallet.nextIndex);
@@ -351,21 +440,145 @@
         state.auto.running=false;transition(state,'FAULT','알 수 없는 자동 시퀀스 단계');
     }
   }
+  function productionMove(state,axis,target,next,message){
+    if(!commandAxis(state,axis,target))return productionFault(state,'MOTION_COMMAND_REJECTED',`${axis}축 위치결정 명령 거부`);
+    transition(state,next,message);return true;
+  }
+  function productionWatch(state,vacuum=false,pallet=false){
+    if(!productionPreflightOk(state))return productionFault(state,'PREFLIGHT_LOST','안전/드라이브 사전조건 상실');
+    if(pallet&&!productionInput(state,'palletPresent'))return productionFault(state,'PALLET_MISSING','팔레트 검출 상실');
+    if(vacuum&&!productionInput(state,'vacuumOk'))return productionFault(state,'VACUUM_LOST','진공 검출 상실');
+    return true;
+  }
+  function tickProductionAuto(state,dt){
+    const auto=state.auto;auto.timer+=dt;
+    if(!productionWatch(state))return;
+    const pick=state.cell.pick,slot=palletSlot(state,state.pallet.nextIndex);
+    switch(auto.state){
+      case 'PROD_SERVO':
+        if(!Object.values(state.axes).every(axis=>axis.servoOn))setServo(state,null,true);
+        else if(auto.timer>=.02)transition(state,'PROD_PREFLIGHT','사전 점검');
+        break;
+      case 'PROD_PREFLIGHT': if(auto.timer>=.02)productionMove(state,'Z',state.cell.safeZ,'PROD_Z_WAIT','Z 대기 높이 이동');break;
+      case 'PROD_Z_WAIT': if(axesReady(state,['Z']))productionMove(state,'X',pick.x,'PROD_X_WAIT','X 대기 위치 이동');break;
+      case 'PROD_X_WAIT': if(axesReady(state,['X']))productionMove(state,'Y',pick.y,'PROD_Y_WAIT','Y 대기 위치 이동');break;
+      case 'PROD_Y_WAIT': if(axesReady(state,['Y']))transition(state,'PROD_WAIT_PRODUCT','제품/팔레트 대기');break;
+      case 'PROD_WAIT_PRODUCT': if(productionInput(state,'workPresent')&&productionInput(state,'palletPresent'))productionMove(state,'X',pick.x,'PROD_FEED_X','X 픽업 이동');break;
+      case 'PROD_FEED_X': if(axesReady(state,['X']))productionMove(state,'Y',pick.y,'PROD_FEED_Y','Y 픽업 이동');break;
+      case 'PROD_FEED_Y': if(axesReady(state,['Y']))transition(state,'PROD_FEED_WAIT','픽업 XY 완료');break;
+      case 'PROD_FEED_WAIT':
+        if(!productionInput(state,'workPresent'))return productionFault(state,'PRODUCT_LOST','제품 검출 상실');
+        if(axesReady(state,['X','Y']))productionMove(state,'Z',pick.z,'PROD_PICK_Z','픽업 높이 하강');break;
+      case 'PROD_PICK_Z': if(axesReady(state,['Z'])){state.gripper.closed=true;transition(state,'PROD_VACUUM','흡착 확인');}break;
+      case 'PROD_VACUUM':
+        if(productionInput(state,'vacuumOk')&&auto.timer>=.1){state.gripper.holding=true;state.gripper.workpieceId=`BOX-${state.pallet.nextIndex+1}`;productionMove(state,'Z',state.cell.safeZ,'PROD_LIFT','제품 안전높이 상승');}
+        else if(auto.timer>=3)return productionFault(state,'VACUUM_TIMEOUT','진공 확인 시간초과');break;
+      case 'PROD_LIFT': if(productionWatch(state,true,true)&&axesReady(state,['Z']))transition(state,'PROD_CALCULATE','팔레트 좌표 계산');break;
+      case 'PROD_CALCULATE': if(productionWatch(state,true,true))productionMove(state,'X',slot.x,'PROD_PALLET_X','X 팔레트 이동');break;
+      case 'PROD_PALLET_X': if(productionWatch(state,true,true)&&axesReady(state,['X']))productionMove(state,'Y',slot.y,'PROD_PALLET_Y','Y 팔레트 이동');break;
+      case 'PROD_PALLET_Y': if(productionWatch(state,true,true)&&axesReady(state,['Y']))transition(state,'PROD_PALLET_WAIT','팔레트 XY 완료');break;
+      case 'PROD_PALLET_WAIT':
+        if(productionWatch(state,true,true)&&axesReady(state,['X','Y','Z'])){
+          const approachZ=Math.min(state.cell.safeZ,slot.z+Math.max(10,state.cell.pallet.layerHeight*.5));
+          productionMove(state,'Z',approachZ,'PROD_APPROACH','팔레트 접근높이 하강');
+        }
+        break;
+      case 'PROD_APPROACH': if(productionWatch(state,true,true)&&axesReady(state,['Z']))productionMove(state,'Z',slot.z,'PROD_PLACE_Z','최종 적재 높이 하강');break;
+      case 'PROD_PLACE_Z':
+        if(productionWatch(state,true,true)&&axesReady(state,['Z'])){
+          state.releasedWorkpieceId=state.gripper.workpieceId;
+          setGripper(state,false);transition(state,'PROD_RELEASE','해제 확인');
+        }
+        break;
+      case 'PROD_RELEASE':
+        if((productionInput(state,'releaseOk')||!productionInput(state,'vacuumOk'))&&auto.timer>=state.cell.dwell.release){
+          productionMove(state,'Z',state.cell.safeZ,'PROD_RETURN_Z','안전높이 복귀');
+        }else if(auto.timer>=3)return productionFault(state,'RELEASE_TIMEOUT','해제 확인 시간초과');
+        break;
+      case 'PROD_RETURN_Z': if(axesReady(state,['Z']))transition(state,'PROD_COUNT_RETURN_X','카운트 및 X 복귀');break;
+      case 'PROD_COUNT_RETURN_X':
+        placeReleasedWorkpiece(state);
+        productionMove(state,'X',pick.x,'PROD_RETURN_Y','X 대기 위치 복귀');
+        break;
+      case 'PROD_RETURN_Y': if(axesReady(state,['X']))productionMove(state,'Y',pick.y,'PROD_COMPLETE','Y 대기 위치 복귀');break;
+      case 'PROD_COMPLETE':
+        if(axesReady(state,['X','Y','Z'])){
+          if(state.pallet.nextIndex>=palletCapacity(state))transition(state,'PROD_FULL',`팔레트 가득 참 · ${state.pallet.placed.length}개`);
+          else transition(state,'PROD_WAIT_PRODUCT','다음 제품 대기');
+        }
+        break;
+      case 'PROD_FULL': break;
+      case 'PROD_NEW_PALLET':
+        if(productionInput(state,'palletPresent')&&auto.timer>=.1){
+          state.pallet.placed=[];state.pallet.nextIndex=0;state.auto.cycle=0;state.releasedWorkpieceId=null;
+          transition(state,'PROD_WAIT_PRODUCT','신규 팔레트 제품 대기');
+        }
+        break;
+      default: productionFault(state,'STEP_INVALID','알 수 없는 생산 자동 STEP');
+    }
+  }
 
+  function observedStatusValue(state,rawAddress,fallback){
+    const addressKey=address(rawAddress),observed=state.observedStatus;
+    if(observed?.active&&Object.prototype.hasOwnProperty.call(observed.values||{},addressKey))return bool(observed.values[addressKey]);
+    return !!fallback;
+  }
+  function setStatusMemory(state,rawAddress,value){memorySet(state,rawAddress,observedStatusValue(state,rawAddress,value));}
+  function axisAtHome(axis){return Math.abs(axis.position-axis.home)<=axis.tolerance;}
   function refreshMemory(state){
-    const p=getProfile(state),s=p.status,d=p.actual,a=state.axes;
-    memorySet(state,s.autoRunning,!!state.auto.running);memorySet(state,s.autoComplete,state.auto.state==='COMPLETE');memorySet(state,s.fault,state.auto.state==='FAULT'||!!state.auto.fault||Object.values(a).some(x=>x.alarm));
-    memorySet(state,s.xBusy,a.X.busy);memorySet(state,s.yBusy,a.Y.busy);memorySet(state,s.zBusy,a.Z.busy);
-    memorySet(state,s.xHomed,a.X.homed);memorySet(state,s.yHomed,a.Y.homed);memorySet(state,s.zHomed,a.Z.homed);
-    memorySet(state,s.xInPosition,a.X.inPosition);memorySet(state,s.yInPosition,a.Y.inPosition);memorySet(state,s.zInPosition,a.Z.inPosition);
-    memorySet(state,s.gripperClosed,state.gripper.closed);memorySet(state,s.holding,state.gripper.holding);
-    memorySet(state,s.xNegLimit,a.X.negLimit);memorySet(state,s.xPosLimit,a.X.posLimit);memorySet(state,s.yNegLimit,a.Y.negLimit);memorySet(state,s.yPosLimit,a.Y.posLimit);memorySet(state,s.zNegLimit,a.Z.negLimit);memorySet(state,s.zPosLimit,a.Z.posLimit);
+    const p=getProfile(state),s=p.status,d=p.actual,a=state.axes,production=p.id==='xgb-production';
+    const alarm=state.auto.state==='FAULT'||state.auto.state==='PROD_FAULT'||!!state.auto.fault||Object.values(a).some(x=>x.alarm);
+    const full=production?state.auto.state==='PROD_FULL':state.auto.state==='COMPLETE';
+    const driveReady=axis=>axis.servoOn&&!axis.alarm;
+    const productionPermit=name=>production&&productionInput(state,name);
+    const autoReady=production?!alarm&&!state.auto.running&&productionPreflightOk(state):!alarm&&!state.auto.running&&allHomed(state);
+    setStatusMemory(state,s.autoRunning,!!state.auto.running);setStatusMemory(state,s.autoComplete,full);setStatusMemory(state,s.fault,alarm);setStatusMemory(state,s.alarmLatch,alarm);
+    setStatusMemory(state,s.xBusy,a.X.busy);setStatusMemory(state,s.yBusy,a.Y.busy);setStatusMemory(state,s.zBusy,a.Z.busy);
+    setStatusMemory(state,s.xHomed,a.X.homed);setStatusMemory(state,s.yHomed,a.Y.homed);setStatusMemory(state,s.zHomed,a.Z.homed);
+    setStatusMemory(state,s.xDone,a.X.inPosition&&!a.X.busy&&!a.X.alarm);setStatusMemory(state,s.yDone,a.Y.inPosition&&!a.Y.busy&&!a.Y.alarm);setStatusMemory(state,s.zDone,a.Z.inPosition&&!a.Z.busy&&!a.Z.alarm);
+    setStatusMemory(state,s.xInPosition,a.X.inPosition);setStatusMemory(state,s.yInPosition,a.Y.inPosition);setStatusMemory(state,s.zInPosition,a.Z.inPosition);
+    setStatusMemory(state,s.xError,!!a.X.alarm);setStatusMemory(state,s.yError,!!a.Y.alarm);setStatusMemory(state,s.zError,!!a.Z.alarm);
+    setStatusMemory(state,s.xDriveReady,driveReady(a.X));setStatusMemory(state,s.yDriveReady,driveReady(a.Y));setStatusMemory(state,s.zDriveReady,driveReady(a.Z));
+    setStatusMemory(state,s.xServoOn,a.X.servoOn);setStatusMemory(state,s.yServoOn,a.Y.servoOn);setStatusMemory(state,s.zServoOn,a.Z.servoOn);
+    setStatusMemory(state,s.xNegLimit,a.X.negLimit);setStatusMemory(state,s.xPosLimit,a.X.posLimit);setStatusMemory(state,s.yNegLimit,a.Y.negLimit);setStatusMemory(state,s.yPosLimit,a.Y.posLimit);setStatusMemory(state,s.zNegLimit,a.Z.negLimit);setStatusMemory(state,s.zPosLimit,a.Z.posLimit);
+    setStatusMemory(state,s.xHomeSensor,axisAtHome(a.X));setStatusMemory(state,s.yHomeSensor,axisAtHome(a.Y));setStatusMemory(state,s.zHomeSensor,axisAtHome(a.Z));
+    setStatusMemory(state,s.xDogSensor,axisAtHome(a.X));setStatusMemory(state,s.yDogSensor,axisAtHome(a.Y));setStatusMemory(state,s.zDogSensor,axisAtHome(a.Z));
+    setStatusMemory(state,s.xServoReadyStatus,driveReady(a.X));setStatusMemory(state,s.yServoReadyStatus,driveReady(a.Y));setStatusMemory(state,s.zServoReadyStatus,driveReady(a.Z));
+    setStatusMemory(state,s.vacuumBreakStatus,production&&state.auto.state==='PROD_RELEASE');setStatusMemory(state,s.vacuumOnStatus,state.gripper.closed);
+    setStatusMemory(state,s.palletFullStatus,full);setStatusMemory(state,s.alarmStatus,alarm);setStatusMemory(state,s.alarmLatch,alarm);setStatusMemory(state,s.buzzerStatus,alarm);
+    setStatusMemory(state,s.autoRunningStatus,!!state.auto.running);setStatusMemory(state,s.autoReadyStatus,autoReady);
+    setStatusMemory(state,s.xPowerPermitStatus,productionPermit('xDrivePowerOk'));setStatusMemory(state,s.yPowerPermitStatus,productionPermit('yDrivePowerOk'));setStatusMemory(state,s.zPowerPermitStatus,productionPermit('zDrivePowerOk'));
+    setStatusMemory(state,s.safetyOkStatus,production&&['eStopLoopOk','guardLoopOk','safetyRelayEdmOk','extStopLoopOk'].every(productionPermit));
+    setStatusMemory(state,s.allHomeStatus,allHomed(state));setStatusMemory(state,s.carryingStatus,state.gripper.holding);
+    setStatusMemory(state,s.gripperClosed,state.gripper.closed);setStatusMemory(state,s.holding,state.gripper.holding);
     memorySet(state,d.x,Number(a.X.position.toFixed(2)));memorySet(state,d.y,Number(a.Y.position.toFixed(2)));memorySet(state,d.z,Number(a.Z.position.toFixed(2)));
     memorySet(state,d.placed,state.pallet.placed.length);memorySet(state,d.step,AUTO_STEPS[state.auto.state]??-1);memorySet(state,d.cycle,state.auto.cycle);
+  }
+  function setObservedStatus(state,values={}){
+    const profile=getProfile(state);if(profile.id!=='xgb-production')return false;
+    const allowed=new Set(Object.values(profile.status).map(address));const next={};
+    for(const [rawAddress,value] of Object.entries(values)){
+      const key=address(rawAddress);if(allowed.has(key))next[key]=bool(value);
+    }
+    state.observedStatus={active:true,values:next};refreshMemory(state);return true;
+  }
+  function clearObservedStatus(state){
+    if(!state.observedStatus?.active)return false;
+    state.observedStatus={active:false,values:{}};refreshMemory(state);return true;
+  }
+  function setPlcAuthoritative(state,active){
+    if(getProfile(state).id!=='xgb-production')return false;
+    const next=!!active;if(state.plcAuthoritative===next)return true;
+    state.plcAuthoritative=next;
+    if(next){
+      stopAll(state,'PLC-authoritative XG-SIM 관측');setServo(state,null,false);state.manualOrg.step=0;
+    }
+    refreshMemory(state);return true;
   }
   function initializeMemory(state){
     state.memory=emptyMemory();const p=getProfile(state);
     for(const mapped of Object.values(p.commands))memorySet(state,mapped,false);
+    for(const mapped of Object.values(p.inputs||{}))memorySet(state,mapped,false);
     memorySet(state,p.setpoints.x,state.cell.pick.x);memorySet(state,p.setpoints.y,state.cell.pick.y);memorySet(state,p.setpoints.z,state.cell.safeZ);memorySet(state,p.setpoints.speed,140);
     refreshMemory(state);return state.memory;
   }
@@ -375,6 +588,7 @@
   }
   function writeDevice(state,rawAddress,value){
     const key=address(rawAddress),profile=getProfile(state),setpoint=roleAt(profile.setpoints,key);
+    if(key.startsWith('P'))return {ok:false,error:`${key} is a physical input; use setPhysicalInput`};
     if(setpoint){
       const n=finite(value,NaN);if(!Number.isFinite(n))return {ok:false,error:'숫자 설정값이 필요합니다'};
       memorySet(state,key,n);refreshMemory(state);return {ok:true,address:key,value:n};
@@ -384,14 +598,17 @@
       if(mappedAddresses(profile).has(key))return {ok:false,error:`${key}는 읽기 전용 상태 주소입니다`};
       return {ok:false,error:`${key||'(빈 주소)'}는 선택한 ${profile.vendor} 프로필에 정의되지 않았습니다`};
     }
+    if(state.plcAuthoritative&&profile.id==='xgb-production')return {ok:false,error:'XG-SIM PLC 관측 중에는 로컬 명령을 실행할 수 없습니다'};
     const on=bool(value);memorySet(state,key,on);let accepted=true;
     if(command==='autoStart'&&on)accepted=startAuto(state);
-    else if(command==='stop'&&on)stopAll(state,'PLC 정지 지령');
-    else if(command==='reset'&&on)accepted=resetCell(state,{clearPallet:false});
-    else if(command==='home'&&on)accepted=homeAll(state);
+    else if(command==='stop'&&on){if(profile.id==='xgb-production')accepted=productionStop(state);else stopAll(state,'PLC 정지 지령');}
+    else if(command==='newPallet'&&on)accepted=requestNewPallet(state);
+    else if(command==='reset'&&on)accepted=profile.id==='xgb-production'?resetProduction(state):resetCell(state,{clearPallet:false});
+    else if(command==='manualOrg'&&on)accepted=requestManualOrg(state);
     else if(command==='grip'&&on)setGripper(state,true);
     else if(command==='release'&&on)setGripper(state,false);
     else if(command==='servoOn')accepted=setServo(state,null,on);
+    else if(command==='servoOff'&&on)accepted=setServo(state,null,false);
     else if(['moveX','moveY','moveZ'].includes(command)&&on){
       const axis={moveX:'X',moveY:'Y',moveZ:'Z'}[command],targetKey={X:'x',Y:'y',Z:'z'}[axis];
       accepted=commandAxis(state,axis,memoryGet(state,profile.setpoints[targetKey]),{speed:memoryGet(state,profile.setpoints.speed)});
@@ -402,18 +619,51 @@
     refreshMemory(state);return {ok:true,address:key,value:on,...(accepted===false?{accepted:false}:{})};
   }
 
+  function setPhysicalInput(state,rawAddress,value){
+    const key=address(rawAddress),profile=getProfile(state);
+    if(!Object.values(profile.inputs||{}).map(address).includes(key))return false;
+    const next=bool(value),previous=!!memoryGet(state,key);
+    memorySet(state,key,next);
+    if(next&&!previous)state.physicalInputEdges[key]=true;
+    refreshMemory(state);return true;
+  }
+  function processPhysicalInputEdges(state){
+    if(getProfile(state).id!=='xgb-production')return;
+    const p=getProfile(state).inputs,edges=state.physicalInputEdges||{};
+    if(edges[p.startPb])startAuto(state);
+    if(edges[p.stopPb])productionStop(state,'물리 STOP PB');
+    if(edges[p.resetPb])resetProduction(state);
+    state.physicalInputEdges={};
+  }
+  function requestManualOrg(state){
+    if(state.auto.running||state.auto.state!=='IDLE'||state.manualOrg.step!==0)return false;
+    if(!Object.values(state.axes).every(axis=>!axis.busy&&!axis.alarm&&axis.servoOn))return false;
+    state.manualOrg.step=10;state.manualOrg.previous=0;state.manualOrg.message='Z축 원점복귀';
+    return homeAxis(state,'Z');
+  }
+  function tickManualOrg(state){
+    const org=state.manualOrg;if(!org||org.step===0)return;
+    if(state.auto.running||state.auto.state!=='IDLE'){org.step=0;org.message='자동운전 중단';return;}
+    if(org.step===10&&state.axes.Z.homed&&!state.axes.Z.busy){org.previous=10;org.step=20;org.message='X축 원점복귀';homeAxis(state,'X');}
+    else if(org.step===20&&state.axes.X.homed&&!state.axes.X.busy){org.previous=20;org.step=30;org.message='Y축 원점복귀';homeAxis(state,'Y');}
+    else if(org.step===30&&state.axes.Y.homed&&!state.axes.Y.busy){org.previous=30;org.step=0;org.message='원점복귀 완료';}
+  }
+
   function setProfile(state,profileName){
     const profileId=resolveProfile(profileName);if(!profileId)return false;if(profileId===state.profileId)return true;
     stopAll(state,'PLC 제조사 프로필 전환');setServo(state,null,false);setGripper(state,false);
-    state.profileId=profileId;state.profile=profileId;initializeMemory(state);
+    state.profileId=profileId;state.profile=profileId;state.plcAuthoritative=false;state.observedStatus={active:false,values:{}};initializeMemory(state);
     addEvent(state,'profile',`${getProfile(state).vendor} 주소 프로필 선택 · 이전 출력 안전 해제`);return true;
   }
 
   function tick(state,dt){
     dt=clamp(finite(dt,0),0,.1);if(dt<=0){refreshMemory(state);return state;}
     state.elapsed+=dt;
+    if(state.plcAuthoritative&&getProfile(state).id==='xgb-production'){refreshMemory(state);return state;}
     tickAuto(state,dt);
     for(const axis of Object.values(state.axes))tickAxis(state,axis,dt);
+    tickManualOrg(state);
+    processPhysicalInputEdges(state);
     refreshMemory(state);return state;
   }
   function configurePallet(state,patch={}){
@@ -459,7 +709,7 @@
   return {
     version:VERSION,AXIS_DEFAULTS:clone(AXIS_DEFAULTS),DEFAULT_CELL:clone(DEFAULT_CELL),AUTO_STEPS:{...AUTO_STEPS},DEVICE_MAP:clone(DEVICE_MAP),PROFILES:clone(PROFILES),
     createAxis,createState,create:createState,tick,commandAxis,homeAxis,homeAll,jogAxis,stopAxis,stopAll,setServo,resetAlarms,
-    startAuto,resetCell,setGripper,configurePallet,palletCapacity,palletSlot,allHomed,getProfile,setProfile,readDevice,writeDevice,refreshMemory,
+    startAuto,resetCell,setGripper,configurePallet,palletCapacity,palletSlot,allHomed,getProfile,setProfile,readDevice,writeDevice,setPhysicalInput,requestManualOrg,refreshMemory,setObservedStatus,clearObservedStatus,setPlcAuthoritative,
     exportState,importState
   };
 });
