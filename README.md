@@ -85,6 +85,43 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Get-XgSimProjectIdenti
 
 정식 대상은 Windows x64 오프라인 Electron입니다. `index.html` 더블클릭 실행은 지원하지 않습니다.
 
+### 집 또는 다른 PC에서 현재 작업 브랜치 받기
+
+처음 내려받는 PC에서는 PowerShell을 열고 다음 명령을 실행합니다. 현재 변경은 아직 `main`에 병합되지 않았으므로 `codex/home-sync-palletizer-20260813` 브랜치를 선택해야 합니다.
+
+```powershell
+git clone https://github.com/bagseunggwon30-cyber/plc-wiring-trainer-v3.git
+Set-Location .\plc-wiring-trainer-v3
+git fetch origin
+git switch --track origin/codex/home-sync-palletizer-20260813
+npm ci
+npm start
+```
+
+이미 저장소를 내려받은 PC에서는 다음 명령으로 최신 작업을 이어받습니다.
+
+```powershell
+Set-Location .\plc-wiring-trainer-v3
+git fetch origin
+git switch codex/home-sync-palletizer-20260813
+git pull --ff-only
+npm ci
+npm start
+```
+
+브랜치가 `main`에 병합된 뒤에는 다음 명령만 사용하면 됩니다.
+
+```powershell
+git switch main
+git pull --ff-only
+npm ci
+npm start
+```
+
+Node.js가 설치되어 있지 않으면 `npm` 명령을 실행할 수 없습니다. 이 프로젝트는 `.nvmrc`에 기록된 Node.js 버전을 기준으로 하며, Node.js 설치 후 새 PowerShell 창에서 `node --version`과 `npm --version`이 출력되는지 먼저 확인합니다.
+
+### 실행·검증·빌드 명령
+
 ```powershell
 npm ci
 
