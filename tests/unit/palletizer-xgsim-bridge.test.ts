@@ -6,17 +6,40 @@ import {
 } from '../../src/renderer/plc-runtime/palletizer-xgsim-bridge';
 
 const sha256 = 'a'.repeat(64);
+let snapshotSequence = 0;
+let sessionNonce = '';
+const hostEpoch = 'host-epoch-1';
+const allMonitors = [
+  'M00111', 'M00119', 'M00122', 'M00123', 'M00124', 'M00125', 'M00126',
+  ...Array.from({ length: 30 }, (_, index) => `M003${String(20 + index).padStart(2, '0')}`),
+  ...Array.from({ length: 16 }, (_, index) => `M004${String(index).padStart(2, '0')}`),
+];
 
 function snapshot(inputs: Record<string, boolean>, devices: Record<string, boolean> = {}): PlcRuntimeSnapshot {
-  return { sequence: 1, capturedAt: '2026-08-13T00:00:00.000Z', inputs, outputs: {}, monitors: devices };
+  snapshotSequence += 1;
+  return {
+    sequence: snapshotSequence,
+    capturedAt: new Date(Date.parse('2026-08-13T00:00:00.000Z') + snapshotSequence).toISOString(),
+    sessionId: 'bridge', sessionNonce, hostEpoch, projectSha256: sha256,
+    inputs, outputs: {},
+    monitors: { ...Object.fromEntries(allMonitors.map((address) => [address, false])), ...devices },
+  };
 }
 
 function adapter(): PlcRuntimeAdapter {
+  snapshotSequence = 0;
+  sessionNonce = '';
   return {
     async probe() { throw new Error('not used'); },
-    async connect() { return { sessionId: 'bridge', connectedAt: '2026-08-13T00:00:00.000Z', projectSha256: sha256, projectIdentityVerified: true }; },
+    async connect(request) {
+      sessionNonce = request.sessionNonce;
+      return {
+        sessionId: 'bridge', sessionNonce, hostEpoch, connectedAt: '2026-08-13T00:00:00.000Z',
+        projectSha256: sha256, projectIdentityVerified: true,
+      };
+    },
     async readSnapshot() { return snapshot({}); },
-    async writeInputImage() { return { acceptedBindingIds: [], rejectedBindingIds: [] }; },
+    async writeInputImage(image) { return { acceptedBindingIds: Object.keys(image.values), rejectedBindingIds: [] }; },
     async getStatus() { return { state: 'connected', sessionId: 'bridge', projectSha256: sha256, projectIdentityVerified: true, lastSequence: 0, lastError: null }; },
     async disconnect() {},
   };
@@ -66,8 +89,22 @@ describe('3-axis palletizer XG-SIM bridge contract', () => {
       .filter((binding) => binding.direction === 'input')
       .map((binding) => binding.address)).toEqual(canonicalChannels);
     expect(bridge.status).toMatchObject({
-      state: 'connected', identityVerified: false, reason: 'project-identity-unverified',
+      state: 'diagnostic', identityVerified: false, reason: 'project-identity-unverified-diagnostic-only',
     });
+  });
+
+  it('rejects reordered or mixed-base DI channel banks before constructing a usable host binding set', () => {
+    const mixedChannels = Array.from({ length: 16 }, (_, index) => (
+      `${index === 7 ? 'B9S09' : 'B0S00'}.IN${String(index).padStart(2, '0')}`
+    ));
+    expect(() => createPalletizerXgSimBridge({
+      adapter: adapter(), runtime: runtime(), expectedIdentity: identity, inputChannels: mixedChannels,
+    })).toThrow(expect.objectContaining({ code: 'XGSIM_INVALID_DI_CHANNELS' }));
+
+    const reordered = Array.from({ length: 16 }, (_, index) => `B0S00.IN${String(15 - index).padStart(2, '0')}`);
+    expect(() => createPalletizerXgSimBridge({
+      adapter: adapter(), runtime: runtime(), expectedIdentity: identity, inputChannels: reordered,
+    })).toThrow(expect.objectContaining({ code: 'XGSIM_INVALID_DI_CHANNELS' }));
   });
 
   it('blocks a connect identity mismatch before any simulator session is usable', async () => {
@@ -75,6 +112,21 @@ describe('3-axis palletizer XG-SIM bridge contract', () => {
 
     await expect(bridge.connect({ ...identity, base: 1 })).rejects.toMatchObject({ code: 'XGSIM_IDENTITY_MISMATCH' });
     expect(bridge.status).toMatchObject({ state: 'blocked', reason: 'base-mismatch' });
+  });
+
+  it('keeps a nominally verified connection diagnostic-only when the host does not echo this session nonce', async () => {
+    const host = adapter();
+    host.connect = async () => ({
+      sessionId: 'bridge', sessionNonce: 'f'.repeat(32), hostEpoch,
+      connectedAt: '2026-08-13T00:00:00.000Z', projectSha256: sha256, projectIdentityVerified: true,
+    });
+    const cell = runtime();
+    const bridge = createPalletizerXgSimBridge({ adapter: host, runtime: cell, expectedIdentity: identity });
+
+    await bridge.connect(identity);
+
+    expect(bridge.status).toMatchObject({ state: 'diagnostic', identityVerified: false });
+    await expect(bridge.synchronizeInputImage()).rejects.toMatchObject({ code: 'XGSIM_NOT_CONNECTED' });
   });
 
   it('writes local virtual DIs, observes PLC-owned M outcomes without replaying commands, and explicitly blocks host-v1 D/D004xx/D005xx reads', async () => {

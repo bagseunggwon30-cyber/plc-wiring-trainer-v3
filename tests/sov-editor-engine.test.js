@@ -167,6 +167,60 @@ test('interactive 3D labs can opt into raycastable solid electric cables', () =>
   engine.dispose();
 });
 
+test('solid-wire drag preview stays lightweight and becomes a raycastable cable only after completion', () => {
+  const scene = new THREE.Scene();
+  const engine = Editor.create({ three: THREE, scene, lab: 'workbench3d', solidElectricWires: true });
+  makeModule(engine, scene, 'left', 'workbench3d');
+  makeModule(engine, scene, 'right', 'workbench3d', [2, 0, 0]);
+  scene.updateMatrixWorld(true);
+  engine.setMode(Editor.MODES.WIRE);
+
+  assert.equal(engine.beginConnection({ moduleId: 'left', anchorId: 'E' }), true);
+  assert.equal(engine.pendingConnection.visual.isLine, true);
+  assert.equal(engine.pendingConnection.visual.userData.sovEditorVisual, 'line');
+  assert.equal(engine.updateConnectionPreview([1, .4, .2]), true);
+  const cable = engine.completeConnection({ moduleId: 'right', anchorId: 'E' });
+  assert.equal(cable.visual.isMesh, true);
+  assert.equal(cable.visual.userData.sovEditorVisual, 'cable');
+  engine.dispose();
+});
+
+test('terminal capacity permits intentional branch wiring and survives delete plus import', () => {
+  const createBench = () => {
+    const scene = new THREE.Scene();
+    const engine = Editor.create({ three: THREE, scene, lab: 'workbench3d' });
+    for (const [id, x, maxConductors] of [['source', 0, 2], ['load-a', 1, 1], ['load-b', 2, 1], ['load-c', 3, 1]]) {
+      const object = new THREE.Group(); object.position.x = x; scene.add(object);
+      engine.registerModule({
+        id, lab: 'workbench3d', object,
+        anchors: [{ id: 'T', kind: 'electric', position: [0, 0, 0], maxConductors }]
+      });
+    }
+    scene.updateMatrixWorld(true); engine.setMode(Editor.MODES.WIRE);
+    return engine;
+  };
+
+  const engine = createBench();
+  const first = engine.connect({ moduleId: 'source', anchorId: 'T' }, { moduleId: 'load-a', anchorId: 'T' }, { id: 'branch-a' });
+  engine.connect({ moduleId: 'source', anchorId: 'T' }, { moduleId: 'load-b', anchorId: 'T' }, { id: 'branch-b' });
+  const info = engine.moduleInfo('source').anchors[0];
+  assert.deepEqual({ connected: info.connected, connectionCount: info.connectionCount, maxConductors: info.maxConductors }, { connected: true, connectionCount: 2, maxConductors: 2 });
+  assert.throws(() => engine.connect({ moduleId: 'source', anchorId: 'T' }, { moduleId: 'load-c', anchorId: 'T' }), /capacity exceeded/);
+
+  engine.setMode(Editor.MODES.DELETE_WIRE);
+  assert.equal(engine.deleteLink(first.id), true);
+  assert.equal(engine.moduleInfo('source').anchors[0].connectionCount, 1);
+  engine.setMode(Editor.MODES.WIRE);
+  engine.connect({ moduleId: 'source', anchorId: 'T' }, { moduleId: 'load-c', anchorId: 'T' }, { id: 'branch-c' });
+  const saved = engine.serialize();
+
+  const restored = createBench();
+  restored.importState(JSON.parse(JSON.stringify(saved)));
+  assert.equal(restored.moduleInfo('source').anchors[0].connectionCount, 2);
+  assert.equal(restored.connections.size, 2);
+  engine.dispose(); restored.dispose();
+});
+
 test('transparent terminal-hole hit targets remain raycastable without drawing floating markers', () => {
   const target = Editor.createAnchorHitTarget({ three: THREE, radius: .02 });
   const scene = new THREE.Scene(); scene.add(target); scene.updateMatrixWorld(true);

@@ -7,20 +7,34 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const xgSimFunctionPanel = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'plc-runtime', 'xgsim-function-test-panel.ts'), 'utf8');
+const xgSimBuildScript = fs.readFileSync(path.join(__dirname, '..', 'tools', 'build-xgsim-host.ps1'), 'utf8');
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 
 test('ordinary start does not require the optional XG-SIM build toolchain', () => {
   assert.equal(packageJson.scripts.start, 'npm run build:renderer && electron .');
   assert.equal(packageJson.scripts['start:xgsim'], 'npm run build:xgsim-host && npm run build:renderer && electron .');
+  assert.match(packageJson.scripts['build:offline'], /electron-builder --config electron-builder\.offline\.yml/);
+});
+
+test('XG-SIM host build discovers Visual Studio installations and the required targeting pack', () => {
+  assert.match(xgSimBuildScript, /XGSIM_MSBUILD_PATH/);
+  assert.match(xgSimBuildScript, /vswhere\.exe/);
+  assert.match(xgSimBuildScript, /Microsoft\.Component\.MSBuild/);
+  assert.match(xgSimBuildScript, /\.NETFramework\\v4\.7\.2\\mscorlib\.dll/);
+  assert.doesNotMatch(xgSimBuildScript, /approved Build Tools path/);
 });
 
 test('Electron keeps the renderer isolated and exposes only bounded report/XG-SIM bridges', () => {
   assert.match(main, /contextIsolation:\s*true/);
   assert.match(main, /nodeIntegration:\s*false/);
+  assert.match(main, /sandbox:\s*true/);
+  assert.match(main, /webSecurity:\s*true/);
   assert.match(main, /preload:\s*path\.join\(__dirname,\s*'preload\.js'\)/);
   assert.match(main, /event\.sender\s*!==\s*mainWindow\.webContents/);
   assert.match(main, /sandbox:\s*true,\s*javascript:\s*false/);
   assert.match(main, /setWindowOpenHandler\(\(\)\s*=>\s*\(\{\s*action:\s*'deny'/);
+  assert.match(main, /will-navigate/);
+  assert.match(main, /will-redirect/);
   assert.match(preload, /contextBridge\.exposeInMainWorld\('WorkshopDesktop'/);
   assert.match(preload, /ipcRenderer\.invoke\(SAVE_REVIEW_PDF_CHANNEL/);
   assert.match(preload, /writeInputImage\(payload\).*XGSIM_CHANNELS\.writeInputImage/);

@@ -74,7 +74,11 @@ import { createXgSimDiagnosticsPanel } from './plc-runtime/xgsim-diagnostics-pan
 import { createXgSimFunctionTestPanel } from './plc-runtime/xgsim-function-test-panel';
 import { XgSimRuntimeAdapter } from './plc-runtime/xgsim-adapter';
 import { createPalletizerXgSimBridge } from './plc-runtime/palletizer-xgsim-bridge';
-import { createPalletizerXgSimUiIntegration, type PalletizerXgSimUiIntegration } from './plc-runtime/palletizer-xgsim-ui-integration';
+import {
+  createPalletizerXgSimUiIntegration,
+  type PalletizerXgSimUiIntegration,
+  type PalletizerXgSimUiStatus,
+} from './plc-runtime/palletizer-xgsim-ui-integration';
 import { installEquipmentOrderPanel, type EquipmentOrderPanelController } from './equipment-order-panel';
 
 interface LegacyTrainerBridge {
@@ -714,10 +718,23 @@ export function installWorkflowApp(): void {
     let controller: PalletizerXgSimUiIntegration | null = null;
     const palletizerAdapter = new XgSimRuntimeAdapter();
     let poll: number | null = null;
+    let connecting = false;
+    let xgSimState: PalletizerXgSimUiStatus['state'] = 'disconnected';
     const clearPoll = (): void => { if (poll !== null) { window.clearInterval(poll); poll = null; } };
-    const safeDisconnect = async (): Promise<void> => { clearPoll(); if (controller) await controller.disconnect(); disconnect.disabled = true; };
-    consentBox.onchange = () => { select.disabled = !consentBox.checked; if (!consentBox.checked) connect.disabled = true; };
+    const safeDisconnect = async (): Promise<void> => {
+      clearPoll();
+      if (controller) await controller.disconnect();
+      disconnect.disabled = true;
+      connecting = false;
+      select.disabled = !consentBox.checked;
+      connect.disabled = !consentBox.checked || selected?.selected !== true || !selected?.reference;
+    };
+    consentBox.onchange = () => {
+      select.disabled = connecting || !consentBox.checked;
+      connect.disabled = connecting || !consentBox.checked || selected?.selected !== true || !selected?.reference;
+    };
     select.onclick = () => void (async () => {
+      if (connecting) return;
       if (!window.WorkshopDesktop?.xgSim) { status.textContent = 'BLOCKED · Desktop XG-SIM bridge unavailable'; return; }
       selected = await window.WorkshopDesktop.xgSim.selectProject();
       const ref = selected.reference;
@@ -725,8 +742,12 @@ export function installWorkflowApp(): void {
       status.textContent = ref ? `선택 참조 · ${ref.fileName} · SHA-256 ${ref.sha256.slice(0, 12)}… · 프로젝트 식별 미검증` : '프로젝트 선택이 취소되었습니다.';
     })();
     connect.onclick = () => void (async () => {
+      if (connecting) return;
       const ref = selected?.reference;
       if (!ref || !window.WorkshopDesktop?.xgSim) return;
+      connecting = true;
+      connect.disabled = true;
+      select.disabled = true;
       controller = createPalletizerXgSimUiIntegration({
         classic: classicPalletizer,
         selectProject: async () => ({ selected: selected?.selected === true, reference: selected?.reference }),
@@ -737,14 +758,29 @@ export function installWorkflowApp(): void {
         readSnapshot: () => palletizerAdapter.readSnapshot(),
         runtimeTarget: { cpuModel: 'XGB-XBCU', base: 0, slot: 1 },
         setStatus: (next) => {
+          xgSimState = next.state;
           const identity = next.identityVerified === false
             ? ' · 프로젝트 식별 미검증(Host v1) · 관측/DI 시뮬레이션 전용'
             : '';
           status.textContent = `${next.state.toUpperCase()}${next.reason ? ` · ${next.reason}` : ''}${identity}${next.blocked.length ? ` · BLOCKED ${next.blocked.join(', ')}` : ''}`;
         },
       });
-      try { await controller.connect({ localSimulationConsented: consentBox.checked }); clearPoll(); poll = window.setInterval(() => { void controller?.pollOnce(); }, 100); disconnect.disabled = false; }
-      catch (error) { status.textContent = `BLOCKED · ${error instanceof Error ? error.message : String(error)}`; }
+      let sessionOpened = false;
+      try {
+        await controller.connect({ localSimulationConsented: consentBox.checked });
+        sessionOpened = true;
+        clearPoll();
+        if (xgSimState === 'connected') {
+          poll = window.setInterval(() => { void controller?.pollOnce(); }, 100);
+        }
+        disconnect.disabled = false;
+      } catch (error) {
+        status.textContent = `BLOCKED · ${error instanceof Error ? error.message : String(error)}`;
+      } finally {
+        connecting = false;
+        select.disabled = !consentBox.checked;
+        connect.disabled = sessionOpened || !consentBox.checked || selected?.selected !== true || !selected?.reference;
+      }
     })();
     disconnect.onclick = () => void safeDisconnect();
     window.addEventListener('palletizer-profile-changed', () => { clearPoll(); void controller?.onProfileChanged(); });

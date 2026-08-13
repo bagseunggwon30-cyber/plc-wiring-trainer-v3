@@ -107,11 +107,15 @@ npm run test:e2e
 # 모든 출시 게이트 뒤 새 포터블 산출물 생성
 npm run build
 
+# XG-SIM 호스트를 제외한 오프라인 포터블 생성
+# Visual Studio Build Tools가 없는 PC에서도 사용 가능
+npm run build:offline
+
 # 출시 게이트부터 다시 실행한 뒤 공유용 최소 ZIP 생성
 npm run package:share
 ```
 
-`npm start`는 XG-SIM 호스트 실행 파일이 없어도 정상적으로 시작됩니다. 이 경우 결선·검증·3D 실습 기능은 사용할 수 있고, 고급 도구의 XG-SIM 공식 인터페이스 진단만 연결 시 안전하게 차단됩니다.
+`npm start`와 `npm run build:offline`은 XG-SIM 호스트 실행 파일이 없어도 정상적으로 동작합니다. 이 경우 결선·검증·3D 실습 기능은 사용할 수 있고, 고급 도구의 XG-SIM 공식 인터페이스 진단만 연결 시 안전하게 차단됩니다. XG-SIM 호스트 빌드는 `vswhere`, `XGSIM_MSBUILD_PATH`, Visual Studio 2022 표준 설치 위치 순으로 MSBuild를 찾습니다.
 
 새 포터블 파일은 `release/결선작업장-<package.json version>-portable.exe`에 생성됩니다. 명령이 성공해도 기존 실행 파일은 자동으로 대체하지 마십시오. 외부 배포에는 별도 코드서명과 훈련 패널 대조 시험이 필요합니다.
 

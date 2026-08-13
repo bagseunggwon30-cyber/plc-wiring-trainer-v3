@@ -331,7 +331,8 @@ test('the equipment gallery names all manual-backed assets and the discrete lab 
   assert.match(discrete, /(?:fallback|catch)[\s\S]{0,600}mitsubishi-q-plc-module\.glb|mitsubishi-q-plc-module\.glb[\s\S]{0,600}(?:fallback|catch)/i, 'discrete PLC must retain a Mitsubishi fallback when the manual-backed asset cannot load');
   assert.match(discrete, /const fallbackRotation[\s\S]{0,700}addImported\('discrete', options\.fallback, size, position, fallbackRotation/, 'a legacy fallback must retain its own authored front orientation');
   assert.match(importedModels, /new URL\(source\.manifestUrl, document\.baseURI\)/, 'manifest URLs must resolve from the packaged renderer root');
-  assert.match(importedModels, /new URL\(`\$\{entry\.modelBaseUrl\}\$\{filename\}`, document\.baseURI\)/, 'GLB URLs must resolve from the packaged renderer root');
+  assert.match(importedModels, /const baseUrl = new URL\(entry\.modelBaseUrl, document\.baseURI\)/, 'GLB base URLs must resolve from the packaged renderer root');
+  assert.match(importedModels, /new URL\(encodeURIComponent\(entry\.file\), baseUrl\)/, 'GLB filenames must be safely resolved beneath the selected asset collection');
   assert.doesNotMatch(importedModels, /manifestUrl:\s*['"]\.\.\//, 'packaged manifest paths must not escape build\/renderer');
   const createRenderer = ui.slice(ui.indexOf('function createRenderer()'), ui.indexOf('function findImportedNode'));
   assert.doesNotMatch(createRenderer, /loadImportedAssets\(\)/, 'hidden automation labs must not prefetch every GLB during app startup');

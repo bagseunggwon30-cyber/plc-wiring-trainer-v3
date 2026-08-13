@@ -10,14 +10,32 @@ const revM2OutcomeAddresses = [
   ...Array.from({ length: 16 }, (_, index) => `M004${String(index).padStart(2, '0')}`),
 ];
 
+let snapshotSequence = 0;
+let activeNonce = '';
 function snapshot(monitors: Record<string, boolean> = {}): PlcRuntimeSnapshot {
-  return { sequence: 1, capturedAt: '2026-08-13T00:00:00.000Z', inputs: {}, outputs: {}, monitors };
+  snapshotSequence += 1;
+  return {
+    sequence: snapshotSequence,
+    capturedAt: new Date(Date.parse('2026-08-13T00:00:00.000Z') + snapshotSequence).toISOString(),
+    sessionId: 'revm2', sessionNonce: activeNonce, hostEpoch: 'revm2-epoch', projectSha256: sha256,
+    inputs: {}, outputs: {},
+    monitors: {
+      ...Object.fromEntries([...commandAddresses, ...revM2OutcomeAddresses].map((address) => [address, false])),
+      ...monitors,
+    },
+  };
 }
 
 function createHarness() {
-  const connect = vi.fn(async (_request: PlcRuntimeConnectRequest) => ({
-    sessionId: 'revm2', connectedAt: '2026-08-13T00:00:00.000Z', projectSha256: sha256, projectIdentityVerified: true,
-  }));
+  snapshotSequence = 0;
+  activeNonce = '';
+  const connect = vi.fn(async (request: PlcRuntimeConnectRequest) => {
+    activeNonce = request.sessionNonce;
+    return {
+      sessionId: 'revm2', sessionNonce: activeNonce, hostEpoch: 'revm2-epoch',
+      connectedAt: '2026-08-13T00:00:00.000Z', projectSha256: sha256, projectIdentityVerified: true,
+    };
+  });
   const adapter: PlcRuntimeAdapter = {
     probe: async () => { throw new Error('not used'); },
     connect,

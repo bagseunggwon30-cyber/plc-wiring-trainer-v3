@@ -72,6 +72,12 @@
     return value.map((item, index) => finiteNumber(item, `${label}[${index}]`));
   }
 
+  function normalizeMaxConductors(value, label = 'maxConductors') {
+    const count = Number(value ?? 1);
+    if (!Number.isInteger(count) || count < 1 || count > 32) throw new RangeError(`${label} must be an integer between 1 and 32`);
+    return count;
+  }
+
   function connectionKey(moduleId, anchorId) { return `${moduleId}::${anchorId}`; }
 
   function normalizeRouting(value) {
@@ -223,7 +229,9 @@
         const anchor = {
           id: anchorId, moduleId: id, kind, object: anchorObject,
           localPosition: this._vector(item.localPosition ?? item.position ?? [0, 0, 0], `anchor ${id}:${anchorId} position`),
-          tag: item.tag == null ? anchorId : String(item.tag), connectionId: null, metadata: item.metadata
+          tag: item.tag == null ? anchorId : String(item.tag),
+          maxConductors: normalizeMaxConductors(item.maxConductors ?? item.metadata?.maxConductors, `anchor ${id}:${anchorId} maxConductors`),
+          connectionIds: new Set(), connectionId: null, metadata: item.metadata
         };
         module.anchors.set(anchorId, anchor); this.anchors.set(connectionKey(id, anchorId), anchor);
       }
@@ -232,7 +240,21 @@
 
     moduleInfo(id) {
       const module = this.modules.get(String(id)); if (!module) return null;
-      return { id: module.id, lab: module.lab, movable: module.movable, tag: module.tag, anchors: [...module.anchors.values()].map(anchor => ({ id: anchor.id, kind: anchor.kind, tag: anchor.tag, connected: !!anchor.connectionId })) };
+      return {
+        id: module.id, lab: module.lab, movable: module.movable, tag: module.tag,
+        anchors: [...module.anchors.values()].map(anchor => ({
+          id: anchor.id, kind: anchor.kind, tag: anchor.tag,
+          connected: anchor.connectionIds.size > 0,
+          connectionCount: anchor.connectionIds.size,
+          maxConductors: anchor.maxConductors
+        }))
+      };
+    }
+
+    _anchorHasCapacity(anchor) { return anchor.connectionIds.size < anchor.maxConductors; }
+
+    _syncAnchorConnectionId(anchor) {
+      anchor.connectionId = anchor.connectionIds.values().next().value || null;
     }
 
     _resolveAnchor(reference) {
@@ -255,7 +277,7 @@
     _createVisual(kind, preview = false, options = {}) {
       const color = options.color ?? (preview ? this.colors.preview : this.colors[kind]);
       if (kind === 'electric' || kind === 'optical') {
-        if (this.solidElectricWires) {
+        if (this.solidElectricWires && !preview) {
           const start = new this.THREE.Vector3(), end = new this.THREE.Vector3(0, .0001, 0);
           const geometry = new this.THREE.TubeGeometry(new this.THREE.LineCurve3(start, end), 1, options.radius || this.wireRadius, 8, false);
           const material = new this.THREE.MeshStandardMaterial({
@@ -312,7 +334,11 @@
       const from = this._resolveAnchor(fromReference), to = this._resolveAnchor(toReference);
       if (from === to) throw new Error('A socket cannot connect to itself');
       if (from.kind !== to.kind) throw new Error('Sockets must use the same connection medium');
-      if (from.connectionId || to.connectionId) throw new Error('Each socket accepts only one direct connection');
+      const fromFull = !this._anchorHasCapacity(from), toFull = !this._anchorHasCapacity(to);
+      if (fromFull || toFull) {
+        if ((fromFull && from.maxConductors === 1) || (toFull && to.maxConductors === 1)) throw new Error('Each socket accepts only one direct connection');
+        throw new Error('Socket conductor capacity exceeded');
+      }
       const fromModule = this.modules.get(from.moduleId), toModule = this.modules.get(to.moduleId);
       if (fromModule.lab !== toModule.lab) throw new Error('Connections cannot cross labs');
       if (options.enforceMode !== false) {
@@ -325,7 +351,10 @@
       const routing = normalizeRouting(options.routing ?? from.metadata?.routing ?? to.metadata?.routing);
       const visual = this._createVisual(from.kind, false, { ...options, routing }), connection = { id, kind: from.kind, from, to, visual, metadata: options.metadata };
       visual.name = `sov-${from.kind}-${id}`; visual.userData.connectionId = id; this.connectionRoot.add(visual);
-      this.connections.set(id, connection); from.connectionId = id; to.connectionId = id; this._updateConnection(connection);
+      this.connections.set(id, connection);
+      from.connectionIds.add(id); to.connectionIds.add(id);
+      this._syncAnchorConnectionId(from); this._syncAnchorConnectionId(to);
+      this._updateConnection(connection);
       if (options.emit !== false) { this._emit('connectioncreated', { connection: this.connectionInfo(id) }); this._change('connection-create', { connectionId: id }); }
       return connection;
     }
@@ -344,7 +373,7 @@
         : this.mode === MODES.AIR && anchor.kind === 'air';
       if (!modeAcceptsKind) { this._emit('actionrejected', { action: 'connection-start', mode: this.mode }); return false; }
       const kind = anchor.kind;
-      if (module.lab !== this.lab || anchor.connectionId) { this._emit('actionrejected', { action: 'connection-start', moduleId: anchor.moduleId, anchorId: anchor.id }); return false; }
+      if (module.lab !== this.lab || !this._anchorHasCapacity(anchor)) { this._emit('actionrejected', { action: 'connection-start', moduleId: anchor.moduleId, anchorId: anchor.id }); return false; }
       this.cancel('connection-restart');
       const routing = normalizeRouting(anchor.metadata?.routing);
       const visual = this._createVisual(kind, true, { routing }); this.previewRoot.add(visual);
@@ -429,12 +458,18 @@
 
     _resolveConnection(reference) {
       if (typeof reference === 'string' && this.connections.has(reference)) return this.connections.get(reference);
-      try { const anchor = this._resolveAnchor(reference); return anchor.connectionId ? this.connections.get(anchor.connectionId) : null; } catch (_) { return null; }
+      try {
+        const anchor = this._resolveAnchor(reference);
+        const id = anchor.connectionIds.values().next().value;
+        return id ? this.connections.get(id) : null;
+      } catch (_) { return null; }
     }
 
     _removeConnection(reference, emit = true) {
       const connection = this._resolveConnection(reference); if (!connection) return false;
-      connection.from.connectionId = null; connection.to.connectionId = null; connection.visual.removeFromParent(); connection.visual.geometry?.dispose?.(); connection.visual.material?.dispose?.(); this.connections.delete(connection.id);
+      connection.from.connectionIds.delete(connection.id); connection.to.connectionIds.delete(connection.id);
+      this._syncAnchorConnectionId(connection.from); this._syncAnchorConnectionId(connection.to);
+      connection.visual.removeFromParent(); connection.visual.geometry?.dispose?.(); connection.visual.material?.dispose?.(); this.connections.delete(connection.id);
       if (emit) { this._emit('connectiondeleted', { connectionId: connection.id }); this._change('connection-delete', { connectionId: connection.id }); } return true;
     }
 
@@ -447,7 +482,7 @@
 
     unregisterModule(moduleId, options = {}) {
       const module = this.modules.get(String(moduleId)); if (!module) return false;
-      const links = new Set([...module.anchors.values()].map(anchor => anchor.connectionId).filter(Boolean)); for (const id of links) this._removeConnection(id, options.emit !== false);
+      const links = new Set([...module.anchors.values()].flatMap(anchor => [...anchor.connectionIds])); for (const id of links) this._removeConnection(id, options.emit !== false);
       for (const anchor of module.anchors.values()) this.anchors.delete(connectionKey(module.id, anchor.id)); this.modules.delete(module.id);
       if (options.removeObject ?? module.removeObjectOnDelete) module.object.removeFromParent?.();
       if (this.pendingMove?.module === module || this.pendingConnection?.anchor.moduleId === module.id) this.cancel('module-delete');
@@ -495,7 +530,7 @@
         if (normalizeLab(item.lab) !== module.lab) throw new Error(`Module lab mismatch: ${id}`);
         modules.push({ module, position: finiteTuple(item.position, 3, `${id}.position`), quaternion: finiteTuple(item.quaternion, 4, `${id}.quaternion`), scale: finiteTuple(item.scale, 3, `${id}.scale`) });
       }
-      const occupied = new Set(), ids = new Set(), connections = [];
+      const occupancy = new Map(), ids = new Set(), connections = [];
       for (const item of state.connections) {
         const id = normalizeId(item?.id, 'connection id'); if (ids.has(id)) throw new Error(`Duplicate connection state: ${id}`); ids.add(id);
         let from, to;
@@ -503,9 +538,14 @@
         if (from === to || from.kind !== to.kind) throw new Error(`Invalid connection: ${id}`);
         if (item.kind && item.kind !== from.kind) throw new Error(`Connection kind mismatch: ${id}`);
         const fromKey = connectionKey(from.moduleId, from.id), toKey = connectionKey(to.moduleId, to.id);
-        if (occupied.has(fromKey) || occupied.has(toKey)) throw new Error(`Socket used more than once in state: ${id}`);
+        const fromCount = (occupancy.get(fromKey) || 0) + 1, toCount = (occupancy.get(toKey) || 0) + 1;
+        const fromExceeded = fromCount > from.maxConductors, toExceeded = toCount > to.maxConductors;
+        if (fromExceeded || toExceeded) {
+          if ((fromExceeded && from.maxConductors === 1) || (toExceeded && to.maxConductors === 1)) throw new Error(`Socket used more than once in state: ${id}`);
+          throw new Error(`Socket conductor capacity exceeded in state: ${id}`);
+        }
         if (this.modules.get(from.moduleId).lab !== this.modules.get(to.moduleId).lab) throw new Error(`Cross-lab connection: ${id}`);
-        occupied.add(fromKey); occupied.add(toKey); connections.push({ id, from, to });
+        occupancy.set(fromKey, fromCount); occupancy.set(toKey, toCount); connections.push({ id, from, to });
       }
       return { lab, mode, modules, connections };
     }
@@ -530,5 +570,5 @@
 
   function create(options) { return new EditorEngine(options); }
 
-  return Object.freeze({ version: '1.2.0', SCHEMA_VERSION, MODES, LABS, MODE_ALLOWANCES, hotkeyAction, editableTarget, normalizeRouting, createAnchorHitTarget, EditorEngine, create });
+  return Object.freeze({ version: '1.3.0', SCHEMA_VERSION, MODES, LABS, MODE_ALLOWANCES, hotkeyAction, editableTarget, normalizeRouting, createAnchorHitTarget, EditorEngine, create });
 });

@@ -18,6 +18,14 @@
     pallet:{origin:{x:342,y:146,z:24},rows:3,cols:3,layers:1,spacingX:62,spacingY:58,layerHeight:34},
     dwell:{grip:.28,release:.24}
   };
+  const PRODUCTION_SAFETY_INPUTS=[
+    'eStopLoopOk','guardLoopOk','autoEnableKey','airPressureOk','xDrivePowerOk',
+    'yDrivePowerOk','zDrivePowerOk','safetyRelayEdmOk','extStopLoopOk'
+  ];
+  const PRODUCTION_CLEARANCE=10;
+  const PRODUCTION_MOTION_TIMEOUT_MIN=3;
+  const PRODUCTION_MOTION_TIMEOUT_MAX=30;
+  const PRODUCTION_ORG_TIMEOUT=20;
   const AUTO_STEPS={
     IDLE:0,HOMING:10,MOVE_PICK_XY:20,LOWER_PICK:30,GRIP:40,LIFT_PICK:50,
     MOVE_PLACE_XY:60,LOWER_PLACE:70,RELEASE:80,LIFT_PLACE:90,NEXT:100,
@@ -102,6 +110,8 @@
 
   function finite(value,fallback=0){const n=Number(value);return Number.isFinite(n)?n:fallback;}
   function clamp(value,min,max){return Math.max(min,Math.min(max,value));}
+  function bounded(value,fallback,min,max){return clamp(finite(value,fallback),min,max);}
+  function integer(value,fallback,min,max){return clamp(Math.trunc(finite(value,fallback)),min,max);}
   function approach(value,target,amount){return value<target?Math.min(target,value+amount):Math.max(target,value-amount);}
   function clone(value){return JSON.parse(JSON.stringify(value));}
   function address(value){return String(value||'').trim().toUpperCase().replace(/\s+/g,'');}
@@ -128,9 +138,35 @@
   function mappedAddresses(profile){return new Set(flattenAddresses({commands:profile.commands,inputs:profile.inputs,setpoints:profile.setpoints,status:profile.status,actual:profile.actual}));}
   function roleAt(mapping,raw){const key=address(raw);return Object.entries(mapping).find(([,mapped])=>address(mapped)===key)?.[0]||null;}
 
+  function normalizeCell(raw={}){
+    const source=raw&&typeof raw==='object'?raw:{};
+    const pick=source.pick&&typeof source.pick==='object'?source.pick:{};
+    const pallet=source.pallet&&typeof source.pallet==='object'?source.pallet:{};
+    const origin=pallet.origin&&typeof pallet.origin==='object'?pallet.origin:{};
+    const dwell=source.dwell&&typeof source.dwell==='object'?source.dwell:{};
+    return {
+      pick:{x:finite(pick.x,DEFAULT_CELL.pick.x),y:finite(pick.y,DEFAULT_CELL.pick.y),z:finite(pick.z,DEFAULT_CELL.pick.z)},
+      safeZ:finite(source.safeZ,DEFAULT_CELL.safeZ),
+      pallet:{
+        origin:{x:finite(origin.x,DEFAULT_CELL.pallet.origin.x),y:finite(origin.y,DEFAULT_CELL.pallet.origin.y),z:finite(origin.z,DEFAULT_CELL.pallet.origin.z)},
+        rows:integer(pallet.rows,DEFAULT_CELL.pallet.rows,1,8),cols:integer(pallet.cols,DEFAULT_CELL.pallet.cols,1,8),layers:integer(pallet.layers,DEFAULT_CELL.pallet.layers,1,5),
+        spacingX:bounded(pallet.spacingX,DEFAULT_CELL.pallet.spacingX,10,150),spacingY:bounded(pallet.spacingY,DEFAULT_CELL.pallet.spacingY,10,150),layerHeight:bounded(pallet.layerHeight,DEFAULT_CELL.pallet.layerHeight,10,150)
+      },
+      dwell:{grip:bounded(dwell.grip,DEFAULT_CELL.dwell.grip,.02,10),release:bounded(dwell.release,DEFAULT_CELL.dwell.release,.02,10)}
+    };
+  }
+
   function createAxis(name,overrides={}){
-    const cfg={...(AXIS_DEFAULTS[name]||AXIS_DEFAULTS.X),...overrides};
-    const position=clamp(finite(overrides.position,cfg.home),cfg.min,cfg.max);
+    const defaults=AXIS_DEFAULTS[name]||AXIS_DEFAULTS.X,raw=overrides&&typeof overrides==='object'?overrides:{};
+    let min=finite(raw.min,defaults.min),max=finite(raw.max,defaults.max);
+    if(max<=min){min=defaults.min;max=defaults.max;}
+    const span=max-min,home=clamp(finite(raw.home,defaults.home),min,max);
+    const cfg={
+      min,max,home,homeDirection:Math.sign(finite(raw.homeDirection,defaults.homeDirection))||defaults.homeDirection,
+      maxSpeed:bounded(raw.maxSpeed,defaults.maxSpeed,1,2000),accel:bounded(raw.accel,defaults.accel,1,5000),decel:bounded(raw.decel,defaults.decel,1,5000),
+      homeSpeed:bounded(raw.homeSpeed,defaults.homeSpeed,1,2000),tolerance:bounded(raw.tolerance,defaults.tolerance,.01,Math.max(.01,span/10))
+    };
+    const position=clamp(finite(raw.position,cfg.home),cfg.min,cfg.max);
     return {
       name,min:cfg.min,max:cfg.max,home:cfg.home,homeDirection:cfg.homeDirection,
       maxSpeed:cfg.maxSpeed,accel:cfg.accel,decel:cfg.decel,homeSpeed:cfg.homeSpeed,tolerance:cfg.tolerance,
@@ -141,11 +177,7 @@
   }
 
   function createState(options={}){
-    const cell={...clone(DEFAULT_CELL),...(options.cell||{})};
-    cell.pick={...DEFAULT_CELL.pick,...(options.cell?.pick||{})};
-    cell.pallet={...clone(DEFAULT_CELL.pallet),...(options.cell?.pallet||{})};
-    cell.pallet.origin={...DEFAULT_CELL.pallet.origin,...(options.cell?.pallet?.origin||{})};
-    cell.dwell={...DEFAULT_CELL.dwell,...(options.cell?.dwell||{})};
+    const cell=normalizeCell(options.cell);
     const requestedProfile=options.profileId||options.profile||options.saved?.profileId||options.saved?.profile;
     const profileId=resolveProfile(requestedProfile)||'ls';
     const state={
@@ -158,8 +190,9 @@
       gripper:{closed:false,holding:false,workpieceId:null},releasedWorkpieceId:null,
       pallet:{placed:[],nextIndex:0},
       auto:{running:false,state:'IDLE',previous:'IDLE',timer:0,cycle:0,message:'대기',fault:null},
-      manualOrg:{step:0,previous:0,message:'대기'},
-      memory:emptyMemory(),physicalInputEdges:{},observedStatus:{active:false,values:{}},plcAuthoritative:false,
+      manualOrg:{step:0,previous:0,timer:0,message:'대기'},
+      production:{workArmed:true,palletRemovalSeen:false,palletArrivalTimer:0,motionTimeout:0},
+      memory:emptyMemory(),physicalInputEdges:{},commandLevels:{},observedStatus:{active:false,values:{}},plcAuthoritative:false,
       events:[]
     };
     initializeMemory(state);
@@ -186,11 +219,23 @@
     axis.alarm=null;axis.mode='idle';axis.velocity=0;axis.busy=false;
     axis.inPosition=Math.abs(axis.target-axis.position)<=axis.tolerance;
   }
-  function resetAlarms(state){
+  function clearAlarmState(state){
     Object.values(state.axes).forEach(resetAxisAlarm);
     state.auto.fault=null;
     if(state.auto.state==='FAULT')transition(state,'IDLE','알람 리셋');
     refreshMemory(state);
+    return true;
+  }
+  function resetAlarms(state){
+    if(getProfile(state).id==='xgb-production'){
+      const hasAlarm=!!state.auto.fault||Object.values(state.axes).some(axis=>axis.alarm);
+      if(!['PROD_STOP','PROD_FAULT','FAULT'].includes(state.auto.state)){
+        if(!hasAlarm)return false;
+        state.auto.running=false;transition(state,'PROD_FAULT','생산 알람 리셋 대기');
+      }
+      return resetProduction(state);
+    }
+    return clearAlarmState(state);
   }
   function setAxisAlarm(state,axis,code,message){
     axis.alarm={code,message};axis.mode='idle';axis.velocity=0;axis.busy=false;axis.inPosition=false;
@@ -303,24 +348,55 @@
   }
   function productionInput(state,name){return !!memoryGet(state,getProfile(state).inputs[name]);}
   function stoppedProduction(state){return Object.values(state.axes).every(axis=>!axis.busy);}
-  function productionPreflightOk(state){return allHomed(state)&&['eStopLoopOk','guardLoopOk','autoEnableKey','airPressureOk','xDrivePowerOk','yDrivePowerOk','zDrivePowerOk','safetyRelayEdmOk','extStopLoopOk'].every(name=>productionInput(state,name));}
+  function productionSafetyOk(state){return PRODUCTION_SAFETY_INPUTS.every(name=>productionInput(state,name));}
+  function productionPreflightOk(state){return allHomed(state)&&productionSafetyOk(state);}
+  function unresolvedProductionWork(state){return !!(state.gripper.holding||state.gripper.workpieceId||state.releasedWorkpieceId);}
+  function productionGeometryError(state){
+    const within=(axis,value)=>Number.isFinite(Number(value))&&Number(value)>=axis.min-EPS&&Number(value)<=axis.max+EPS;
+    const p=state.cell.pallet,pick=state.cell.pick;
+    if(![p.rows,p.cols,p.layers].every(Number.isInteger)||p.rows<1||p.rows>8||p.cols<1||p.cols>8||p.layers<1||p.layers>5)return '팔레트 행·열·단 설정이 유효하지 않습니다';
+    if(![p.spacingX,p.spacingY,p.layerHeight].every(value=>Number.isFinite(Number(value))&&Number(value)>0))return '팔레트 간격 설정이 유효하지 않습니다';
+    if(!within(state.axes.X,pick.x)||!within(state.axes.Y,pick.y)||!within(state.axes.Z,pick.z))return '픽업 좌표가 축 이동 범위를 벗어났습니다';
+    if(!within(state.axes.Z,state.cell.safeZ))return '안전 Z 좌표가 축 이동 범위를 벗어났습니다';
+    for(let index=0;index<palletCapacity(state);index++){
+      const slot=palletSlot(state,index);
+      if(!within(state.axes.X,slot.x)||!within(state.axes.Y,slot.y)||!within(state.axes.Z,slot.z))return `팔레트 ${index+1}번 슬롯이 축 이동 범위를 벗어났습니다`;
+    }
+    const highestWorkZ=Math.max(pick.z,...Array.from({length:palletCapacity(state)},(_,index)=>palletSlot(state,index).z));
+    if(Number(state.cell.safeZ)<highestWorkZ+PRODUCTION_CLEARANCE)return `안전 Z는 작업 높이보다 ${PRODUCTION_CLEARANCE} mm 이상 높아야 합니다`;
+    return null;
+  }
   function productionResetCauseClear(state){
-    if(!stoppedProduction(state)||!productionPreflightOk(state))return false;
+    // Axis alarms are deliberately excluded here: RESET is the operation that
+    // clears them.  Requiring allHomed() (which rejects alarms) made a genuine
+    // motion alarm impossible to reset.  Physical safety causes must still be
+    // healthy and every axis must already be stopped.
+    if(!stoppedProduction(state)||!productionSafetyOk(state))return false;
     const fault=state.auto.fault?.code;
-    if(['VACUUM_TIMEOUT','VACUUM_LOST'].includes(fault)&&!productionInput(state,'vacuumOk'))return false;
+    if(['VACUUM_TIMEOUT','VACUUM_LOST'].includes(fault)&&productionInput(state,'vacuumOk'))return false;
     if(fault==='RELEASE_TIMEOUT'&&productionInput(state,'vacuumOk')&&!productionInput(state,'releaseOk'))return false;
-    if(fault==='PRODUCT_LOST'&&!productionInput(state,'workPresent'))return false;
     if(fault==='PALLET_MISSING'&&!productionInput(state,'palletPresent'))return false;
+    if(fault==='CONFIG_INVALID'&&productionGeometryError(state))return false;
+    if(unresolvedProductionWork(state))return false;
     return true;
   }
   function productionFault(state,code,message){
     state.auto.running=false;state.auto.fault={code,message};Object.keys(state.axes).forEach(name=>stopAxis(state,name));
+    if(['PREFLIGHT_LOST','SERVO_DROPPED','AXIS_FAULT','ORG_LOST','CONFIG_INVALID','MOTION_TIMEOUT','ORG_TIMEOUT'].includes(code))setServo(state,null,false);
+    if(['VACUUM_TIMEOUT','VACUUM_LOST'].includes(code)){
+      state.gripper.closed=false;state.gripper.holding=false;state.gripper.workpieceId=null;
+    }
     transition(state,'PROD_FAULT',message||code);refreshMemory(state);return false;
   }
   function startProductionAuto(state){
     // Product and pallet are asynchronous process signals and are deliberately
     // waited for at STEP100; all motion/safety permits must already be true.
-    if(state.auto.state!=='IDLE'||!productionPreflightOk(state))return false;
+    if(state.auto.state!=='IDLE'||!productionPreflightOk(state)||unresolvedProductionWork(state))return false;
+    if(state.pallet.nextIndex>=palletCapacity(state)){
+      state.auto.running=false;transition(state,'PROD_FULL',`팔레트 가득 참 · ${state.pallet.placed.length}개`);return false;
+    }
+    const geometryError=productionGeometryError(state);
+    if(geometryError)return productionFault(state,'CONFIG_INVALID',geometryError);
     if(!productionInput(state,'workPresent')||!productionInput(state,'palletPresent')){
       state.auto.running=true;state.auto.fault=null;transition(state,'PROD_WAIT_PRODUCT','제품/팔레트 대기');refreshMemory(state);return true;
     }
@@ -328,16 +404,21 @@
   }
   function productionStop(state,reason='PLC 정지 지령'){
     Object.keys(state.axes).forEach(name=>stopAxis(state,name));state.auto.running=false;transition(state,'PROD_STOP',reason);
+    if(state.manualOrg.step!==0){state.manualOrg.previous=state.manualOrg.step;state.manualOrg.step=0;state.manualOrg.message=reason;}
+    state.production.motionTimeout=0;
     // In-memory axes acknowledge XSTP synchronously, so XSVOFF follows the stopped state here.
     setServo(state,null,false);refreshMemory(state);return true;
   }
   function resetProduction(state){
     if(!['PROD_STOP','PROD_FAULT','FAULT'].includes(state.auto.state)||!productionResetCauseClear(state))return false;
-    resetAlarms(state);setServo(state,null,false);state.auto.running=false;state.auto.fault=null;state.auto.timer=0;transition(state,'IDLE','대기');refreshMemory(state);return true;
+    clearAlarmState(state);setServo(state,null,false);state.auto.running=false;state.auto.fault=null;state.auto.timer=0;
+    state.production.motionTimeout=0;state.production.palletArrivalTimer=0;
+    transition(state,'IDLE','대기');refreshMemory(state);return true;
   }
   function requestNewPallet(state){
-    if(getProfile(state).id!=='xgb-production'||state.auto.state!=='PROD_FULL'||!productionInput(state,'palletPresent'))return false;
-    state.auto.running=true;transition(state,'PROD_NEW_PALLET','신규 팔레트 초기화');refreshMemory(state);return true;
+    if(getProfile(state).id!=='xgb-production'||state.auto.state!=='PROD_FULL'||unresolvedProductionWork(state))return false;
+    state.production.palletRemovalSeen=!productionInput(state,'palletPresent');state.production.palletArrivalTimer=0;
+    state.auto.running=true;transition(state,'PROD_NEW_PALLET','기존 팔레트 제거 대기');refreshMemory(state);return true;
   }
   function startAuto(state){
     if(faultIfAny(state))return false;
@@ -361,8 +442,16 @@
     refreshMemory(state);
   }
   function resetCell(state,options={}){
-    stopAll(state,'리셋');resetAlarms(state);
+    const production=getProfile(state).id==='xgb-production';
+    if(production){
+      if(state.auto.running||state.manualOrg.step!==0||!stoppedProduction(state))return false;
+      const explicitRecovery=options.recoverWorkpiece===true||options.clearPallet===true;
+      if(unresolvedProductionWork(state)&&!explicitRecovery)return false;
+      if(['PROD_STOP','PROD_FAULT','FAULT'].includes(state.auto.state)&&!productionSafetyOk(state))return false;
+    }
+    stopAll(state,'리셋');if(production)setServo(state,null,false);clearAlarmState(state);
     state.gripper.closed=false;state.gripper.holding=false;state.gripper.workpieceId=null;
+    state.releasedWorkpieceId=null;state.production.workArmed=true;state.production.palletRemovalSeen=false;state.production.palletArrivalTimer=0;state.production.motionTimeout=0;
     if(options.clearPallet!==false){state.pallet.placed=[];state.pallet.nextIndex=0;state.auto.cycle=0;}
     transition(state,'IDLE','대기');state.auto.running=false;state.auto.timer=0;state.events=[];
     refreshMemory(state);return true;
@@ -442,10 +531,23 @@
   }
   function productionMove(state,axis,target,next,message){
     if(!commandAxis(state,axis,target))return productionFault(state,'MOTION_COMMAND_REJECTED',`${axis}축 위치결정 명령 거부`);
-    transition(state,next,message);return true;
+    const targetAxis=axisFor(state,axis),travel=Math.abs(targetAxis.target-targetAxis.position),speed=Math.max(1,targetAxis.commandSpeed);
+    const expected=travel/speed+speed/Math.max(1,targetAxis.accel)+speed/Math.max(1,targetAxis.decel)+1;
+    transition(state,next,message);state.production.motionTimeout=clamp(expected,PRODUCTION_MOTION_TIMEOUT_MIN,PRODUCTION_MOTION_TIMEOUT_MAX);return true;
+  }
+  function productionAtWaitPose(state){
+    const pick=state.cell.pick,z=state.axes.Z,x=state.axes.X,y=state.axes.Y;
+    return Object.values(state.axes).every(axis=>axis.servoOn&&!axis.alarm&&!axis.busy)
+      &&Math.abs(z.position-state.cell.safeZ)<=z.tolerance
+      &&Math.abs(x.position-pick.x)<=x.tolerance
+      &&Math.abs(y.position-pick.y)<=y.tolerance;
   }
   function productionWatch(state,vacuum=false,pallet=false){
-    if(!productionPreflightOk(state))return productionFault(state,'PREFLIGHT_LOST','안전/드라이브 사전조건 상실');
+    if(!productionSafetyOk(state))return productionFault(state,'PREFLIGHT_LOST','안전/드라이브 사전조건 상실');
+    const alarmAxis=Object.values(state.axes).find(axis=>axis.alarm);
+    if(alarmAxis)return productionFault(state,'AXIS_FAULT',`${alarmAxis.name}축 알람 · ${alarmAxis.alarm.code}`);
+    if(!Object.values(state.axes).every(axis=>axis.homed))return productionFault(state,'ORG_LOST','원점 완료 상태 상실');
+    if(!['PROD_SERVO','PROD_WAIT_PRODUCT'].includes(state.auto.state)&&!Object.values(state.axes).every(axis=>axis.servoOn))return productionFault(state,'SERVO_DROPPED','자동운전 중 서보 준비 상실');
     if(pallet&&!productionInput(state,'palletPresent'))return productionFault(state,'PALLET_MISSING','팔레트 검출 상실');
     if(vacuum&&!productionInput(state,'vacuumOk'))return productionFault(state,'VACUUM_LOST','진공 검출 상실');
     return true;
@@ -453,6 +555,7 @@
   function tickProductionAuto(state,dt){
     const auto=state.auto;auto.timer+=dt;
     if(!productionWatch(state))return;
+    if(state.production.motionTimeout>0&&auto.timer>=state.production.motionTimeout&&Object.values(state.axes).some(axis=>axis.busy))return productionFault(state,'MOTION_TIMEOUT','위치결정 완료 시간초과');
     const pick=state.cell.pick,slot=palletSlot(state,state.pallet.nextIndex);
     switch(auto.state){
       case 'PROD_SERVO':
@@ -463,13 +566,22 @@
       case 'PROD_Z_WAIT': if(axesReady(state,['Z']))productionMove(state,'X',pick.x,'PROD_X_WAIT','X 대기 위치 이동');break;
       case 'PROD_X_WAIT': if(axesReady(state,['X']))productionMove(state,'Y',pick.y,'PROD_Y_WAIT','Y 대기 위치 이동');break;
       case 'PROD_Y_WAIT': if(axesReady(state,['Y']))transition(state,'PROD_WAIT_PRODUCT','제품/팔레트 대기');break;
-      case 'PROD_WAIT_PRODUCT': if(productionInput(state,'workPresent')&&productionInput(state,'palletPresent'))productionMove(state,'X',pick.x,'PROD_FEED_X','X 픽업 이동');break;
+      case 'PROD_WAIT_PRODUCT':
+        if(!productionInput(state,'workPresent'))state.production.workArmed=true;
+        if(state.production.workArmed&&productionInput(state,'workPresent')&&productionInput(state,'palletPresent')){
+          if(!productionAtWaitPose(state))transition(state,'PROD_SERVO','대기 자세/서보 준비');
+          else{state.production.workArmed=false;productionMove(state,'X',pick.x,'PROD_FEED_X','X 픽업 이동');}
+        }
+        break;
       case 'PROD_FEED_X': if(axesReady(state,['X']))productionMove(state,'Y',pick.y,'PROD_FEED_Y','Y 픽업 이동');break;
       case 'PROD_FEED_Y': if(axesReady(state,['Y']))transition(state,'PROD_FEED_WAIT','픽업 XY 완료');break;
       case 'PROD_FEED_WAIT':
         if(!productionInput(state,'workPresent'))return productionFault(state,'PRODUCT_LOST','제품 검출 상실');
         if(axesReady(state,['X','Y']))productionMove(state,'Z',pick.z,'PROD_PICK_Z','픽업 높이 하강');break;
-      case 'PROD_PICK_Z': if(axesReady(state,['Z'])){state.gripper.closed=true;transition(state,'PROD_VACUUM','흡착 확인');}break;
+      case 'PROD_PICK_Z':
+        if(!productionInput(state,'workPresent'))return productionFault(state,'PRODUCT_LOST','픽업 하강 중 제품 검출 상실');
+        if(axesReady(state,['Z'])){state.gripper.closed=true;transition(state,'PROD_VACUUM','흡착 확인');}
+        break;
       case 'PROD_VACUUM':
         if(productionInput(state,'vacuumOk')&&auto.timer>=.1){state.gripper.holding=true;state.gripper.workpieceId=`BOX-${state.pallet.nextIndex+1}`;productionMove(state,'Z',state.cell.safeZ,'PROD_LIFT','제품 안전높이 상승');}
         else if(auto.timer>=3)return productionFault(state,'VACUUM_TIMEOUT','진공 확인 시간초과');break;
@@ -491,6 +603,7 @@
         }
         break;
       case 'PROD_RELEASE':
+        if(!productionWatch(state,false,true))return;
         if((productionInput(state,'releaseOk')||!productionInput(state,'vacuumOk'))&&auto.timer>=state.cell.dwell.release){
           productionMove(state,'Z',state.cell.safeZ,'PROD_RETURN_Z','안전높이 복귀');
         }else if(auto.timer>=3)return productionFault(state,'RELEASE_TIMEOUT','해제 확인 시간초과');
@@ -503,14 +616,18 @@
       case 'PROD_RETURN_Y': if(axesReady(state,['X']))productionMove(state,'Y',pick.y,'PROD_COMPLETE','Y 대기 위치 복귀');break;
       case 'PROD_COMPLETE':
         if(axesReady(state,['X','Y','Z'])){
-          if(state.pallet.nextIndex>=palletCapacity(state))transition(state,'PROD_FULL',`팔레트 가득 참 · ${state.pallet.placed.length}개`);
+          if(state.pallet.nextIndex>=palletCapacity(state)){state.auto.running=false;transition(state,'PROD_FULL',`팔레트 가득 참 · ${state.pallet.placed.length}개`);}
           else transition(state,'PROD_WAIT_PRODUCT','다음 제품 대기');
         }
         break;
       case 'PROD_FULL': break;
       case 'PROD_NEW_PALLET':
-        if(productionInput(state,'palletPresent')&&auto.timer>=.1){
+        if(!productionInput(state,'palletPresent')){
+          state.production.palletRemovalSeen=true;state.production.palletArrivalTimer=0;auto.message='신규 팔레트 장착 대기';
+        }else if(state.production.palletRemovalSeen)state.production.palletArrivalTimer+=dt;
+        if(state.production.palletRemovalSeen&&productionInput(state,'palletPresent')&&state.production.palletArrivalTimer>=.1){
           state.pallet.placed=[];state.pallet.nextIndex=0;state.auto.cycle=0;state.releasedWorkpieceId=null;
+          state.production.palletRemovalSeen=false;state.production.palletArrivalTimer=0;state.production.workArmed=!productionInput(state,'workPresent');
           transition(state,'PROD_WAIT_PRODUCT','신규 팔레트 제품 대기');
         }
         break;
@@ -520,7 +637,7 @@
 
   function observedStatusValue(state,rawAddress,fallback){
     const addressKey=address(rawAddress),observed=state.observedStatus;
-    if(observed?.active&&Object.prototype.hasOwnProperty.call(observed.values||{},addressKey))return bool(observed.values[addressKey]);
+    if(state.plcAuthoritative&&observed?.active&&Object.prototype.hasOwnProperty.call(observed.values||{},addressKey))return bool(observed.values[addressKey]);
     return !!fallback;
   }
   function setStatusMemory(state,rawAddress,value){memorySet(state,rawAddress,observedStatusValue(state,rawAddress,value));}
@@ -531,8 +648,13 @@
     const full=production?state.auto.state==='PROD_FULL':state.auto.state==='COMPLETE';
     const driveReady=axis=>axis.servoOn&&!axis.alarm;
     const productionPermit=name=>production&&productionInput(state,name);
-    const autoReady=production?!alarm&&!state.auto.running&&productionPreflightOk(state):!alarm&&!state.auto.running&&allHomed(state);
-    setStatusMemory(state,s.autoRunning,!!state.auto.running);setStatusMemory(state,s.autoComplete,full);setStatusMemory(state,s.fault,alarm);setStatusMemory(state,s.alarmLatch,alarm);
+    const capacityAvailable=state.pallet.nextIndex<palletCapacity(state);
+    const autoReady=production
+      ? !alarm&&!state.auto.running&&state.auto.state==='IDLE'&&capacityAvailable&&!unresolvedProductionWork(state)&&productionPreflightOk(state)
+      : !alarm&&!state.auto.running&&state.auto.state==='IDLE'&&capacityAvailable&&allHomed(state);
+    setStatusMemory(state,s.autoRunning,!!state.auto.running);setStatusMemory(state,s.autoComplete,full);
+    // Local safety faults are never masked by a stale or false observed PLC bit.
+    memorySet(state,s.fault,alarm||observedStatusValue(state,s.fault,false));memorySet(state,s.alarmLatch,alarm||observedStatusValue(state,s.alarmLatch,false));
     setStatusMemory(state,s.xBusy,a.X.busy);setStatusMemory(state,s.yBusy,a.Y.busy);setStatusMemory(state,s.zBusy,a.Z.busy);
     setStatusMemory(state,s.xHomed,a.X.homed);setStatusMemory(state,s.yHomed,a.Y.homed);setStatusMemory(state,s.zHomed,a.Z.homed);
     setStatusMemory(state,s.xDone,a.X.inPosition&&!a.X.busy&&!a.X.alarm);setStatusMemory(state,s.yDone,a.Y.inPosition&&!a.Y.busy&&!a.Y.alarm);setStatusMemory(state,s.zDone,a.Z.inPosition&&!a.Z.busy&&!a.Z.alarm);
@@ -545,7 +667,7 @@
     setStatusMemory(state,s.xDogSensor,axisAtHome(a.X));setStatusMemory(state,s.yDogSensor,axisAtHome(a.Y));setStatusMemory(state,s.zDogSensor,axisAtHome(a.Z));
     setStatusMemory(state,s.xServoReadyStatus,driveReady(a.X));setStatusMemory(state,s.yServoReadyStatus,driveReady(a.Y));setStatusMemory(state,s.zServoReadyStatus,driveReady(a.Z));
     setStatusMemory(state,s.vacuumBreakStatus,production&&state.auto.state==='PROD_RELEASE');setStatusMemory(state,s.vacuumOnStatus,state.gripper.closed);
-    setStatusMemory(state,s.palletFullStatus,full);setStatusMemory(state,s.alarmStatus,alarm);setStatusMemory(state,s.alarmLatch,alarm);setStatusMemory(state,s.buzzerStatus,alarm);
+    setStatusMemory(state,s.palletFullStatus,full);memorySet(state,s.alarmStatus,alarm||observedStatusValue(state,s.alarmStatus,false));memorySet(state,s.alarmLatch,alarm||observedStatusValue(state,s.alarmLatch,false));memorySet(state,s.buzzerStatus,alarm||observedStatusValue(state,s.buzzerStatus,false));
     setStatusMemory(state,s.autoRunningStatus,!!state.auto.running);setStatusMemory(state,s.autoReadyStatus,autoReady);
     setStatusMemory(state,s.xPowerPermitStatus,productionPermit('xDrivePowerOk'));setStatusMemory(state,s.yPowerPermitStatus,productionPermit('yDrivePowerOk'));setStatusMemory(state,s.zPowerPermitStatus,productionPermit('zDrivePowerOk'));
     setStatusMemory(state,s.safetyOkStatus,production&&['eStopLoopOk','guardLoopOk','safetyRelayEdmOk','extStopLoopOk'].every(productionPermit));
@@ -569,9 +691,12 @@
   function setPlcAuthoritative(state,active){
     if(getProfile(state).id!=='xgb-production')return false;
     const next=!!active;if(state.plcAuthoritative===next)return true;
+    state.physicalInputEdges={};
     state.plcAuthoritative=next;
     if(next){
-      stopAll(state,'PLC-authoritative XG-SIM 관측');setServo(state,null,false);state.manualOrg.step=0;
+      const localMotion=state.auto.running||state.manualOrg.step!==0||Object.values(state.axes).some(axis=>axis.busy);
+      if(localMotion)productionStop(state,'PLC-authoritative XG-SIM 관측');
+      else{stopAll(state,'PLC-authoritative XG-SIM 관측');setServo(state,null,false);state.manualOrg.step=0;}
     }
     refreshMemory(state);return true;
   }
@@ -616,6 +741,10 @@
       const axis=command[3],dir=command.endsWith('Plus')?1:-1;
       accepted=on?jogAxis(state,axis,dir,memoryGet(state,profile.setpoints.speed)):(state.axes[axis].mode==='jog'&&state.axes[axis].jogDirection===dir?stopAxis(state,axis):true);
     }
+    // Commands are one-scan pulses.  Returning the image to OFF keeps existing
+    // true-only UI buttons repeatable while preventing a held command level
+    // from being interpreted as a second edge by the runtime.
+    if(on)memorySet(state,key,false);
     refreshMemory(state);return {ok:true,address:key,value:on,...(accepted===false?{accepted:false}:{})};
   }
 
@@ -624,82 +753,131 @@
     if(!Object.values(profile.inputs||{}).map(address).includes(key))return false;
     const next=bool(value),previous=!!memoryGet(state,key);
     memorySet(state,key,next);
-    if(next&&!previous)state.physicalInputEdges[key]=true;
+    if(next&&!previous&&!state.plcAuthoritative)state.physicalInputEdges[key]=true;
     refreshMemory(state);return true;
   }
   function processPhysicalInputEdges(state){
-    if(getProfile(state).id!=='xgb-production')return;
+    if(getProfile(state).id!=='xgb-production')return null;
     const p=getProfile(state).inputs,edges=state.physicalInputEdges||{};
-    if(edges[p.startPb])startAuto(state);
-    if(edges[p.stopPb])productionStop(state,'물리 STOP PB');
-    if(edges[p.resetPb])resetProduction(state);
     state.physicalInputEdges={};
+    // One scan can contain more than one PB edge.  STOP must dominate RESET,
+    // and RESET must dominate START, so a simultaneous button event can never
+    // restart or clear the controlled stop in the same scan.
+    if(edges[p.stopPb]){productionStop(state,'물리 STOP PB');return 'stop';}
+    if(edges[p.resetPb]){resetProduction(state);return 'reset';}
+    if(edges[p.startPb]){startAuto(state);return 'start';}
+    return null;
   }
   function requestManualOrg(state){
     if(state.auto.running||state.auto.state!=='IDLE'||state.manualOrg.step!==0)return false;
     if(!Object.values(state.axes).every(axis=>!axis.busy&&!axis.alarm&&axis.servoOn))return false;
-    state.manualOrg.step=10;state.manualOrg.previous=0;state.manualOrg.message='Z축 원점복귀';
+    state.manualOrg.step=10;state.manualOrg.previous=0;state.manualOrg.timer=0;state.manualOrg.message='Z축 원점복귀';
     return homeAxis(state,'Z');
   }
-  function tickManualOrg(state){
+  function tickManualOrg(state,dt=0){
     const org=state.manualOrg;if(!org||org.step===0)return;
-    if(state.auto.running||state.auto.state!=='IDLE'){org.step=0;org.message='자동운전 중단';return;}
-    if(org.step===10&&state.axes.Z.homed&&!state.axes.Z.busy){org.previous=10;org.step=20;org.message='X축 원점복귀';homeAxis(state,'X');}
-    else if(org.step===20&&state.axes.X.homed&&!state.axes.X.busy){org.previous=20;org.step=30;org.message='Y축 원점복귀';homeAxis(state,'Y');}
-    else if(org.step===30&&state.axes.Y.homed&&!state.axes.Y.busy){org.previous=30;org.step=0;org.message='원점복귀 완료';}
+    if(state.auto.running||state.auto.state!=='IDLE'){org.previous=org.step;org.step=0;org.message='자동운전/정지 지령으로 원점복귀 중단';return;}
+    const activeName={10:'Z',20:'X',30:'Y'}[org.step],activeAxis=axisFor(state,activeName);
+    if(!activeAxis||!activeAxis.servoOn||activeAxis.alarm||(!activeAxis.busy&&!activeAxis.homed)){
+      org.previous=org.step;org.step=0;org.message=`${activeName||'?'}축 원점복귀 중단`;
+      addEvent(state,'alarm',org.message);refreshMemory(state);return;
+    }
+    org.timer+=Math.max(0,finite(dt,0));
+    if(org.timer>=PRODUCTION_ORG_TIMEOUT){
+      org.previous=org.step;org.step=0;org.message=`${activeName}축 원점복귀 시간초과`;
+      return productionFault(state,'ORG_TIMEOUT',org.message);
+    }
+    if(org.step===10&&state.axes.Z.homed&&!state.axes.Z.busy){org.previous=10;org.step=20;org.timer=0;org.message='X축 원점복귀';homeAxis(state,'X');}
+    else if(org.step===20&&state.axes.X.homed&&!state.axes.X.busy){org.previous=20;org.step=30;org.timer=0;org.message='Y축 원점복귀';homeAxis(state,'Y');}
+    else if(org.step===30&&state.axes.Y.homed&&!state.axes.Y.busy){org.previous=30;org.step=0;org.timer=0;org.message='원점복귀 완료';}
   }
 
   function setProfile(state,profileName){
     const profileId=resolveProfile(profileName);if(!profileId)return false;if(profileId===state.profileId)return true;
     stopAll(state,'PLC 제조사 프로필 전환');setServo(state,null,false);setGripper(state,false);
-    state.profileId=profileId;state.profile=profileId;state.plcAuthoritative=false;state.observedStatus={active:false,values:{}};initializeMemory(state);
+    state.profileId=profileId;state.profile=profileId;state.plcAuthoritative=false;state.observedStatus={active:false,values:{}};
+    state.physicalInputEdges={};state.commandLevels={};state.manualOrg={step:0,previous:0,timer:0,message:'대기'};
+    state.production={workArmed:true,palletRemovalSeen:false,palletArrivalTimer:0,motionTimeout:0};
+    state.auto.running=false;state.auto.state='IDLE';state.auto.previous='IDLE';state.auto.timer=0;state.auto.fault=null;state.auto.message='대기';state.releasedWorkpieceId=null;
+    initializeMemory(state);
     addEvent(state,'profile',`${getProfile(state).vendor} 주소 프로필 선택 · 이전 출력 안전 해제`);return true;
   }
 
   function tick(state,dt){
-    dt=clamp(finite(dt,0),0,.1);if(dt<=0){refreshMemory(state);return state;}
-    state.elapsed+=dt;
+    dt=clamp(finite(dt,0),0,.1);
     if(state.plcAuthoritative&&getProfile(state).id==='xgb-production'){refreshMemory(state);return state;}
+    const physicalAction=processPhysicalInputEdges(state);
+    // A PB edge owns this scan.  This preserves PLC scan semantics: START does
+    // not immediately advance STEP10 in the same scan, RESET does not run an
+    // AUTO step immediately after clearing, and STOP still precedes motion.
+    if(physicalAction){refreshMemory(state);return state;}
+    if(dt<=0){refreshMemory(state);return state;}
+    state.elapsed+=dt;
     tickAuto(state,dt);
     for(const axis of Object.values(state.axes))tickAxis(state,axis,dt);
-    tickManualOrg(state);
-    processPhysicalInputEdges(state);
+    tickManualOrg(state,dt);
     refreshMemory(state);return state;
   }
   function configurePallet(state,patch={}){
-    const p=state.cell.pallet;
-    if(patch.rows!=null)p.rows=clamp(Math.trunc(finite(patch.rows,p.rows)),1,8);
-    if(patch.cols!=null)p.cols=clamp(Math.trunc(finite(patch.cols,p.cols)),1,8);
-    if(patch.layers!=null)p.layers=clamp(Math.trunc(finite(patch.layers,p.layers)),1,5);
-    for(const k of ['spacingX','spacingY','layerHeight'])if(patch[k]!=null)p[k]=clamp(finite(patch[k],p[k]),10,150);
-    if(patch.origin)p.origin={...p.origin,...patch.origin};
-    if(state.pallet.nextIndex>palletCapacity(state))state.pallet.nextIndex=palletCapacity(state);
-    refreshMemory(state);return clone(p);
+    const production=getProfile(state).id==='xgb-production';
+    const correctingInvalidConfig=production&&state.auto.state==='PROD_FAULT'&&state.auto.fault?.code==='CONFIG_INVALID';
+    if(production&&(state.auto.running||(!correctingInvalidConfig&&state.auto.state!=='IDLE')||state.manualOrg.step!==0||!stoppedProduction(state)||unresolvedProductionWork(state)))return false;
+    const current=state.cell.pallet,raw=patch&&typeof patch==='object'?patch:{};
+    const normalized=normalizeCell({...state.cell,pallet:{...current,...raw,origin:{...current.origin,...(raw.origin&&typeof raw.origin==='object'?raw.origin:{})}}});
+    state.cell.pallet=normalized.pallet;
+    const capacity=palletCapacity(state),placed=Array.isArray(state.pallet.placed)?state.pallet.placed.slice(0,capacity):[];
+    state.pallet.placed=placed;state.pallet.nextIndex=clamp(placed.length,0,capacity);state.auto.cycle=state.pallet.nextIndex;
+    refreshMemory(state);return clone(state.cell.pallet);
   }
   function exportState(state){
     return clone({
       version:VERSION,elapsed:state.elapsed,profileId:state.profileId,profile:state.profileId,axes:state.axes,cell:state.cell,gripper:state.gripper,
-      pallet:state.pallet,auto:state.auto,memory:state.memory,events:state.events
+      releasedWorkpieceId:state.releasedWorkpieceId,pallet:state.pallet,auto:state.auto,memory:state.memory,events:state.events
     });
   }
   function importState(state,saved={}){
     if(!saved||typeof saved!=='object')return state;
     state.profileId=resolveProfile(saved.profileId||saved.profile)||state.profileId||'ls';state.profile=state.profileId;
     if(saved.cell){
-      state.cell={...state.cell,...clone(saved.cell)};
-      state.cell.pick={...DEFAULT_CELL.pick,...(saved.cell.pick||{})};
-      state.cell.pallet={...clone(DEFAULT_CELL.pallet),...(saved.cell.pallet||{})};
-      state.cell.pallet.origin={...DEFAULT_CELL.pallet.origin,...(saved.cell.pallet?.origin||{})};
-      state.cell.dwell={...DEFAULT_CELL.dwell,...(saved.cell.dwell||{})};
+      state.cell=normalizeCell({
+        ...state.cell,...saved.cell,
+        pick:{...state.cell.pick,...(saved.cell.pick&&typeof saved.cell.pick==='object'?saved.cell.pick:{})},
+        pallet:{...state.cell.pallet,...(saved.cell.pallet&&typeof saved.cell.pallet==='object'?saved.cell.pallet:{}),origin:{...state.cell.pallet.origin,...(saved.cell.pallet?.origin&&typeof saved.cell.pallet.origin==='object'?saved.cell.pallet.origin:{})}},
+        dwell:{...state.cell.dwell,...(saved.cell.dwell&&typeof saved.cell.dwell==='object'?saved.cell.dwell:{})}
+      });
     }
     for(const name of ['X','Y','Z'])if(saved.axes?.[name]){
-      const base=createAxis(name),src=saved.axes[name];Object.assign(base,src);
-      base.position=clamp(finite(src.position,base.home),base.min,base.max);base.target=base.position;
-      base.servoOn=false;base.mode='idle';base.velocity=0;base.jogDirection=0;base.busy=false;base.inPosition=false;state.axes[name]=base;updateLimits(base);
+      const src=saved.axes[name]&&typeof saved.axes[name]==='object'?saved.axes[name]:{};
+      const base=createAxis(name,{
+        min:src.min,max:src.max,home:src.home,homeDirection:src.homeDirection,maxSpeed:src.maxSpeed,
+        accel:src.accel,decel:src.decel,homeSpeed:src.homeSpeed,tolerance:src.tolerance,position:src.position
+      });
+      base.target=base.position;base.servoOn=false;base.mode='idle';base.velocity=0;base.jogDirection=0;base.busy=false;base.inPosition=false;
+      base.homed=bool(src.homed)&&axisAtHome(base);
+      if(src.alarm&&typeof src.alarm==='object')base.alarm={code:String(src.alarm.code||'RESTORED_AXIS_FAULT'),message:String(src.alarm.message||'복원된 축 알람')};
+      state.axes[name]=base;updateLimits(base);
     }
-    if(saved.gripper)state.gripper={...state.gripper,...clone(saved.gripper),closed:false,holding:false,workpieceId:null};
-    if(saved.pallet){state.pallet={placed:Array.isArray(saved.pallet.placed)?clone(saved.pallet.placed):[],nextIndex:Math.max(0,Math.trunc(finite(saved.pallet.nextIndex,0)))};}
-    if(saved.auto){const faulted=saved.auto.state==='FAULT';state.auto={...state.auto,...clone(saved.auto),running:false,state:faulted?'FAULT':'IDLE',timer:0,message:faulted?saved.auto.message:'복원 후 안전 정지'};}
+    const production=getProfile(state).id==='xgb-production',savedHolding=production&&bool(saved.gripper?.holding),savedReleased=production&&saved.releasedWorkpieceId?String(saved.releasedWorkpieceId):null;
+    state.gripper={closed:false,holding:savedHolding,workpieceId:savedHolding?String(saved.gripper?.workpieceId||'RESTORED-WORKPIECE'):null};
+    if(saved.pallet){
+      const capacity=palletCapacity(state),placed=Array.isArray(saved.pallet.placed)?clone(saved.pallet.placed).slice(0,capacity):[];
+      state.pallet={placed,nextIndex:placed.length};state.auto.cycle=placed.length;
+    }
+    if(saved.auto){
+      const faulted=['FAULT','PROD_FAULT'].includes(saved.auto.state),production=getProfile(state).id==='xgb-production';
+      state.auto={...state.auto,...clone(saved.auto),running:false,state:faulted?(production?'PROD_FAULT':'FAULT'):'IDLE',timer:0,message:faulted?saved.auto.message:'복원 후 안전 정지'};
+    }
+    if(saved.auto){
+      const savedFault=saved.auto.fault&&typeof saved.auto.fault==='object'?{code:String(saved.auto.fault.code||'RESTORED_FAULT'),message:String(saved.auto.fault.message||saved.auto.message||'복원된 알람')}:null;
+      const faulted=['FAULT','PROD_FAULT'].includes(saved.auto.state)||!!savedFault||savedHolding||!!savedReleased||Object.values(state.axes).some(axis=>axis.alarm);
+      const restoredFault=(savedHolding||savedReleased)?{code:'RECOVERY_REQUIRED',message:'복원된 제품 상태를 확인하고 안전하게 제거해야 합니다'}:savedFault;
+      state.auto={running:false,state:faulted?(production?'PROD_FAULT':'FAULT'):'IDLE',previous:'IDLE',timer:0,cycle:state.pallet.placed.length,message:faulted?(restoredFault?.message||saved.auto.message||'복원된 알람'):'복원 후 안전 정지',fault:restoredFault};
+    }
+    state.auto.cycle=state.pallet.placed.length;
+    if((savedHolding||savedReleased)&&!state.auto.fault){state.auto.state='PROD_FAULT';state.auto.fault={code:'RECOVERY_REQUIRED',message:'복원된 제품 상태를 확인하고 안전하게 제거해야 합니다'};state.auto.message=state.auto.fault.message;}
+    state.releasedWorkpieceId=savedReleased;state.physicalInputEdges={};state.commandLevels={};state.observedStatus={active:false,values:{}};state.plcAuthoritative=false;
+    state.manualOrg={step:0,previous:0,timer:0,message:'복원 후 안전 정지'};
+    state.production={workArmed:true,palletRemovalSeen:false,palletArrivalTimer:0,motionTimeout:0};
     state.elapsed=Math.max(0,finite(saved.elapsed,0));state.events=Array.isArray(saved.events)?clone(saved.events).slice(-80):[];
     initializeMemory(state);const profile=getProfile(state);
     for(const mapped of Object.values(profile.setpoints))if(saved.memory?.D?.[mapped]!=null)memorySet(state,mapped,finite(saved.memory.D[mapped],memoryGet(state,mapped)));

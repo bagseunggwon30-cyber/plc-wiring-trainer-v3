@@ -1,0 +1,20 @@
+appId: com.bark.wiring-trainer
+productName: 결선 작업장
+compression: normal
+npmRebuild: false
+directories:
+  output: release
+files:
+  - main.js
+  - preload.js
+  - src/main/xgsim-session-service.js
+  - src/main/xgsim-project-file.js
+  - package.json
+  - build/renderer/**/*
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+portable:
+  artifactName: 결선작업장-${version}-offline-portable.exe

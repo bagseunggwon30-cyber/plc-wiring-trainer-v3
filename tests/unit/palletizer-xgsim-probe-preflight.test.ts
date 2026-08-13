@@ -42,14 +42,21 @@ function classic(): PalletizerClassicRuntimePort {
 
 function createHarness(probeResults: readonly PlcRuntimeProbeResult[], options: { readonly projectIdentityVerified?: boolean } = {}) {
   const probe = vi.fn(async () => probeResults[probe.mock.calls.length - 1]!);
-  const connect = vi.fn(async () => undefined);
+  let bridgeState: 'disconnected' | 'connected' | 'diagnostic' = 'disconnected';
+  const connect = vi.fn(async () => {
+    bridgeState = options.projectIdentityVerified === false ? 'diagnostic' : 'connected';
+  });
   const status = {
-    state: 'disconnected' as const,
     blocked: [] as readonly string[],
     identityVerified: options.projectIdentityVerified ?? false,
   };
   const bridgeFactory = vi.fn(() => ({
-    get status() { return status; },
+    get status() {
+      return {
+        ...status, state: bridgeState,
+        ...(bridgeState === 'diagnostic' ? { reason: 'project-identity-unverified-diagnostic-only' } : {}),
+      };
+    },
     connect,
     synchronizeInputImage: vi.fn(async () => undefined),
     applySnapshot: vi.fn(async () => ({ blocked: [] })),
@@ -104,6 +111,25 @@ describe('3-axis palletizer XG-SIM probe preflight contract', () => {
     }));
   });
 
+  it('rejects a complete-looking IN00..IN15 list assembled from different base/slot banks', async () => {
+    const mixedBanks = canonicalDiChannels.map((channel, index) => (
+      index === 8 ? channel.replace('B0S00', 'B1S03') : channel
+    ));
+    const harness = createHarness([
+      probeResult('available', mixedBanks),
+      probeResult('available', ['B0S01.POS00']),
+    ]);
+
+    await expect(harness.integration.connect({ localSimulationConsented: true }))
+      .rejects.toMatchObject({ code: 'XGSIM_DI_CHANNEL_CONTRACT_MISSING' });
+
+    expect(harness.probe).toHaveBeenCalledOnce();
+    expect(harness.connect).not.toHaveBeenCalled();
+    expect(harness.setStatus).toHaveBeenLastCalledWith(expect.objectContaining({
+      state: 'blocked', reason: 'di-channel-contract-missing',
+    }));
+  });
+
   it('blocks without opening an XG-SIM session when the DI probe itself is unavailable', async () => {
     const harness = createHarness([
       probeResult('blocked', [], 'XG-SIM DI simulator unavailable'),
@@ -146,9 +172,9 @@ describe('3-axis palletizer XG-SIM probe preflight contract', () => {
     await harness.integration.connect({ localSimulationConsented: true });
 
     expect(harness.setStatus).toHaveBeenLastCalledWith(expect.objectContaining({
-      state: 'connected',
+      state: 'diagnostic',
       identityVerified: false,
-      reason: 'project-identity-unverified',
+      reason: 'project-identity-unverified-diagnostic-only',
     }));
   });
 });

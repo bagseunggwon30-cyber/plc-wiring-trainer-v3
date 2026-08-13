@@ -50,9 +50,13 @@ test('renderer build copies local automation scripts, vendor modules, manifest, 
   ]) assert.ok(vite.includes(token), token);
   assert.match(vite, /assetsInlineLimit\(filePath\)[\s\S]*?\/\\\.glb\$\/i\.test\(filePath\)[\s\S]*?return false/);
   assert.match(importedModels, /manifestUrl: 'assets\/imported\/sov-kdp\/manifest\.json'/);
-  assert.match(importedModels, /fetch\(new URL\(source\.manifestUrl, document\.baseURI\)\)/);
+  assert.match(importedModels, /fetch\(new URL\(source\.manifestUrl, document\.baseURI\), \{ signal: controller\.signal \}\)/);
   assert.match(importedModels, /modelBaseUrl: 'assets\/models\/automation\/'/);
   assert.match(importedModels, /l7sa004a-production-v3\.glb/);
+  assert.match(vite, /filter: sourcePath => !BLENDER_WORKFILE\.test\(sourcePath\)/);
+  assert.match(vite, /verifyPackagedModelAssets\(\)/);
+  assert.match(vite, /LOCAL_MODEL_ASSETS\.forEach\(relativePath => \{ packagedModelBytes \+= verifyGlb\(relativePath\); \}\)/);
+  assert.match(vite, /Blender workfiles leaked into renderer output/);
 });
 
 test('optimized L7SA004A GLB is web-sized and carries the four CN1 wiring anchors', () => {
@@ -98,7 +102,16 @@ test('imported SoV GLBs use CSP-safe inlined WebP textures and match the asset m
 
 test('inlined model textures use the DOM texture loader when ImageBitmap decoding is unavailable', () => {
   assert.match(importedModels, /new globalThis\.THREE\.LoadingManager\(\)/);
-  assert.match(importedModels, /addHandler\(\/\^data:image\\\/\(\?:png\|jpe\?g\|webp\)\/i, webpTextureLoader\)/);
+  assert.match(importedModels, /addHandler\(\/\^data:image\\\/\(\?:png\|jpe\?g\|webp\)\/i, inlineTextureLoader\)/);
+});
+
+test('mixed 3D catalog preloads safely, retries source failures, and reserves local model names', () => {
+  assert.match(importedModels, /const SAFE_MODEL_FILE = \/\^\[a-z0-9\]/);
+  assert.match(importedModels, /Object\.values\(localAssets\)\.forEach\(add\)/);
+  assert.match(importedModels, /sourceCatalogCache\.delete\(source\.id\)/);
+  assert.match(importedModels, /catalog\.retryableFailureCount && catalogPromise === request/);
+  assert.match(importedModels, /void preloadCatalog\(\)\.catch/);
+  assert.match(importedModels, /plc-trainer-imported-models-catalog-ready/);
 });
 
 test('3D equipment gallery exposes every selective model and lazy-loads only the selected asset', () => {

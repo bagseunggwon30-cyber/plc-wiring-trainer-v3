@@ -9,8 +9,20 @@
   const P={
     visible:false,initialized:false,state:null,host:null,sceneHost:null,renderer:null,scene:null,camera:null,
     raf:0,lastTime:0,lastUi:0,lastSave:0,placedStamp:'',palletStamp:'',parts:{},cameraOrbit:{yaw:.78,pitch:.5,distance:15.2},
-    cameraTarget:{x:0,y:2,z:0},cameraNavigationPreset:'3ds-max',drag:null,resizeObserver:null
+    cameraTarget:{x:0,y:2,z:0},cameraNavigationPreset:'3ds-max',drag:null,resizeObserver:null,
+    renderDirty:true,activeJogs:new Map(),safetyHandlers:null,axisWorldPoint:null,
+    modelLoad:{status:'idle',source:'procedural',attempts:0,generation:0,error:null,missingNodes:[],promise:null,retryTimer:0,retryAt:0,startedAt:0,completedAt:0}
   };
+  const PALLETIZER_MODEL='palletizer-3axis-v2.glb';
+  const MODEL_NODE_NAMES=Object.freeze(['X_Carriage','Y_Carriage','Z_Slide','Gripper','Jaw_L','Jaw_R']);
+  const MODEL_RETRY_DELAYS=Object.freeze([450,1400]);
+  const MODEL_LOAD_TIMEOUT_MS=12000;
+  const AXIS_SCENE_RANGES=Object.freeze({
+    X:Object.freeze({component:'x',start:-4.45,end:4.45}),
+    Y:Object.freeze({component:'z',start:2.5,end:-2.65}),
+    Z:Object.freeze({component:'y',start:.62,end:4.42})
+  });
+  const AXIS_WORLD_COMPONENTS=Object.freeze({X:'x',Y:'z',Z:'y'});
   const q=(selector,root=document)=>root.querySelector(selector);
   const qa=(selector,root=document)=>[...root.querySelectorAll(selector)];
   const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
@@ -18,6 +30,54 @@
   const mmX=value=>-4.45+(Number(value)||0)/600*8.9;
   const mmY=value=>2.5-(Number(value)||0)/420*5.15;
   const mmZ=value=>.62+(Number(value)||0)/280*3.8;
+  const finite=(value,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;
+  function axisSceneCoordinate(name,axis){
+    const range=AXIS_SCENE_RANGES[name],min=finite(axis?.min,0),max=finite(axis?.max,min+1),position=clamp(finite(axis?.position,min),min,max);
+    const ratio=max===min?0:(position-min)/(max-min);return range.start+(range.end-range.start)*ratio;
+  }
+  function setAxisWorldCoordinate(binding,value){
+    const node=binding?.node,parent=node?.parent;if(!node||!parent)return false;
+    const point=P.axisWorldPoint||(P.axisWorldPoint=new Three.Vector3());
+    parent.updateMatrixWorld(true);node.getWorldPosition(point);point[binding.worldComponent]=value;
+    parent.worldToLocal(point);node.position.copy(point);node.updateMatrixWorld(true);return true;
+  }
+  function isEffectivelyVisible(object){for(let cursor=object;cursor;cursor=cursor.parent)if(cursor.visible===false)return false;return !!object;}
+  function stopActiveJogs(){
+    if(!P.state||!P.activeJogs?.size)return false;
+    for(const address of P.activeJogs.values())Runtime.writeDevice(P.state,address,false);
+    P.activeJogs.clear();P.renderDirty=true;if(P.initialized){updateUi(true);persist(true);schedule();}return true;
+  }
+  function installJogSafetyHandlers(){
+    if(P.safetyHandlers)return;
+    const blur=()=>stopActiveJogs(),visibility=()=>{if(document.hidden)stopActiveJogs();};
+    window.addEventListener('blur',blur);document.addEventListener('visibilitychange',visibility);P.safetyHandlers={blur,visibility};
+  }
+  function isDescendantOf(node,parent){
+    for(let cursor=node?.parent;cursor;cursor=cursor.parent)if(cursor===parent)return true;
+    return false;
+  }
+  function resolveMovingHierarchy(model){
+    const found={},duplicates=[];
+    model?.traverse?.(object=>{if(!MODEL_NODE_NAMES.includes(object.name))return;if(found[object.name])duplicates.push(object.name);else found[object.name]=object;});
+    const missingNodes=MODEL_NODE_NAMES.filter(name=>!found[name]),relationships=[];
+    if(!missingNodes.length){
+      if(!isDescendantOf(found.Y_Carriage,found.X_Carriage))relationships.push('Y_Carriage must be below X_Carriage');
+      if(!isDescendantOf(found.Z_Slide,found.Y_Carriage))relationships.push('Z_Slide must be below Y_Carriage');
+      if(!isDescendantOf(found.Gripper,found.Z_Slide))relationships.push('Gripper must be below Z_Slide');
+      for(const jaw of ['Jaw_L','Jaw_R'])if(!isDescendantOf(found[jaw],found.Gripper))relationships.push(`${jaw} must be below Gripper`);
+    }
+    return {ok:missingNodes.length===0&&duplicates.length===0&&relationships.length===0,nodes:found,missingNodes,duplicates,relationships};
+  }
+  function resolveWorldAxisBinding(node,name){
+    const targetComponent=AXIS_WORLD_COMPONENTS[name],target=new Three.Vector3(targetComponent==='x'?1:0,targetComponent==='y'?1:0,targetComponent==='z'?1:0);
+    node.parent?.updateWorldMatrix?.(true,false);const parentRotation=new Three.Quaternion();node.parent?.getWorldQuaternion?.(parentRotation);
+    let component='x',direction=1,best=-1;
+    for(const candidate of ['x','y','z']){
+      const basis=new Three.Vector3(candidate==='x'?1:0,candidate==='y'?1:0,candidate==='z'?1:0).applyQuaternion(parentRotation),alignment=basis.dot(target);
+      if(Math.abs(alignment)>best){best=Math.abs(alignment);component=candidate;direction=alignment<0?-1:1;}
+    }
+    return {node,component,direction,worldComponent:targetComponent};
+  }
 
   function loadSavedState(){
     let saved=null;
@@ -146,32 +206,89 @@
     const sun=new Three.DirectionalLight(0xffffff,1.35);sun.position.set(-5,11,7);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);sun.shadow.camera.left=-10;sun.shadow.camera.right=10;sun.shadow.camera.top=9;sun.shadow.camera.bottom=-7;P.scene.add(sun);
     const floor=new Three.Mesh(new Three.PlaneGeometry(22,16),material(0x263139,.05,.9));floor.rotation.x=-Math.PI/2;floor.position.y=.02;floor.receiveShadow=true;P.scene.add(floor);
     const grid=new Three.GridHelper(20,40,0x3b5869,0x233642);grid.position.y=.025;P.scene.add(grid);
-    createMachine();loadBlenderMachine();updateCamera();installCameraControls();resize();return true;
+    createMachine();loadBlenderMachine({reason:'scene-init'});updateCamera();installCameraControls();resize();return true;
   }
 
-  async function loadBlenderMachine(){
-    const loader=window.PLCTrainerImportedModels;if(!loader)return;
-    try{
-      const model=await loader.loadModel('palletizer-3axis-v2.glb',{name:'Blender-Palletizer-3Axis-v2'});
-      const node=name=>model.getObjectByName(name);
-      const xCarriage=node('X_Carriage'),yCarriage=node('Y_Carriage'),zSlide=node('Z_Slide'),gripper=node('Gripper'),jawL=node('Jaw_L'),jawR=node('Jaw_R');
-      if(!xCarriage||!yCarriage||!zSlide||!gripper||!jawL||!jawR)throw new Error('moving hierarchy is incomplete');
-      // Keep runtime workpieces and indicators, but replace the primitive machine meshes.
-      P.parts.machine.traverse(object=>{if(object.isMesh)object.visible=false;});
-      P.parts.target.visible=true;P.parts.pickBox.visible=true;
-      P.parts.palletGroup.traverse(object=>{if(object.isMesh)object.visible=true;});
-      P.parts.placedGroup.traverse(object=>{if(object.isMesh)object.visible=true;});
-      model.traverse(object=>{if(/^Pallet_(?:Slat|Block)/.test(object.name))object.visible=false;});
-      P.scene.add(model);P.parts.machine=model;P.parts.blenderModel=model;
-      P.parts.xCarriage=xCarriage;P.parts.yCarriage=yCarriage;P.parts.zSlide=zSlide;P.parts.gripper=gripper;P.parts.jaws=[jawL,jawR];
-      gripper.add(P.parts.heldBox);P.parts.heldBox.position.set(0,-1.18,0);P.parts.heldBox.visible=false;
-      P.parts.detailStats={safetyPosts:4,energyChains:3,linearRails:6,servoMotors:3,gripperComponents:10};
-      updateMachine();schedule();
-    }catch(error){console.warn('Blender palletizer model unavailable; procedural fallback remains active',error);}
+  function updateModelBadge(){
+    const badge=q('#p3-scene-badge span',P.host);if(!badge)return;
+    const load=P.modelLoad,label=load.status==='ready'?'BLENDER GLB':load.status==='loading'?'3D LOADING':load.status==='retry-wait'?'3D RETRY':load.status==='waiting-loader'?'3D WAIT':'PROCEDURAL FALLBACK';
+    badge.textContent=`OFFLINE DIGITAL TWIN · ${label}`;
+    badge.title=load.error||`${load.source} · ${load.status}`;
+  }
+  function removeImportedModel(model){
+    if(!model)return;model.parent?.remove?.(model);
+    const shared=new Set(Object.values(P.materials||{}));
+    model.traverse?.(object=>{if(!object.isMesh)return;const materials=Array.isArray(object.material)?object.material:[object.material];materials.filter(item=>item&&!shared.has(item)).forEach(item=>item.dispose?.());});
+  }
+  function loadModelWithTimeout(promise,generation){
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const timer=window.setTimeout(()=>{if(settled)return;settled=true;reject(new Error(`3D model load timed out after ${MODEL_LOAD_TIMEOUT_MS} ms`));},MODEL_LOAD_TIMEOUT_MS);
+      Promise.resolve(promise).then(model=>{
+        if(settled||generation!==P.modelLoad.generation){removeImportedModel(model);return;}
+        settled=true;window.clearTimeout(timer);resolve(model);
+      },error=>{if(settled)return;settled=true;window.clearTimeout(timer);reject(error);});
+    });
+  }
+  function activateBlenderMachine(model,hierarchy){
+    const {X_Carriage:xCarriage,Y_Carriage:yCarriage,Z_Slide:zSlide,Gripper:gripper,Jaw_L:jawL,Jaw_R:jawR}=hierarchy.nodes;
+    const previous=P.parts.blenderModel;
+    if(P.parts.heldBox?.parent)P.parts.runtimeLayer.add(P.parts.heldBox);
+    if(previous&&previous!==model)removeImportedModel(previous);
+    model.traverse(object=>{if(/^Pallet_(?:Slat|Block)/.test(object.name))object.visible=false;});
+    P.scene.add(model);P.scene.updateMatrixWorld(true);
+    for(const statusLed of Object.values(P.parts.leds||{}))if(statusLed&&P.parts.runtimeLayer?.attach)P.parts.runtimeLayer.attach(statusLed);
+    P.parts.proceduralModel.visible=false;P.parts.machine=model;P.parts.blenderModel=model;
+    P.parts.xCarriage=xCarriage;P.parts.yCarriage=yCarriage;P.parts.zSlide=zSlide;P.parts.gripper=gripper;P.parts.jaws=[jawL,jawR];
+    P.parts.axisBindings={X:resolveWorldAxisBinding(xCarriage,'X'),Y:resolveWorldAxisBinding(yCarriage,'Y'),Z:resolveWorldAxisBinding(zSlide,'Z')};
+    P.parts.jawBindings=[jawL,jawR].map(node=>({node,open:finite(node.position.x),closed:finite(node.position.x)*.55}));
+    gripper.add(P.parts.heldBox);gripper.updateMatrixWorld(true);const heldWorld=new Three.Vector3();gripper.getWorldPosition(heldWorld);heldWorld.y-=1.18;gripper.worldToLocal(heldWorld);P.parts.heldBox.position.copy(heldWorld);P.parts.heldBox.visible=false;
+    P.parts.detailStats={safetyPosts:4,energyChains:3,linearRails:6,servoMotors:3,gripperComponents:10};
+    P.renderDirty=true;
+  }
+  function installModelLoaderWait(){
+    if(P.modelLoad.loaderListener)return;P.modelLoad.loaderListener=()=>{P.modelLoad.loaderListener=null;loadBlenderMachine({reason:'loader-ready'});};
+    window.addEventListener('plc-trainer-imported-models-ready',P.modelLoad.loaderListener,{once:true});
+  }
+  function scheduleModelRetry(){
+    const delay=MODEL_RETRY_DELAYS[P.modelLoad.attempts-1];if(delay===undefined||P.modelLoad.retryTimer)return;
+    P.modelLoad.status='retry-wait';P.modelLoad.retryAt=Date.now()+delay;updateModelBadge();
+    P.modelLoad.retryTimer=window.setTimeout(()=>{P.modelLoad.retryTimer=0;loadBlenderMachine({reason:'automatic-retry'});},delay);
+  }
+  function loadBlenderMachine(options={}){
+    if(P.modelLoad.promise)return P.modelLoad.promise;
+    const loader=window.PLCTrainerImportedModels;
+    if(!loader?.loadModel){P.modelLoad.status='waiting-loader';P.modelLoad.error='3D model loader is not ready';installModelLoaderWait();updateModelBadge();return Promise.resolve(false);}
+    if(P.modelLoad.status==='ready'&&!options.force)return Promise.resolve(true);
+    if(P.modelLoad.retryTimer){window.clearTimeout(P.modelLoad.retryTimer);P.modelLoad.retryTimer=0;}
+    P.modelLoad.status='loading';P.modelLoad.attempts+=1;P.modelLoad.error=null;P.modelLoad.missingNodes=[];P.modelLoad.startedAt=Date.now();P.modelLoad.retryAt=0;updateModelBadge();
+    let promise;promise=(async()=>{
+      try{
+        // Yield once so P.modelLoad.promise is installed before any loader can
+        // synchronously throw. This keeps retry/diagnostic state deterministic.
+        await Promise.resolve();
+        const generation=++P.modelLoad.generation;
+        const model=await loadModelWithTimeout(loader.loadModel(PALLETIZER_MODEL,{name:'Blender-Palletizer-3Axis-v2'}),generation);
+        const hierarchy=resolveMovingHierarchy(model);
+        P.modelLoad.missingNodes=[...hierarchy.missingNodes,...hierarchy.duplicates.map(name=>`duplicate:${name}`),...hierarchy.relationships];
+        if(!hierarchy.ok){removeImportedModel(model);throw new Error(`moving hierarchy is incomplete: ${P.modelLoad.missingNodes.join(', ')}`);}
+        activateBlenderMachine(model,hierarchy);P.modelLoad.status='ready';P.modelLoad.source='blender-glb';P.modelLoad.completedAt=Date.now();P.modelLoad.error=null;
+        updateMachine();updateModelBadge();schedule();return true;
+      }catch(error){
+        P.modelLoad.status='failed';P.modelLoad.source=P.parts.blenderModel?'blender-glb':'procedural';P.modelLoad.completedAt=Date.now();P.modelLoad.error=String(error?.message||error);
+        updateModelBadge();console.warn('Blender palletizer model unavailable; procedural fallback remains active',error);scheduleModelRetry();return false;
+      }finally{if(P.modelLoad.promise===promise)P.modelLoad.promise=null;}
+    })();
+    P.modelLoad.promise=promise;return promise;
+  }
+  function retryBlenderMachine(){
+    if(P.modelLoad.promise)return P.modelLoad.promise;
+    P.modelLoad.attempts=0;P.modelLoad.error=null;P.modelLoad.missingNodes=[];return loadBlenderMachine({force:true,reason:'manual-retry'});
   }
 
   function createMachine(){
-    const root=new Three.Group();P.scene.add(root);P.parts.machine=root;
+    const root=new Three.Group();root.name='Procedural-Palletizer-Fallback';P.scene.add(root);P.parts.machine=root;P.parts.proceduralModel=root;
+    const runtimeLayer=new Three.Group();runtimeLayer.name='Palletizer-Runtime-Workpieces';P.scene.add(runtimeLayer);P.parts.runtimeLayer=runtimeLayer;
     P.parts.cableChains=[];P.parts.detailStats={safetyPosts:0,energyChains:0,linearRails:0,servoMotors:0,gripperComponents:0};
     // 강성 베이스와 산업용 알루미늄 프로파일 프레임
     box(root,[10.8,.3,6.6],[0,.28,0],P.materials.dark);
@@ -211,17 +328,19 @@
     const leftJaw=box(gripper,[.12,.62,.18],[-.3,-.62,0],P.materials.jaw),rightJaw=box(gripper,[.12,.62,.18],[.3,-.62,0],P.materials.jaw);
     box(leftJaw,[.18,.12,.28],[0,-.27,0],P.materials.dark);box(rightJaw,[.18,.12,.28],[0,-.27,0],P.materials.dark);
     P.parts.jaws=[leftJaw,rightJaw];
+    P.parts.axisBindings={X:{node:xCarriage,component:'x',direction:1,worldComponent:'x'},Y:{node:yCarriage,component:'z',direction:1,worldComponent:'z'},Z:{node:zSlide,component:'y',direction:1,worldComponent:'y'}};
+    P.parts.jawBindings=[{node:leftJaw,open:-.3,closed:-.17},{node:rightJaw,open:.3,closed:.17}];
     P.parts.detailStats.gripperComponents=7;
     const held=box(gripper,[.52,.43,.52],[0,-.92,0],P.materials.box);held.visible=false;P.parts.heldBox=held;
     // target marker and sensors
-    const target=box(root,[.7,.08,.7],[mmX(P.state.cell.pick.x),.52,mmY(P.state.cell.pick.y)],P.materials.ghost);P.parts.target=target;
+    const target=box(runtimeLayer,[.7,.08,.7],[mmX(P.state.cell.pick.x),.52,mmY(P.state.cell.pick.y)],P.materials.ghost);P.parts.target=target;
     P.parts.leds={xHome:led(root,[-4.74,4.85,2.35]),xLimit:led(root,[4.74,4.85,2.35]),yHome:led(xCarriage,[.42,4.28,2.52]),yLimit:led(xCarriage,[.42,4.28,-2.52]),zHome:led(yCarriage,[.35,4.2,.32]),zLimit:led(yCarriage,[.35,.55,.32])};
-    P.parts.pickGroup=new Three.Group();root.add(P.parts.pickGroup);
+    P.parts.pickGroup=new Three.Group();runtimeLayer.add(P.parts.pickGroup);
     box(P.parts.pickGroup,[1.05,.18,1.0],[mmX(P.state.cell.pick.x),.47,mmY(P.state.cell.pick.y)],P.materials.dark);
     for(const dx of [-.38,.38])for(const dz of [-.34,.34])cylinder(P.parts.pickGroup,.055,.18,[mmX(P.state.cell.pick.x)+dx,.64,mmY(P.state.cell.pick.y)+dz],P.materials.yellow,'y');
     const pickBox=box(P.parts.pickGroup,[.52,.43,.52],[mmX(P.state.cell.pick.x),.78,mmY(P.state.cell.pick.y)],P.materials.box);P.parts.pickBox=pickBox;
-    P.parts.palletGroup=new Three.Group();root.add(P.parts.palletGroup);
-    P.parts.placedGroup=new Three.Group();root.add(P.parts.placedGroup);
+    P.parts.palletGroup=new Three.Group();runtimeLayer.add(P.parts.palletGroup);
+    P.parts.placedGroup=new Three.Group();runtimeLayer.add(P.parts.placedGroup);
     // 설비 안전 영역: 투명 펜스와 제어함만 두고 교실 소품은 사용하지 않는다.
     const fence=new Three.Group();fence.name='industrial-safety-guard';root.add(fence);
     for(const [x,z] of [[-5.35,-3.15],[-5.35,3.15],[5.35,-3.15],[5.35,3.15]]){safetyPost(fence,x,z);P.parts.detailStats.safetyPosts+=1;}
@@ -248,16 +367,20 @@
   }
   function rebuildPlaced(force=false){
     const stamp=P.state.pallet.placed.map(item=>item.id).join('|');if(!force&&stamp===P.placedStamp)return;P.placedStamp=stamp;
-    const g=P.parts.placedGroup;if(!g)return;disposeGroup(g);
+    const g=P.parts.placedGroup;if(!g)return;P.parts.placedMeshes=P.parts.placedMeshes||new Map();
+    if(force){disposeGroup(g);P.parts.placedMeshes.clear();}
+    const live=new Set(P.state.pallet.placed.map(item=>item.id));
+    for(const [id,mesh] of P.parts.placedMeshes)if(!live.has(id)){g.remove(mesh);mesh.geometry?.dispose?.();if(!Object.values(P.materials||{}).includes(mesh.material))mesh.material?.dispose?.();P.parts.placedMeshes.delete(id);}
     for(const item of P.state.pallet.placed){
+      if(P.parts.placedMeshes.has(item.id))continue;
       const color=[0xd8a14b,0x5ea6c8,0x7fb765][item.layer%3],mat=material(color,.05,.68);
-      const mesh=box(g,[.52,.43,.52],[mmX(item.x),.77+item.layer*.45,mmY(item.y)],mat);mesh.userData.workpieceId=item.id;
+      const mesh=box(g,[.52,.43,.52],[mmX(item.x),.77+item.layer*.45,mmY(item.y)],mat);mesh.userData.workpieceId=item.id;P.parts.placedMeshes.set(item.id,mesh);
     }
   }
 
   function updateCamera(){
     if(!P.camera)return;const o=P.cameraOrbit,t=P.cameraTarget,cp=Math.cos(o.pitch);
-    P.camera.position.set(t.x+Math.sin(o.yaw)*cp*o.distance,t.y+Math.sin(o.pitch)*o.distance,t.z+Math.cos(o.yaw)*cp*o.distance);P.camera.lookAt(t.x,t.y,t.z);
+    P.camera.position.set(t.x+Math.sin(o.yaw)*cp*o.distance,t.y+Math.sin(o.pitch)*o.distance,t.z+Math.cos(o.yaw)*cp*o.distance);P.camera.lookAt(t.x,t.y,t.z);P.renderDirty=true;if(P.initialized)schedule();
   }
   function updateCameraHint(){
     const hint=q('#p3-camera-hint',P.host);if(!hint)return;
@@ -303,9 +426,9 @@
   }
 
   function updateMachine(){
-    if(!P.parts.xCarriage)return;const a=P.state.axes;
-    P.parts.xCarriage.position.x=mmX(a.X.position);P.parts.yCarriage.position.z=mmY(a.Y.position);P.parts.zSlide.position.y=mmZ(a.Z.position);
-    const closed=P.state.gripper.closed;P.parts.jaws[0].position.x=closed?-.17:-.31;P.parts.jaws[1].position.x=closed?.17:.31;
+    if(!P.parts.axisBindings)return;const a=P.state.axes;
+    for(const name of ['X','Y','Z']){const binding=P.parts.axisBindings[name];setAxisWorldCoordinate(binding,axisSceneCoordinate(name,a[name]));}
+    const closed=P.state.gripper.closed;for(const binding of P.parts.jawBindings||[])binding.node.position.x=closed?binding.closed:binding.open;
     P.parts.heldBox.visible=!!P.state.gripper.holding;P.parts.pickBox.visible=!P.state.gripper.holding&&P.state.pallet.nextIndex<Runtime.palletCapacity(P.state);
     setLed(P.parts.leds.xHome,a.X.negLimit,a.X.alarm);setLed(P.parts.leds.xLimit,a.X.posLimit,a.X.alarm);
     setLed(P.parts.leds.yHome,a.Y.negLimit,a.Y.alarm);setLed(P.parts.leds.yLimit,a.Y.posLimit,a.Y.alarm);
@@ -357,7 +480,7 @@
     renderProductionInputs();
   }
   function updateUi(force=false){
-    if(!P.host)return;const now=performance.now();if(!force&&now-P.lastUi<100)return;P.lastUi=now;
+    if(!P.host)return;if(force){P.renderDirty=true;if(P.visible&&P.initialized)schedule();}const now=performance.now();if(!force&&now-P.lastUi<100)return;P.lastUi=now;
     const state=P.state,auto=state.auto,profile=Runtime.getProfile(state),hasAlarm=auto.state==='FAULT'||Object.values(state.axes).some(a=>a.alarm),production=isProductionProfile(profile);
     const stateBox=q('#p3-state',P.host);q('b',stateBox).textContent=auto.message||'대기';q('span',stateBox).textContent=`${profile.id==='ls'?'LS':profile.id==='mitsubishi'?'MELSEC':'XGB'} · ${auto.state} · ${state.pallet.placed.length}/${Runtime.palletCapacity(state)}`;stateBox.classList.toggle('p3-alarm',hasAlarm);
     q('#p3-root',P.host)?.classList.toggle('production-profile',production);
@@ -421,8 +544,8 @@
     qa('[data-jog]',P.host).forEach(button=>{
       const [axis,rawDir]=button.dataset.jog.split(','),dir=Number(rawDir);
       const jogAddress=()=>activeProfile().commands[`jog${axis}${dir>0?'Plus':'Minus'}`];
-      const start=event=>{event.preventDefault();manualStop();Runtime.writeDevice(P.state,activeProfile().commands.servoOn,true);Runtime.writeDevice(P.state,jogAddress(),true);button.setPointerCapture?.(event.pointerId);schedule();updateUi(true);};
-      const stop=()=>{Runtime.writeDevice(P.state,jogAddress(),false);updateUi(true);persist(true);};
+      const start=event=>{event.preventDefault();manualStop();Runtime.writeDevice(P.state,activeProfile().commands.servoOn,true);const address=jogAddress();Runtime.writeDevice(P.state,address,true);P.activeJogs.set(event.pointerId,address);button.setPointerCapture?.(event.pointerId);P.renderDirty=true;schedule();updateUi(true);};
+      const stop=event=>{const address=P.activeJogs.get(event?.pointerId)||jogAddress();P.activeJogs.delete(event?.pointerId);Runtime.writeDevice(P.state,address,false);P.renderDirty=true;updateUi(true);persist(true);};
       button.addEventListener('pointerdown',start);button.addEventListener('pointerup',stop);button.addEventListener('pointercancel',stop);button.addEventListener('lostpointercapture',stop);
     });
     q('#p3-write',P.host).onclick=()=>{
@@ -440,16 +563,17 @@
   function animate(timestamp){
     P.raf=0;if(!P.initialized)return;
     if(!P.lastTime)P.lastTime=timestamp;const dt=Math.min(.05,Math.max(0,(timestamp-P.lastTime)/1000));P.lastTime=timestamp;
-    if(P.state.auto.running||Object.values(P.state.axes).some(axis=>axis.busy))Runtime.tick(P.state,dt);
-    updateMachine();updateUi();persist();if(P.visible&&P.renderer)P.renderer.render(P.scene,P.camera);
-    if(P.visible||P.state.auto.running||Object.values(P.state.axes).some(axis=>axis.busy))schedule();
+    const moving=P.state.auto.running||Object.values(P.state.axes).some(axis=>axis.busy);
+    if(moving){Runtime.tick(P.state,dt);P.renderDirty=true;}
+    if(P.renderDirty){updateMachine();updateUi();persist();if(P.visible&&P.renderer)P.renderer.render(P.scene,P.camera);P.renderDirty=false;}
+    if(moving)schedule();
   }
   function schedule(){if(!P.raf)P.raf=requestAnimationFrame(animate);}
   function setVisible(visible){
-    P.visible=!!visible;if(!P.initialized)return;
+    P.visible=!!visible;if(!P.visible)stopActiveJogs();P.renderDirty=true;if(!P.initialized)return;
     // v2.7 자동화 실습실 허브가 있으면 상위 화면의 표시는 허브가 관리한다.
     if(!q('#al-hub',P.host))P.host.classList.toggle('show',P.visible);P.lastTime=0;
-    if(P.visible){resize();updateUi(true);schedule();}else{persist(true);window.dispatchEvent(new CustomEvent('palletizer-view-hidden'));}
+    if(P.visible){resize();updateUi(true);P.renderDirty=true;schedule();}else{persist(true);window.dispatchEvent(new CustomEvent('palletizer-view-hidden'));}
   }
   function renderActive(){if(!P.initialized)return;updateMachine();updateUi(true);if(P.visible)schedule();}
   function exportState(){return persist(true)||Runtime.exportState(P.state);}
@@ -464,14 +588,23 @@
   function writeDevice(addr,value){const result=Runtime.writeDevice(P.state,addr,value);schedule();updateUi(true);persist(true);return result;}
   function getDiagnostics(){
     let meshCount=0;P.parts.machine?.traverse?.(object=>{if(object.isMesh)meshCount+=1;});
+    const axisBindings={};
+    for(const name of ['X','Y','Z']){
+      const binding=P.parts.axisBindings?.[name],axis=P.state?.axes?.[name];
+      const desired=axis?axisSceneCoordinate(name,axis):null,worldPosition=new Three.Vector3();binding?.node?.updateWorldMatrix?.(true,false);binding?.node?.getWorldPosition?.(worldPosition);
+      axisBindings[name]={node:binding?.node?.name||null,component:binding?.component||null,direction:binding?.direction||1,worldComponent:binding?.worldComponent||AXIS_WORLD_COMPONENTS[name],runtimeMm:finite(axis?.position),sceneCoordinate:binding?finite(binding.node.position[binding.component]):null,expectedSceneCoordinate:desired===null?null:desired*(binding?.direction||1),worldCoordinate:binding?finite(worldPosition[binding.worldComponent]):null,expectedWorldCoordinate:desired};
+    }
     return {
       initialized:P.initialized,visible:P.visible,meshCount,
       axes:{x:!!P.parts.xCarriage,y:!!P.parts.yCarriage,z:!!P.parts.zSlide},
+      axisBindings,
       gripper:{present:!!P.parts.gripper,jaws:P.parts.jaws?.length||0,components:P.parts.detailStats?.gripperComponents||0},
+      statusLeds:Object.fromEntries(Object.entries(P.parts.leds||{}).map(([name,statusLed])=>[name,{parent:statusLed.parent?.name||null,visible:isEffectivelyVisible(statusLed)}])),
       linearRails:P.parts.detailStats?.linearRails||0,
       energyChains:P.parts.detailStats?.energyChains||0,
       safetyPosts:P.parts.detailStats?.safetyPosts||0,
       blenderModel:!!P.parts.blenderModel,
+      modelLoad:{status:P.modelLoad.status,source:P.modelLoad.source,attempts:P.modelLoad.attempts,error:P.modelLoad.error,missingNodes:[...P.modelLoad.missingNodes],retryAt:P.modelLoad.retryAt,startedAt:P.modelLoad.startedAt,completedAt:P.modelLoad.completedAt},
       controlCabinet:!!(P.parts.machine?.getObjectByName?.('LS_Control_Cabinet')||P.parts.machine?.getObjectByName?.('ls-electric-control-cabinet'))
     };
   }
@@ -479,11 +612,11 @@
   function init(){
     injectCss();if(!injectUi())return;P.state=loadSavedState();buildMemoryTable();bindUi();
     const pallet=P.state.cell.pallet;q('#p3-rows',P.host).value=pallet.rows;q('#p3-cols',P.host).value=pallet.cols;q('#p3-layers',P.host).value=pallet.layers;
-    P.initialized=createScene();if(!P.initialized)return;P.resizeObserver=new ResizeObserver(()=>{if(P.visible)resize();});P.resizeObserver.observe(P.sceneHost);updateMachine();updateUi(true);persist(true);
+    P.initialized=createScene();if(!P.initialized)return;installJogSafetyHandlers();P.resizeObserver=new ResizeObserver(()=>{if(P.visible){resize();P.renderDirty=true;schedule();}});P.resizeObserver.observe(P.sceneHost);updateMachine();updateUi(true);persist(true);
   }
 
   window.PLCTrainerPalletizer3D={
-    version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,setCameraNavigationPreset,getDiagnostics,
+    version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,setCameraNavigationPreset,getDiagnostics,retryModelLoad:retryBlenderMachine,
     setProfile:profile=>{const ok=Runtime.setProfile(P.state,profile);if(ok){buildMemoryTable();updateUi(true);persist(true);emitProfileChanged();}return ok;},getProfile:()=>Runtime.getProfile(P.state),
     startAuto:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.autoStart,true);schedule();return result.ok&&result.accepted!==false;},stop:()=>Runtime.writeDevice(P.state,activeProfile().commands.stop,true),home:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.home,true);schedule();return result.ok&&result.accepted!==false;},
     getRuntimePort:()=>({readDevice:addr=>Runtime.readDevice(P.state,addr),setPhysicalInput:(addr,value)=>Runtime.setPhysicalInput(P.state,addr,value),writeDevice:(addr,value)=>writeDevice(addr,value),stopAll:()=>Runtime.stopAll(P.state,'XG-SIM 안전 정지'),setServo:(axis,value)=>Runtime.setServo(P.state,axis,value),setObservedStatus:values=>Runtime.setObservedStatus(P.state,values),clearObservedStatus:()=>Runtime.clearObservedStatus(P.state),setPlcAuthoritative:active=>Runtime.setPlcAuthoritative(P.state,active)}),

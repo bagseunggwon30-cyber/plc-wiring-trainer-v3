@@ -71,7 +71,7 @@
       body.mv-diagram #palette{background:#16222b}
       body.mv-palletizer-mode{grid-template-columns:0 minmax(0,1fr) 0!important;overflow:hidden}
       body.mv-palletizer-mode header{min-width:0;max-width:100vw;overflow-x:hidden}
-      body.mv-palletizer-mode #palette,body.mv-palletizer-mode #right{visibility:hidden!important}
+      body.mv-palletizer-mode #palette,body.mv-palletizer-mode #right{visibility:hidden!important;overflow:hidden!important;box-sizing:border-box!important;min-width:0!important;width:0!important;padding:0!important;border:0!important;margin:0!important}
       body.mv-palletizer-mode #stage{min-width:0;min-height:0}
     `;
     document.head.appendChild(st);

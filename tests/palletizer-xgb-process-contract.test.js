@@ -112,11 +112,11 @@ test('STOP enters STEP800, waits for all axes to stop, then removes servo power;
   state.auto.fault = { code: 'VACUUM_TIMEOUT' };
   state.auto.state = 'FAULT';
   Runtime.refreshMemory(state);
-  Runtime.setPhysicalInput(state, 'P00008', false);
+  Runtime.setPhysicalInput(state, 'P00008', true);
   Runtime.writeDevice(state, 'M00126', true);
   assert.equal(Runtime.readDevice(state, STEP), 900);
 
-  Runtime.setPhysicalInput(state, 'P00008', true);
+  Runtime.setPhysicalInput(state, 'P00008', false);
   Runtime.writeDevice(state, 'M00126', true);
   assert.equal(Runtime.readDevice(state, STEP), 0);
 });

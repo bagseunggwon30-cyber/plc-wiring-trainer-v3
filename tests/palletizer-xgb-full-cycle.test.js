@@ -73,7 +73,11 @@ test('a 1x2 pallet follows STEP210/211 back to STEP100 for the first box and rea
   const trace = [];
 
   assert.equal(Runtime.writeDevice(state, CMD.start, true).accepted, undefined);
-  assert.equal(tickUntil(state, () => Runtime.readDevice(state, STEP) === 220, 90, trace), true, 'two placements must end at PALLET FULL');
+  assert.equal(tickUntil(state, () => state.pallet.placed.length === 1 && Runtime.readDevice(state, STEP) === 100, 45, trace), true, 'first consumed product returns to STEP100');
+  Runtime.setPhysicalInput(state, 'P00006', false);
+  Runtime.tick(state, 0.02);
+  Runtime.setPhysicalInput(state, 'P00006', true);
+  assert.equal(tickUntil(state, () => Runtime.readDevice(state, STEP) === 220, 45, trace), true, 'a new OFF→ON product must complete the pallet');
   assert.deepEqual(trace.filter(step => [210, 211, 212, 100, 220].includes(step)), [
     100, 210, 211, 212, 100, 210, 211, 212, 220,
   ]);
@@ -82,7 +86,7 @@ test('a 1x2 pallet follows STEP210/211 back to STEP100 for the first box and rea
   assert.equal(state.auto.cycle, 2);
 });
 
-test('STEP220 accepts rising M00125 only with PALLET_PRESENT, performs STEP230 reset, then returns to STEP100', () => {
+test('STEP220 accepts M00125 but resets only after old-pallet OFF and new-pallet ON confirmation', () => {
   const state = homedProductionState({ pallet: { rows: 1, cols: 1, layers: 1 } });
   state.pallet.placed = [{ id: 'BOX-1' }];
   state.pallet.nextIndex = 1;
@@ -93,7 +97,11 @@ test('STEP220 accepts rising M00125 only with PALLET_PRESENT, performs STEP230 r
 
   assert.equal(Runtime.writeDevice(state, CMD.newPallet, true).accepted, undefined, 'M00125 rising acknowledgement must be accepted');
   assert.equal(Runtime.readDevice(state, STEP), 230);
-  assert.equal(tickUntil(state, () => Runtime.readDevice(state, STEP) === 100, 5), true, 'stable P00007 completes new-pallet initialization');
+  for(let count=0;count<20;count+=1)Runtime.tick(state,.02);
+  assert.equal(Runtime.readDevice(state, STEP), 230, 'stable PALLET_PRESENT must not erase the full pallet');
+  Runtime.setPhysicalInput(state, 'P00007', false);Runtime.tick(state,.02);
+  Runtime.setPhysicalInput(state, 'P00007', true);
+  assert.equal(tickUntil(state, () => Runtime.readDevice(state, STEP) === 100, 5), true, 'OFF→ON pallet exchange completes initialization');
   assert.equal(state.pallet.nextIndex, 0);
   assert.equal(state.auto.cycle, 0);
 });
@@ -120,6 +128,7 @@ test('physical START/STOP/RESET pushbuttons act on rising edges only', () => {
   resetState.auto.running = false;
   resetState.auto.state = 'PROD_FAULT';
   resetState.auto.fault = { code: 'VACUUM_TIMEOUT' };
+  Runtime.setPhysicalInput(resetState, 'P00008', false);
   Runtime.refreshMemory(resetState);
   assert.equal(Runtime.setPhysicalInput(resetState, 'P00004', true), true);
   Runtime.tick(resetState, 0.02);

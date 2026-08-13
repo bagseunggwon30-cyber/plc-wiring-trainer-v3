@@ -478,6 +478,7 @@
         object,
         localPosition: spec.position,
         tag: spec.tag || anchorId,
+        maxConductors: spec.maxConductors,
         metadata: spec.metadata
       };
     });
