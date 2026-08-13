@@ -17,6 +17,10 @@ const failed = new Map();
 // the emitted module instead of resolving a runtime string from the JS chunk.
 const manifestUrl = new URL('../../assets/imported/sov-kdp/manifest.json', import.meta.url);
 const localAssets = Object.freeze({
+  'palletizer-3axis-v2.glb': Object.freeze({
+    url: new URL('../../assets/models/automation/palletizer-3axis-v2.glb', import.meta.url),
+    sourceProduct: 'User-authored Blender 5.2 · 3-axis palletizer v2',
+  }),
   'l7sa004a-production-v3.glb': Object.freeze({
     url: new URL('../../assets/models/ls-electric/l7sa004a-production-v3.glb', import.meta.url),
     sourceProduct: 'User-authored Blender 5.2 · L7SA004A production v3',

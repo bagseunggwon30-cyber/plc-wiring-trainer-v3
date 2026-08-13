@@ -144,7 +144,28 @@
     const sun=new Three.DirectionalLight(0xffffff,1.35);sun.position.set(-5,11,7);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);sun.shadow.camera.left=-10;sun.shadow.camera.right=10;sun.shadow.camera.top=9;sun.shadow.camera.bottom=-7;P.scene.add(sun);
     const floor=new Three.Mesh(new Three.PlaneGeometry(22,16),material(0x263139,.05,.9));floor.rotation.x=-Math.PI/2;floor.position.y=.02;floor.receiveShadow=true;P.scene.add(floor);
     const grid=new Three.GridHelper(20,40,0x3b5869,0x233642);grid.position.y=.025;P.scene.add(grid);
-    createMachine();updateCamera();installCameraControls();resize();return true;
+    createMachine();loadBlenderMachine();updateCamera();installCameraControls();resize();return true;
+  }
+
+  async function loadBlenderMachine(){
+    const loader=window.PLCTrainerImportedModels;if(!loader)return;
+    try{
+      const model=await loader.loadModel('palletizer-3axis-v2.glb',{name:'Blender-Palletizer-3Axis-v2'});
+      const node=name=>model.getObjectByName(name);
+      const xCarriage=node('X_Carriage'),yCarriage=node('Y_Carriage'),zSlide=node('Z_Slide'),gripper=node('Gripper'),jawL=node('Jaw_L'),jawR=node('Jaw_R');
+      if(!xCarriage||!yCarriage||!zSlide||!gripper||!jawL||!jawR)throw new Error('moving hierarchy is incomplete');
+      // Keep runtime workpieces and indicators, but replace the primitive machine meshes.
+      P.parts.machine.traverse(object=>{if(object.isMesh)object.visible=false;});
+      P.parts.target.visible=true;P.parts.pickBox.visible=true;
+      P.parts.palletGroup.traverse(object=>{if(object.isMesh)object.visible=true;});
+      P.parts.placedGroup.traverse(object=>{if(object.isMesh)object.visible=true;});
+      model.traverse(object=>{if(/^Pallet_(?:Slat|Block)/.test(object.name))object.visible=false;});
+      P.scene.add(model);P.parts.machine=model;P.parts.blenderModel=model;
+      P.parts.xCarriage=xCarriage;P.parts.yCarriage=yCarriage;P.parts.zSlide=zSlide;P.parts.gripper=gripper;P.parts.jaws=[jawL,jawR];
+      gripper.add(P.parts.heldBox);P.parts.heldBox.position.set(0,-1.18,0);P.parts.heldBox.visible=false;
+      P.parts.detailStats={safetyPosts:4,energyChains:3,linearRails:6,servoMotors:3,gripperComponents:10};
+      updateMachine();schedule();
+    }catch(error){console.warn('Blender palletizer model unavailable; procedural fallback remains active',error);}
   }
 
   function createMachine(){
@@ -386,7 +407,8 @@
       linearRails:P.parts.detailStats?.linearRails||0,
       energyChains:P.parts.detailStats?.energyChains||0,
       safetyPosts:P.parts.detailStats?.safetyPosts||0,
-      controlCabinet:!!P.parts.machine?.getObjectByName?.('ls-electric-control-cabinet')
+      blenderModel:!!P.parts.blenderModel,
+      controlCabinet:!!(P.parts.machine?.getObjectByName?.('LS_Control_Cabinet')||P.parts.machine?.getObjectByName?.('ls-electric-control-cabinet'))
     };
   }
 
