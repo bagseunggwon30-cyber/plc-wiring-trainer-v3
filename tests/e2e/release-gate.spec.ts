@@ -67,6 +67,14 @@ async function chooseMode(page: Page, mode: 'practice' | 'prewire'): Promise<voi
   await expect(page.locator('#workshop-mode-selector')).toHaveCount(0);
 }
 
+async function openAdvancedTools(page: Page): Promise<void> {
+  const advancedTools = page.locator('#advanced-tools');
+  if (!(await advancedTools.evaluate((element: HTMLDetailsElement) => element.open))) {
+    await advancedTools.locator('> summary').click();
+  }
+  await expect(advancedTools).toHaveAttribute('open', '');
+}
+
 function mdrReferenceDocument() {
   const device = (
     id: string,
@@ -359,6 +367,44 @@ async function imageCrossingAudit(page: Page): Promise<{ crossings: string[]; bl
 
 test.describe.configure({ mode: 'serial' });
 
+test('undo and redo keep the persisted workspace view synchronized with the rendered MultiView', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'practice');
+
+  // A palette placement creates a real history entry while the panel is the
+  // saved view. Switching into the automation lab must not leave its DOM
+  // visible when undo restores that panel snapshot.
+  await page.locator('#palette .pal[data-type="BOUNDARY-AC"]').click();
+  await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(1);
+
+  await openAdvancedTools(page);
+  await page.getByRole('button', { name: /자동화 실습실/ }).click();
+  await expect(page.locator('#mv-palletizer')).toHaveClass(/show/);
+  await page.getByRole('button', { name: 'MPS 제어' }).click();
+  await expect(page.locator('#al-mps-status')).toBeVisible();
+
+  await page.keyboard.press('Control+Z');
+  await expect.poll(async () => page.evaluate(() => (
+    (window as unknown as {
+      LegacyTrainerBridge: { readState(): { workspaceView: string } };
+    }).LegacyTrainerBridge.readState().workspaceView
+  ))).toBe('panel');
+  await expect(page.locator('#canvas')).toBeVisible();
+  await expect(page.locator('#mv-palletizer')).not.toHaveClass(/show/);
+
+  await page.keyboard.press('Control+Y');
+  await expect.poll(async () => page.evaluate(() => (
+    (window as unknown as {
+      LegacyTrainerBridge: { readState(): { workspaceView: string } };
+    }).LegacyTrainerBridge.readState().workspaceView
+  ))).toBe('palletizer');
+  await expect(page.locator('#canvas')).not.toBeVisible();
+  await expect(page.locator('#mv-palletizer')).toHaveClass(/show/);
+  await expect(page.locator('#al-mps-status')).toBeVisible();
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
 test('offline policy blocks main-process and session network before transmission', async ({ harness }) => {
   const { app, externalRequests, failedRequests, pageErrors } = harness;
   const probe = await app.evaluate(async ({ net }) => {
@@ -648,7 +694,7 @@ test('Electron UI keeps a prewire reference fail-closed through validate, restor
   await page.keyboard.press('Control+Z');
   await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(0);
 
-  await page.locator('#advanced-tools > summary').click();
+  await openAdvancedTools(page);
   await page.locator('#b-load').click();
   await expect.poll(async () => Object.keys((await bridgeState(page)).devices).length).toBe(3);
   await expect.poll(async () => (await bridgeState(page)).wires.length).toBe(5);
@@ -657,6 +703,12 @@ test('Electron UI keeps a prewire reference fail-closed through validate, restor
   await expect(page.getByRole('spinbutton', { name: '밀리미터당 캔버스 단위' })).toHaveValue('2');
   await expect(page.getByRole('spinbutton', { name: '예상 단락전류 A' })).toHaveValue('1500');
   await expect(page.getByRole('textbox', { name: '보호기기 차단곡선' })).toHaveValue('C16');
+
+  // Restoring a workshop returns to the panel view. The production view switch
+  // closes the advanced flyout so it cannot cover the workspace; report export
+  // therefore requires the same explicit re-open action as the user flow.
+  await expect(page.locator('#advanced-tools')).not.toHaveAttribute('open', '');
+  await openAdvancedTools(page);
 
   await page.evaluate(() => {
     const target = window as unknown as {
@@ -723,6 +775,45 @@ test('Electron UI keeps a prewire reference fail-closed through validate, restor
   expect(await readMainNetworkAudit()).toEqual({ externalRequests: [], failedRequests: [] });
   expect(externalRequests).toEqual([]);
   expect(failedRequests).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('diagram Delete removes only its selected wire after retaining a panel device selection', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'practice');
+  await applyDocument(page, mdrReferenceDocument());
+
+  // Select a real panel device first: this is the stale selection that must
+  // never turn a diagram-local wire deletion into device deletion.
+  await pointerClickSvgDeviceBody(page, 'mdr-e2e');
+  await expect.poll(async () => page.evaluate(() => (
+    (window as unknown as { LegacyTrainerBridge: { readSelection(): { deviceIds: string[] } } })
+      .LegacyTrainerBridge.readSelection().deviceIds
+  ))).toEqual(['mdr-e2e']);
+
+  const originalDeviceIds = Object.keys((await bridgeState(page)).devices).sort();
+  for (const [view, wireId] of [
+    ['schematic', 'wire-l'],
+    ['sequence', 'wire-n'],
+  ] as const) {
+    await openAdvancedTools(page);
+    await page.locator(`#mv-view-group [data-view="${view}"]`).click();
+    await expect(page.locator('#mv-stage')).toHaveClass(/show/);
+    const wireHit = page.locator(`#mv-wires .mv-wire-hit[data-wire="${wireId}"]`);
+    await expect(wireHit).toHaveCount(1);
+    await wireHit.dispatchEvent('pointerdown', { button: 0 });
+    await expect.poll(async () => page.evaluate(() => (
+      (window as unknown as { PLCTrainerMultiView: { selectedWire: string | null } })
+        .PLCTrainerMultiView.selectedWire
+    ))).toBe(wireId);
+
+    await page.keyboard.press('Delete');
+    const state = await bridgeState(page);
+    expect(Object.keys(state.devices).sort()).toEqual(originalDeviceIds);
+    expect(state.wires.map((wire) => wire.id)).not.toContain(wireId);
+  }
+
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

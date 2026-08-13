@@ -111,6 +111,17 @@ describe('eXP2-0700D and XY-MD02 academy-panel vertical slice', () => {
     });
   });
 
+  it('keeps the AC source egress clear of the adjacent MDR image routing envelope', () => {
+    const document = createAcademyExp2Md02Template();
+    const ac = document.devices.find((entry) => entry.id === 'academy-ac');
+    const mdr = document.devices.find((entry) => entry.id === 'academy-ps1');
+
+    expect(ac).toBeDefined();
+    expect(mdr).toBeDefined();
+    // AC source width 220 + right lead-out 40 + MDR image clearance 36.
+    expect(mdr!.x - ac!.x - 220).toBeGreaterThanOrEqual(80);
+  });
+
   it('powers both devices only through complete source-return paths and keeps MD02 communication optional', async () => {
     const document = createAcademyExp2Md02Template();
     const built = await buildPrewireCircuitV3(document, DEVICE_PROFILES, DEVICE_PROFILES_V3);

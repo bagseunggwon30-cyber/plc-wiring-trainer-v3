@@ -44,11 +44,14 @@ test('renderer build copies local automation scripts, vendor modules, manifest, 
     "'assets/vendor'",
     "'assets/imported/sov-kdp'",
     "'assets/models/ls-electric'",
+    "'assets/models/automation'",
+    "'assets/manual-backed'",
     "'assets/devices/gpt-expansion'"
   ]) assert.ok(vite.includes(token), token);
   assert.match(vite, /assetsInlineLimit\(filePath\)[\s\S]*?\/\\\.glb\$\/i\.test\(filePath\)[\s\S]*?return false/);
-  assert.match(importedModels, /new URL\('\.\.\/\.\.\/assets\/imported\/sov-kdp\/manifest\.json', import\.meta\.url\)/);
-  assert.match(importedModels, /fetch\(manifestUrl\)/);
+  assert.match(importedModels, /manifestUrl: 'assets\/imported\/sov-kdp\/manifest\.json'/);
+  assert.match(importedModels, /fetch\(new URL\(source\.manifestUrl, document\.baseURI\)\)/);
+  assert.match(importedModels, /modelBaseUrl: 'assets\/models\/automation\/'/);
   assert.match(importedModels, /l7sa004a-production-v3\.glb/);
 });
 

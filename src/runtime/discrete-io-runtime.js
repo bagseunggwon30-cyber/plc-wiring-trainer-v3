@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.1';
   const INPUT_MODES = Object.freeze(['sink', 'source']);
   const BANKS = new Set(['P', 'M', 'D', 'X', 'Y']);
 
@@ -287,8 +287,9 @@
     return graph;
   }
 
-  function devicePowered(graph, state, moduleId) {
+  function devicePowered(graph, state, moduleId, powerRailShorted = false) {
     return !!state.power.on
+      && !powerRailShorted
       && connected(graph, `${moduleId}.P24`, 'source.P24')
       && connected(graph, `${moduleId}.N24`, 'source.N24');
   }
@@ -296,13 +297,17 @@
   function evaluateTopology(state) {
     const issues = [];
     const graph = buildGraph(state);
-    const plcPowered = devicePowered(graph, state, 'plc');
+    const powerRailShorted = connected(graph, 'source.P24', 'source.N24');
+    const plcPowered = devicePowered(graph, state, 'plc', powerRailShorted);
     const signalRail = state.inputMode === 'sink' ? 'source.P24' : 'source.N24';
     const commonRail = state.inputMode === 'sink' ? 'source.N24' : 'source.P24';
     const expectedSensorType = state.inputMode === 'sink' ? 'pnp' : 'npn';
     const inputCommonReady = plcPowered && connected(graph, 'plc.COM', commonRail);
     const devicePower = {};
 
+    if (powerRailShorted) {
+      addIssue(issues, 'POWER_RAIL_SHORT', 'source', 'DC 24V +24V와 24G가 단락되어 전원을 안전 차단했습니다.', ['source.P24', 'source.N24']);
+    }
     if (!plcPowered) {
       addIssue(issues, 'POWER_PATH_OPEN', 'plc', 'PLC의 +24V/24G 전원 경로가 완성되지 않았습니다.', ['plc.P24', 'plc.N24']);
     }
@@ -312,7 +317,7 @@
 
     for (const definition of INPUT_DEFINITIONS) {
       if (definition.kind !== 'sensor') continue;
-      const powered = devicePowered(graph, state, definition.moduleId);
+      const powered = devicePowered(graph, state, definition.moduleId, powerRailShorted);
       devicePower[definition.key] = powered;
       if (!powered) {
         addIssue(issues, 'DEVICE_POWER_OPEN', definition.key, `${definition.key} 센서의 +24V/24G 전원이 완성되지 않았습니다.`, [`${definition.moduleId}.P24`, `${definition.moduleId}.N24`]);
@@ -324,7 +329,7 @@
     }
 
     for (const moduleId of ['timer', 'counter']) {
-      const powered = devicePowered(graph, state, moduleId);
+      const powered = devicePowered(graph, state, moduleId, powerRailShorted);
       devicePower[moduleId] = powered;
       if (!powered) {
         addIssue(issues, 'DEVICE_POWER_OPEN', moduleId, `${moduleId}의 +24V/24G 전원이 완성되지 않았습니다.`, [`${moduleId}.P24`, `${moduleId}.N24`]);
@@ -374,6 +379,12 @@
     state.inputs = inputs;
     state.effectiveOutputs = effectiveOutputs;
     state.outputs = { ...effectiveOutputs };
+    if (!effectiveOutputs.timer) {
+      state.timer.active = false;
+      state.timer.value = 0;
+      state.timer.done = false;
+    }
+    if (!effectiveOutputs.counter) state.counter.previousPulse = false;
     state.solution = {
       ready: issues.length === 0,
       powerReady: plcPowered,
@@ -411,6 +422,10 @@
       }
       const continuity = connected(graph, first, second);
       return { status: 'OK', mode, continuity, ohms: continuity ? 0 : null, powered: false };
+    }
+
+    if (state.power.on && connected(graph, 'source.P24', 'source.N24')) {
+      return { status: 'BLOCKED', mode, code: 'POWER_RAIL_SHORT', message: 'DC 24V +24V와 24G가 단락되어 전원을 안전 차단했습니다.' };
     }
 
     const potential = endpoint => {

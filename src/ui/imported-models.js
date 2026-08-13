@@ -13,25 +13,70 @@ const cache = new Map();
 const requested = new Set();
 const loaded = new Set();
 const failed = new Map();
-// Keep the asset path literal inside new URL so Vite rewrites it relative to
-// the emitted module instead of resolving a runtime string from the JS chunk.
-const manifestUrl = new URL('../../assets/imported/sov-kdp/manifest.json', import.meta.url);
 const localAssets = Object.freeze({
   'palletizer-3axis-v2.glb': Object.freeze({
-    url: new URL('../../assets/models/automation/palletizer-3axis-v2.glb', import.meta.url),
+    modelBaseUrl: 'assets/models/automation/',
     sourceProduct: 'User-authored Blender 5.2 · 3-axis palletizer v2',
+    assetCollection: 'local-automation',
   }),
   'l7sa004a-production-v3.glb': Object.freeze({
-    url: new URL('../../assets/models/ls-electric/l7sa004a-production-v3.glb', import.meta.url),
+    modelBaseUrl: 'assets/models/ls-electric/',
     sourceProduct: 'User-authored Blender 5.2 · L7SA004A production v3',
+    assetCollection: 'local-ls-electric',
   }),
 });
+const manifestSources = Object.freeze([
+  Object.freeze({
+    id: 'sov-kdp',
+    manifestUrl: 'assets/imported/sov-kdp/manifest.json',
+    modelBaseUrl: 'assets/imported/sov-kdp/models/',
+    sourceProduct: 'SoV-KDP 1.1.9K',
+  }),
+  Object.freeze({
+    id: 'manual-backed',
+    manifestUrl: 'assets/manual-backed/manifest.json',
+    modelBaseUrl: 'assets/manual-backed/',
+    sourceProduct: 'Manual-backed · Blender 5.2',
+  }),
+]);
+let catalogPromise = null;
 
-function loadRaw(filename) {
-  const resolved = localAssets[filename]?.url.href || new URL(`../../assets/imported/sov-kdp/models/${filename}`, import.meta.url).href;
+async function loadCatalog() {
+  if (!catalogPromise) {
+    catalogPromise = Promise.allSettled(manifestSources.map(async source => {
+      // Resolve runtime data from the document root. Vite bundles this module
+      // under build/renderer/assets, while its unbundled source lives under
+      // src/ui; import.meta.url therefore cannot represent both layouts.
+      const response = await fetch(new URL(source.manifestUrl, document.baseURI));
+      if (!response.ok) throw new Error(`${source.id} asset manifest HTTP ${response.status}`);
+      const manifest = await response.json();
+      const models = Array.isArray(manifest.models) ? manifest.models : [];
+      return models
+        .filter(entry => typeof entry?.file === 'string' && /^[^/\\]+\.glb$/i.test(entry.file))
+        .map(entry => ({ ...entry, assetCollection: source.id, sourceProduct: source.sourceProduct, modelBaseUrl: source.modelBaseUrl }));
+    })).then(results => {
+      const models = [], errors = [];
+      for (const result of results) {
+        if (result.status === 'fulfilled') models.push(...result.value);
+        else errors.push(String(result.reason?.message || result.reason));
+      }
+      if (!models.length) throw new Error(errors.join('; ') || 'No 3D asset manifests were available');
+      const locations = new Map(models.map(entry => [entry.file, entry]));
+      return { models, locations, errors };
+    });
+  }
+  return catalogPromise;
+}
+
+async function loadRaw(filename) {
+  const localEntry = localAssets[filename];
+  const catalog = localEntry ? null : await loadCatalog();
+  const entry = localEntry || catalog.locations.get(filename);
+  if (!entry) throw new Error(`Unknown 3D equipment asset: ${filename}`);
+  const resolved = new URL(`${entry.modelBaseUrl}${filename}`, document.baseURI).href;
   requested.add(filename);
   if (!cache.has(resolved)) {
-    cache.set(resolved, new Promise((resolve, reject) => {
+    const load = new Promise((resolve, reject) => {
       loader.load(resolved, gltf => {
         loaded.add(filename);
         failed.delete(filename);
@@ -40,9 +85,14 @@ function loadRaw(filename) {
         failed.set(filename, String(error?.message || error));
         reject(error);
       });
-    }));
+    });
+    const memoized = load.catch(error => {
+      if (cache.get(resolved) === memoized) cache.delete(resolved);
+      throw error;
+    });
+    cache.set(resolved, memoized);
   }
-  return cache.get(resolved);
+  return { scene: await cache.get(resolved), entry };
 }
 
 function cloneMaterials(root) {
@@ -57,11 +107,13 @@ function cloneMaterials(root) {
 }
 
 async function loadModel(filename, options = {}) {
-  const source = await loadRaw(filename);
+  const { scene: source, entry } = await loadRaw(filename);
   const root = cloneMaterials(source.clone(true));
   root.name = options.name || filename.replace(/\.glb$/i, '');
   root.userData.importedAsset = true;
-  root.userData.sourceProduct = localAssets[filename]?.sourceProduct || 'SoV-KDP 1.1.9K';
+  root.userData.sourceProduct = entry.sourceProduct;
+  root.userData.assetCollection = entry.assetCollection;
+  root.userData.manualEvidence = entry.evidence || null;
   if (Number.isFinite(options.scale)) root.scale.setScalar(options.scale);
   if (Array.isArray(options.position)) root.position.set(...options.position);
   if (Array.isArray(options.rotation)) root.rotation.set(...options.rotation);
@@ -69,16 +121,20 @@ async function loadModel(filename, options = {}) {
 }
 
 async function loadManifest() {
-  const response = await fetch(manifestUrl);
-  if (!response.ok) throw new Error(`Asset manifest HTTP ${response.status}`);
-  return response.json();
+  const catalog = await loadCatalog();
+  return {
+    schemaVersion: 1,
+    sourceTool: 'mixed',
+    models: catalog.models.map(({ modelBaseUrl, ...entry }) => entry),
+    warnings: catalog.errors,
+  };
 }
 
 window.PLCTrainerImportedModels = Object.freeze({
-  version: '1.0.0',
+  version: '1.1.0',
   loadModel,
   loadManifest,
   getStatus: () => ({ requested: [...requested], loaded: [...loaded], failed: [...failed].map(([filename, error]) => ({ filename, error })) }),
-  clearCache: () => { cache.clear(); requested.clear(); loaded.clear(); failed.clear(); },
+  clearCache: () => { cache.clear(); requested.clear(); loaded.clear(); failed.clear(); catalogPromise = null; },
 });
 window.dispatchEvent(new CustomEvent('plc-trainer-imported-models-ready'));

@@ -59,6 +59,7 @@
       .p3-write{display:grid;grid-template-columns:65px 1fr 44px;gap:4px;margin-top:7px}.p3-write button{border:1px solid #56798c;background:#26536a;color:#fff;border-radius:3px;font-size:9px;cursor:pointer}
       #p3-memory{width:100%;margin-top:7px;border-collapse:collapse;font:9px Consolas,monospace}#p3-memory th,#p3-memory td{border:1px solid #2d4350;padding:3px 4px;text-align:left}#p3-memory th{color:#92b8cc;background:#0b151c}#p3-memory td:last-child{text-align:right;color:#fff}
       #p3-log{max-height:74px;overflow:auto;margin-top:6px;color:#83a0b0;font:8px Consolas,monospace}#p3-log div{padding:2px 0;border-bottom:1px dotted #29404e}.p3-alarm{color:#ff8177!important}.p3-on{color:#75e6a7!important}
+      .p3-production-only{display:none}.production-profile .p3-production-only{display:block}.p3-production-inputs{display:grid;grid-template-columns:1fr 1fr;gap:4px}.p3-production-inputs label{display:flex;align-items:center;gap:4px;padding:4px;border:1px solid #304856;border-radius:3px;background:#0b151c;color:#b9d1de;font:8px Consolas,monospace}.p3-production-inputs input{accent-color:#48ba7b}.p3-production-note{margin:0 0 6px;color:#9bc5da;font-size:9px;line-height:1.4}
       @media(max-width:920px){#p3-root{grid-template-columns:minmax(0,1fr) 285px}}
     `;document.head.appendChild(style);
   }
@@ -68,11 +69,12 @@
     P.host.innerHTML=`<div id="p3-root">
       <div id="p3-scene"><div id="p3-scene-badge"><b>3축 팔레타이징 셀</b><span>OFFLINE DIGITAL TWIN</span></div><div id="p3-camera-hint">Alt+가운데 드래그: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소</div></div>
       <aside id="p3-side">
-        <section class="p3-section"><div id="p3-state"><b>대기</b><span>IDLE</span></div><label class="p3-profile">PLC 선택<select id="p3-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU / MELSOFT</option></select></label><div class="p3-actions">
+        <section class="p3-section"><div id="p3-state"><b>대기</b><span>IDLE</span></div><label class="p3-profile">PLC 선택<select id="p3-profile"><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU / MELSOFT</option><option value="xgb-production">XGB XBC-DN32UP / XG5000 생산 계약</option></select></label><div class="p3-actions">
           <button class="run" data-action="auto">▶ 자동 시작</button><button class="stop" data-action="stop">■ 정지</button>
           <button data-action="home">⌂ 전축 원점</button><button data-action="alarm-reset">↺ 알람 리셋</button>
           <button data-action="servo">SERVO ON</button><button data-action="clear">팔레트 비우기</button>
         </div></section>
+        <section class="p3-section p3-production-only" id="p3-production-controls"><h3>XGB 생산 입출력 계약 <small>P00000–P0000F · 수동 ORG</small></h3><p class="p3-production-note">실제 PLC 전송 없이 현재 오프라인 상태의 물리 입력과 생산 계약 주소 이미지를 표시합니다.</p><button class="p3-btn" data-action="manual-org" type="button">수동 ORG · Z → X → Y (M00119)</button><div class="p3-production-inputs" id="p3-production-inputs"></div></section>
         <section class="p3-section"><h3>축 수동 운전 <small>mm · 누르는 동안 JOG</small></h3>${['X','Y','Z'].map(axis=>`
           <div class="p3-axis" data-axis-card="${axis}"><strong>${axis}</strong><div class="p3-axis-main"><div class="p3-axis-value" data-axis-value="${axis}">0.00</div><div class="p3-axis-flags" data-axis-flags="${axis}">SERVO OFF</div><div class="p3-target"><input data-axis-target="${axis}" type="number" step="1" value="${axis==='Z'?238:axis==='X'?74:62}"><button data-axis-move="${axis}">ABS</button></div></div><div class="p3-jog"><button data-jog="${axis},-1">−</button><button data-jog="${axis},1">＋</button></div></div>`).join('')}</section>
         <section class="p3-section"><h3>팔레트 패턴</h3><div class="p3-grid"><label>행<input id="p3-rows" type="number" min="1" max="8" value="3"></label><label>열<input id="p3-cols" type="number" min="1" max="8" value="3"></label><label>단<input id="p3-layers" type="number" min="1" max="5" value="1"></label></div><button class="p3-btn" data-action="pattern" style="width:100%;margin-top:6px">패턴 적용 · 현재 제품 초기화</button></section>
@@ -311,23 +313,54 @@
     rebuildPallet();rebuildPlaced();
   }
 
+  const PRODUCTION_INPUT_LABELS={
+    eStopLoopOk:'비상정지 루프 정상',guardLoopOk:'안전문 인터록 정상',startPb:'시작 버튼',stopPb:'정지 버튼',resetPb:'리셋 버튼',autoEnableKey:'AUTO 선택 키',
+    workPresent:'제품 감지',palletPresent:'팔레트 감지',vacuumOk:'진공 확인',releaseOk:'그리퍼 해제 확인',airPressureOk:'공압 압력 정상',
+    xDrivePowerOk:'X축 드라이브 전원 정상',yDrivePowerOk:'Y축 드라이브 전원 정상',zDrivePowerOk:'Z축 드라이브 전원 정상',safetyRelayEdmOk:'안전 릴레이 EDM 정상',extStopLoopOk:'외부 정지 루프 정상'
+  };
+  const PRODUCTION_AUTO_PERMITS=['eStopLoopOk','guardLoopOk','autoEnableKey','airPressureOk','xDrivePowerOk','yDrivePowerOk','zDrivePowerOk','safetyRelayEdmOk','extStopLoopOk'];
+  function isProductionProfile(profile=Runtime.getProfile(P.state)){return profile.id==='xgb-production';}
   function memoryRows(){
     const p=Runtime.getProfile(P.state),c=p.commands,d=p.setpoints,s=p.status,a=p.actual;
+    const commandRows=isProductionProfile(p)
+      ? [[c.autoStart,'AUTO 시작'],[c.stop,'정지'],[c.reset,'리셋'],[c.manualOrg,'수동 ORG · Z→X→Y'],[c.servoOn,'전축 서보 ON'],[c.servoOff,'전축 서보 OFF']]
+      : [[c.autoStart,'자동 시작'],[c.stop,'정지'],[c.home,'원점복귀'],[c.servoOn,'전축 서보']];
+    const inputRows=isProductionProfile(p)?Object.entries(p.inputs||{}).map(([role,address])=>[address,PRODUCTION_INPUT_LABELS[role]||role]):[];
+    const statusRows=isProductionProfile(p)
+      ? [[s.autoRunningStatus,'PLC AUTO 운전'],[s.autoReadyStatus,'PLC AUTO 준비'],[s.palletFullStatus,'팔레트 Full'],[s.alarmStatus,'PLC 알람'],[s.buzzerStatus,'부저 상태'],
+        [s.xHomed,'X 원점 완료'],[s.yHomed,'Y 원점 완료'],[s.zHomed,'Z 원점 완료'],[s.xBusy,'X BUSY'],[s.yBusy,'Y BUSY'],[s.zBusy,'Z BUSY'],[s.xDone,'X DONE'],[s.yDone,'Y DONE'],[s.zDone,'Z DONE'],[s.xError,'X ERROR'],[s.yError,'Y ERROR'],[s.zError,'Z ERROR'],
+        [s.xServoReadyStatus,'X 서보 Ready'],[s.yServoReadyStatus,'Y 서보 Ready'],[s.zServoReadyStatus,'Z 서보 Ready'],[s.vacuumBreakStatus,'진공 파괴'],[s.vacuumOnStatus,'진공 ON'],[s.carryingStatus,'제품 파지']]
+      : [[s.autoRunning,'자동 운전'],[s.autoComplete,'완료'],[s.fault,'알람'],[s.xBusy,'X BUSY'],[s.yBusy,'Y BUSY'],[s.zBusy,'Z BUSY'],[s.xHomed,'X 원점'],[s.yHomed,'Y 원점'],[s.zHomed,'Z 원점'],[s.gripperClosed,'그리퍼'],[s.holding,'제품 파지']];
     return [
-      [c.autoStart,'자동 시작'],[c.stop,'정지'],[c.home,'원점복귀'],[c.servoOn,'전축 서보'],
+      ...commandRows,...inputRows,
       [d.x,'X 목표 mm'],[d.y,'Y 목표 mm'],[d.z,'Z 목표 mm'],[d.speed,'속도 mm/s'],
-      [s.autoRunning,'자동 운전'],[s.autoComplete,'완료'],[s.fault,'알람'],[s.xBusy,'X BUSY'],[s.yBusy,'Y BUSY'],[s.zBusy,'Z BUSY'],
-      [s.xHomed,'X 원점'],[s.yHomed,'Y 원점'],[s.zHomed,'Z 원점'],[s.gripperClosed,'그리퍼'],[s.holding,'제품 파지'],
+      ...statusRows,
       [a.x,'X 현재'],[a.y,'Y 현재'],[a.z,'Z 현재'],[a.placed,'적재 수'],[a.step,'스텝']
-    ];
+    ].filter(([address])=>typeof address==='string'&&address.length>0);
+  }
+  function renderProductionInputs(){
+    const host=q('#p3-production-inputs',P.host),profile=Runtime.getProfile(P.state);if(!host)return;
+    if(!isProductionProfile(profile)){host.replaceChildren();return;}
+    host.innerHTML=Object.entries(profile.inputs||{}).map(([role,address])=>`<label><input type="checkbox" data-production-input="${address}"><span>${address} · ${esc(PRODUCTION_INPUT_LABELS[role]||role)}</span></label>`).join('');
+    qa('[data-production-input]',host).forEach(input=>{
+      input.checked=Runtime.readDevice(P.state,input.dataset.productionInput)===true;
+      input.onchange=()=>{
+        const address=input.dataset.productionInput,active=!!input.checked;
+        if(!Runtime.setPhysicalInput(P.state,address,active))return;
+        P.state.events.push({time:P.state.elapsed,type:'input',message:`${address} ← ${active?'ON':'OFF'}`});
+        updateUi(true);persist(true);
+      };
+    });
   }
   function buildMemoryTable(){
     const body=q('#p3-memory tbody',P.host);body.innerHTML=memoryRows().map(([addr,label])=>`<tr><td>${addr}</td><td>${label}</td><td data-memory="${addr}">0</td></tr>`).join('');
+    renderProductionInputs();
   }
   function updateUi(force=false){
     if(!P.host)return;const now=performance.now();if(!force&&now-P.lastUi<100)return;P.lastUi=now;
-    const state=P.state,auto=state.auto,profile=Runtime.getProfile(state),hasAlarm=auto.state==='FAULT'||Object.values(state.axes).some(a=>a.alarm);
-    const stateBox=q('#p3-state',P.host);q('b',stateBox).textContent=auto.message||'대기';q('span',stateBox).textContent=`${profile.id==='ls'?'LS':'MELSEC'} · ${auto.state} · ${state.pallet.placed.length}/${Runtime.palletCapacity(state)}`;stateBox.classList.toggle('p3-alarm',hasAlarm);
+    const state=P.state,auto=state.auto,profile=Runtime.getProfile(state),hasAlarm=auto.state==='FAULT'||Object.values(state.axes).some(a=>a.alarm),production=isProductionProfile(profile);
+    const stateBox=q('#p3-state',P.host);q('b',stateBox).textContent=auto.message||'대기';q('span',stateBox).textContent=`${profile.id==='ls'?'LS':profile.id==='mitsubishi'?'MELSEC':'XGB'} · ${auto.state} · ${state.pallet.placed.length}/${Runtime.palletCapacity(state)}`;stateBox.classList.toggle('p3-alarm',hasAlarm);
+    q('#p3-root',P.host)?.classList.toggle('production-profile',production);
     q('#p3-profile',P.host).value=profile.id;q('#p3-address-title',P.host).firstChild.textContent=`${profile.vendor} 주소 이미지 `;q('#p3-profile-note',P.host).textContent=`${profile.family} 교육용 기본 맵 · ${profile.addressStyle} · 실제 PLC 전송 없음`;
     for(const name of ['X','Y','Z']){
       const axis=state.axes[name],value=q(`[data-axis-value="${name}"]`,P.host),flags=q(`[data-axis-flags="${name}"]`,P.host);
@@ -336,17 +369,48 @@
     }
     const servoButton=q('[data-action="servo"]',P.host),allServo=Object.values(state.axes).every(axis=>axis.servoOn);
     servoButton.textContent=allServo?'SERVO OFF':'SERVO ON';servoButton.classList.toggle('p3-on',allServo);
+    qa('[data-axis-move],[data-jog]',P.host).forEach(button=>button.disabled=production);
     for(const [addr,label] of memoryRows()){const cell=q(`[data-memory="${addr}"]`,P.host);if(!cell)continue;const value=Runtime.readDevice(state,addr);cell.textContent=typeof value==='boolean'?(value?'ON':'OFF'):Number(value).toFixed(/현재/.test(label)?2:0);cell.classList.toggle('p3-on',value===true);cell.classList.toggle('p3-alarm',addr===profile.status.fault&&value===true);}
     const events=state.events.slice(-7).reverse();q('#p3-log',P.host).innerHTML=events.map(event=>`<div class="${event.type==='alarm'?'p3-alarm':''}">${event.time.toFixed(1)}s · ${esc(event.message)}</div>`).join('');
   }
 
   function activeProfile(){return Runtime.getProfile(P.state);}
   function manualStop(){if(P.state.auto.running)Runtime.writeDevice(P.state,activeProfile().commands.stop,true);}
+  function productionAutoRejectReason(){
+    if(!Object.values(P.state.axes).every(axis=>axis.homed&&!axis.alarm))return '수동 ORG 완료 전 AUTO 허가 거부';
+    const profile=activeProfile(),missing=PRODUCTION_AUTO_PERMITS.filter(role=>Runtime.readDevice(P.state,profile.inputs[role])!==true);
+    return missing.length ? `AUTO 허가 조건 OFF · ${missing.map(role=>`${profile.inputs[role]} ${PRODUCTION_INPUT_LABELS[role]}`).join(', ')}` : 'AUTO 시작 지령 거부';
+  }
+  function rejectProductionAuto(){
+    const message=productionAutoRejectReason();
+    P.state.auto.message=message;
+    P.state.events.push({time:P.state.elapsed,type:'reject',message});
+  }
+  function requestProductionOrg(){
+    const profile=activeProfile(),result=Runtime.writeDevice(P.state,profile.commands.manualOrg,true);
+    if(result.accepted===false){
+      const message='수동 ORG는 정지 상태와 전축 SERVO ON이 필요합니다';
+      P.state.events.push({time:P.state.elapsed,type:'reject',message});P.state.auto.message=message;
+    }else P.state.events.push({time:P.state.elapsed,type:'command',message:'수동 ORG 시작 · Z → X → Y'});
+    schedule();updateUi(true);persist(true);return result;
+  }
+  function emitProfileChanged(){
+    window.dispatchEvent(new CustomEvent('palletizer-profile-changed',{detail:{profile:Runtime.getProfile(P.state).id}}));
+  }
   function bindUi(){
-    q('#p3-profile',P.host).onchange=event=>{if(Runtime.setProfile(P.state,event.target.value)){buildMemoryTable();q('#p3-address',P.host).value=Runtime.getProfile(P.state).commands.autoStart;}schedule();updateUi(true);persist(true);};
-    q('[data-action="auto"]',P.host).onclick=()=>{Runtime.writeDevice(P.state,activeProfile().commands.autoStart,true);schedule();updateUi(true);persist(true);};
+    q('#p3-profile',P.host).onchange=event=>{if(Runtime.setProfile(P.state,event.target.value)){buildMemoryTable();q('#p3-address',P.host).value=Runtime.getProfile(P.state).commands.autoStart;emitProfileChanged();}schedule();updateUi(true);persist(true);};
+    q('[data-action="auto"]',P.host).onclick=()=>{
+      const result=Runtime.writeDevice(P.state,activeProfile().commands.autoStart,true);
+      if(isProductionProfile()&&result.accepted===false)rejectProductionAuto();
+      schedule();updateUi(true);persist(true);
+    };
     q('[data-action="stop"]',P.host).onclick=()=>{Runtime.writeDevice(P.state,activeProfile().commands.stop,true);updateUi(true);persist(true);};
-    q('[data-action="home"]',P.host).onclick=()=>{manualStop();Runtime.writeDevice(P.state,activeProfile().commands.home,true);schedule();updateUi(true);};
+    q('[data-action="home"]',P.host).onclick=()=>{
+      manualStop();
+      if(isProductionProfile())requestProductionOrg();
+      else{Runtime.writeDevice(P.state,activeProfile().commands.home,true);schedule();updateUi(true);}
+    };
+    q('[data-action="manual-org"]',P.host).onclick=()=>{manualStop();requestProductionOrg();};
     q('[data-action="alarm-reset"]',P.host).onclick=()=>{Runtime.resetAlarms(P.state);updateUi(true);persist(true);};
     q('[data-action="servo"]',P.host).onclick=()=>{const on=!Object.values(P.state.axes).every(axis=>axis.servoOn);Runtime.writeDevice(P.state,activeProfile().commands.servoOn,on);updateUi(true);persist(true);};
     q('[data-action="clear"]',P.host).onclick=()=>{Runtime.resetCell(P.state,{clearPallet:true});rebuildPlaced(true);updateUi(true);persist(true);};
@@ -385,7 +449,7 @@
     P.visible=!!visible;if(!P.initialized)return;
     // v2.7 자동화 실습실 허브가 있으면 상위 화면의 표시는 허브가 관리한다.
     if(!q('#al-hub',P.host))P.host.classList.toggle('show',P.visible);P.lastTime=0;
-    if(P.visible){resize();updateUi(true);schedule();}else persist(true);
+    if(P.visible){resize();updateUi(true);schedule();}else{persist(true);window.dispatchEvent(new CustomEvent('palletizer-view-hidden'));}
   }
   function renderActive(){if(!P.initialized)return;updateMachine();updateUi(true);if(P.visible)schedule();}
   function exportState(){return persist(true)||Runtime.exportState(P.state);}
@@ -420,8 +484,9 @@
 
   window.PLCTrainerPalletizer3D={
     version:Runtime.version,setVisible,renderActive,resize,exportState,importState,readDevice,writeDevice,setCameraNavigationPreset,getDiagnostics,
-    setProfile:profile=>{const ok=Runtime.setProfile(P.state,profile);if(ok){buildMemoryTable();updateUi(true);persist(true);}return ok;},getProfile:()=>Runtime.getProfile(P.state),
+    setProfile:profile=>{const ok=Runtime.setProfile(P.state,profile);if(ok){buildMemoryTable();updateUi(true);persist(true);emitProfileChanged();}return ok;},getProfile:()=>Runtime.getProfile(P.state),
     startAuto:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.autoStart,true);schedule();return result.ok&&result.accepted!==false;},stop:()=>Runtime.writeDevice(P.state,activeProfile().commands.stop,true),home:()=>{const result=Runtime.writeDevice(P.state,activeProfile().commands.home,true);schedule();return result.ok&&result.accepted!==false;},
+    getRuntimePort:()=>({readDevice:addr=>Runtime.readDevice(P.state,addr),setPhysicalInput:(addr,value)=>Runtime.setPhysicalInput(P.state,addr,value),writeDevice:(addr,value)=>writeDevice(addr,value),stopAll:()=>Runtime.stopAll(P.state,'XG-SIM 안전 정지'),setServo:(axis,value)=>Runtime.setServo(P.state,axis,value),setObservedStatus:values=>Runtime.setObservedStatus(P.state,values),clearObservedStatus:()=>Runtime.clearObservedStatus(P.state),setPlcAuthoritative:active=>Runtime.setPlcAuthoritative(P.state,active)}),
     get state(){return P.state;},get visible(){return P.visible;},get cameraNavigationPreset(){return P.cameraNavigationPreset;}
   };
   init();
