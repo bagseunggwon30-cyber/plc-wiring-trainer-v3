@@ -49,6 +49,8 @@ describe('v3 approved asset allowlist', () => {
 
   it('registers new Imagen exact-model skins as pending rather than silently approving them', () => {
     const expected = [
+      'manual:xbc-dn32h-ppt-open-front-clean-v3',
+      'manual:xbc-dr32h-ppt-open-front-transparent-v3',
       'codex:xbc-dn60su-imagen-v1',
       'codex:xbc-dn-dp32up-imagen-v1',
       'codex:xbl-c41a-imagen-v1',

@@ -7,6 +7,7 @@ export const LEGACY_PROFILE_MAP: Readonly<Record<string, string>> = Object.freez
   'XBC-DN32UP': 'ls-electric:xbc-dn32up',
   'XBC-DN60SU': 'ls-electric:xbc-dn60su',
   'XBC-DP32UP': 'ls-electric:xbc-dp32up',
+  'XBC-DN32H': 'ls-electric:xbc-dn32h',
   'XBC-DR32H': 'ls-electric:xbc-dr32h',
   'EXP2-700': 'ls-electric:exp2-0700d',
   'XBL-C41A': 'ls-electric:xbl-c41a',

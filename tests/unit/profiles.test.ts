@@ -8,6 +8,7 @@ describe('device profile catalog', () => {
       'ls-electric:xbc-dn32up',
       'ls-electric:xbc-dp32up',
       'ls-electric:xbc-dn60su',
+      'ls-electric:xbc-dn32h',
       'ls-electric:xbc-dr32h',
       'ls-electric:xbl-c41a',
       'ls-electric:xbf-pd02a',

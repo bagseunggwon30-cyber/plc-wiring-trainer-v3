@@ -66,6 +66,9 @@ WOOD = material("Pallet hardwood", (0.52, 0.27, 0.075), 0.04, 0.66)
 BOX_MAT = material("Training workpiece", (0.77, 0.47, 0.16), 0.05, 0.58)
 GLASS = material("Safety polycarbonate", (0.05, 0.38, 0.55), 0.08, 0.20, alpha=0.12)
 SCREEN = material("HMI screen", (0.015, 0.075, 0.105), 0.12, 0.22, emission=(0.01, 0.16, 0.26))
+WHITE = material("Industrial label white", (0.82, 0.86, 0.86), 0.08, 0.42)
+SENSOR_RED = material("Optical sensor lens", (0.72, 0.008, 0.006), 0.12, 0.22, emission=(0.72, 0.008, 0.006))
+VACUUM_BLUE = material("Pneumatic vacuum blue", (0.015, 0.22, 0.48), 0.44, 0.28)
 
 BOX_DATA = {}
 CYL_DATA = {}
@@ -273,6 +276,35 @@ def sensor(name, loc, parent, rotation=(0, 0, 0)):
     return group
 
 
+def fastener(name, loc, parent, axis="Y", radius=0.032):
+    """Visible socket-head fastener used only where it improves scale reading."""
+    group = empty(name, parent, loc)
+    cylinder(name + "_Head", radius, radius * 0.58, (0, 0, 0), STEEL, group, axis, 12, 0.003)
+    cylinder(name + "_Socket", radius * 0.40, radius * 0.61, (0, 0, 0), BLACK, group, axis, 8, 0.001)
+    return group
+
+
+def corner_bracket(name, loc, parent, rotation=(0, 0, 0)):
+    group = empty(name, parent, loc)
+    group.rotation_euler = rotation
+    box(name + "_Vertical", (0.32, 0.40, 0.055), (0, 0.15, 0), ALU_DARK, group, 0.018)
+    box(name + "_Horizontal", (0.32, 0.055, 0.40), (0, -0.02, 0.15), ALU_DARK, group, 0.018)
+    fastener(name + "_BoltA", (-0.09, 0.20, -0.031), group, "Z", 0.028)
+    fastener(name + "_BoltB", (0.09, 0.20, -0.031), group, "Z", 0.028)
+    fastener(name + "_BoltC", (-0.09, -0.051, 0.20), group, "Y", 0.028)
+    fastener(name + "_BoltD", (0.09, -0.051, 0.20), group, "Y", 0.028)
+    return group
+
+
+def vacuum_cup(name, loc, parent):
+    group = empty(name, parent, loc)
+    cylinder(name + "_Stem", 0.035, 0.18, (0, 0.06, 0), STEEL, group, "Y", 16, 0.004)
+    cylinder(name + "_Bellows", 0.075, 0.12, (0, -0.07, 0), RUBBER, group, "Y", 20, 0.008)
+    cylinder(name + "_Lip", 0.115, 0.045, (0, -0.145, 0), RUBBER, group, "Y", 24, 0.006)
+    cylinder(name + "_Port", 0.025, 0.08, (0.07, 0.055, 0), COPPER, group, "X", 12, 0.003)
+    return group
+
+
 # Export hierarchy. The six named moving groups below are a public runtime API.
 root = empty("PALLETIZER_ROOT")
 root["asset"] = "Three-axis Cartesian palletizer training cell"
@@ -290,7 +322,13 @@ for x in (-5.0, 5.0):
 for x in (-5.0, 5.0):
     extrusion(f"Column_{x}", (0.47, 5.05, 0.47), (x, 2.75, 2.72), static)
     box(f"Column_Gusset_{x}", (0.82, 0.56, 0.12), (x, 4.73, 2.42), ALU_DARK, static, 0.025)
+    corner_bracket(f"Column_BaseBracket_{x}", (x, 0.62, 2.44), static)
+    box(f"Column_EndCap_{x}", (0.49, 0.10, 0.49), (x, 5.30, 2.72), BLACK, static, 0.018)
 extrusion("X_Beam", (10.45, 0.58, 0.64), (0, 5.13, 2.72), static)
+for x in (-5.25, 5.25):
+    box(f"X_Beam_EndCap_{x}", (0.075, 0.56, 0.62), (x, 5.13, 2.72), BLACK, static, 0.015)
+box("X_Axis_Nameplate", (1.42, 0.025, 0.24), (3.15, 4.83, 2.89), WHITE, static, 0.010)
+box("X_Axis_Nameplate_Stripe", (1.20, 0.012, 0.055), (3.15, 4.81, 2.83), LS_BLUE, static, 0.004)
 box("X_Rail_Mounting_Face", (9.92, 0.52, 0.08), (0, 4.88, 2.39), ALU_DARK, static, 0.018)
 for rail_index, y in enumerate((4.72, 4.91), 1):
     box(f"X_LinearRail_{rail_index}", (9.80, 0.085, 0.14), (0, y, 2.34), RAIL, static, 0.012)
@@ -303,7 +341,7 @@ servo("X_Servo", (-5.37, 5.14, 2.72), static, "X")
 cylinder("X_Coupling", 0.14, 0.36, (-4.82, 5.14, 2.72), LS_BLUE, static, "X", 24, 0.010)
 bearing_support("X_Fixed_Bearing", (-4.56, 4.96, 2.25), static, "X")
 bearing_support("X_Floating_Bearing", (4.56, 4.96, 2.25), static, "X")
-energy_chain("X_EnergyChain", [(-4.15, 5.58, 2.12), (-3.70, 5.58, 2.12), (-3.30, 5.30, 2.12), (3.15, 5.30, 2.12), (3.60, 5.58, 2.12)], 24, static)
+energy_chain("X_EnergyChain", [(-4.15, 5.58, 2.12), (-3.70, 5.58, 2.12), (-3.30, 5.30, 2.12), (3.15, 5.30, 2.12), (3.60, 5.58, 2.12)], 20, static)
 sensor("X_Home_Sensor", (-4.57, 4.64, 2.17), static)
 sensor("X_Positive_Limit", (4.57, 4.64, 2.17), static, (0, math.pi, 0))
 
@@ -315,6 +353,10 @@ box("X_CarriagePlate", (1.06, 0.78, 1.08), (0, 4.82, 2.58), LS_BLUE, xcar, 0.060
 for x in (-0.28, 0.28):
     for y in (4.70, 4.92):
         box("X_RailBlock", (0.30, 0.18, 0.36), (x, y, 2.34), STEEL, xcar, 0.022)
+        box("X_RailBlock_Wiper", (0.33, 0.035, 0.39), (x, y - 0.105, 2.34), RUBBER, xcar, 0.010)
+for x in (-0.43, 0.43):
+    for y in (4.52, 5.12):
+        fastener("X_Carriage_Fastener", (x, y, 2.83), xcar, "Z", 0.034)
 box("X_BallNut_Housing", (0.42, 0.33, 0.38), (0, 4.96, 2.25), ALU_DARK, xcar, 0.032)
 extrusion("Y_Beam", (0.52, 0.54, 5.86), (0, 4.62, 0), xcar)
 box("Y_Rail_Mounting_Face", (0.48, 0.12, 5.50), (0, 4.30, 0), ALU_DARK, xcar, 0.016)
@@ -328,7 +370,7 @@ servo("Y_Servo", (0, 4.64, 3.18), xcar, "Y")
 cylinder("Y_Coupling", 0.13, 0.30, (0, 4.40, 2.67), LS_BLUE, xcar, "Z", 22, 0.010)
 bearing_support("Y_Fixed_Bearing", (0, 4.34, 2.54), xcar, "Z")
 bearing_support("Y_Floating_Bearing", (0, 4.34, -2.54), xcar, "Z")
-energy_chain("Y_EnergyChain", [(0.41, 4.75, 2.30), (0.41, 4.75, 1.95), (0.41, 4.48, 1.62), (0.41, 4.48, -2.14)], 18, xcar)
+energy_chain("Y_EnergyChain", [(0.41, 4.75, 2.30), (0.41, 4.75, 1.95), (0.41, 4.48, 1.62), (0.41, 4.48, -2.14)], 15, xcar)
 sensor("Y_Home_Sensor", (-0.31, 4.16, 2.42), xcar)
 sensor("Y_Positive_Limit", (-0.31, 4.16, -2.42), xcar, (0, math.pi, 0))
 
@@ -340,8 +382,14 @@ box("Y_CarriagePlate", (1.02, 0.66, 1.04), (0, 4.28, 0), LS_BLUE, ycar, 0.058)
 for x in (-0.25, 0.25):
     for z in (-0.27, 0.27):
         box("Y_RailBlock", (0.26, 0.18, 0.30), (x, 4.18, z), STEEL, ycar, 0.020)
+        box("Y_RailBlock_Wiper", (0.29, 0.035, 0.33), (x, 4.075, z), RUBBER, ycar, 0.009)
 box("Y_BallNut_Housing", (0.40, 0.30, 0.42), (0, 4.34, 0), ALU_DARK, ycar, 0.030)
-extrusion("Z_Mast", (0.50, 4.42, 0.50), (0, 2.31, 0), ycar)
+zframe = empty("Z_Mast", ycar)
+box("Z_Mast_Backplate", (0.62, 4.42, 0.14), (0, 2.31, -0.18), ALU_DARK, zframe, 0.025)
+for x in (-0.31, 0.31):
+    extrusion("Z_Mast_SideRail", (0.14, 4.42, 0.52), (x, 2.31, 0), zframe)
+for y in (0.12, 2.31, 4.50):
+    box("Z_Mast_CrossBrace", (0.66, 0.16, 0.54), (0, y, 0), ALU_DARK, zframe, 0.020)
 box("Z_Rail_Mounting_Face", (0.48, 4.04, 0.12), (0, 2.31, 0.28), ALU_DARK, ycar, 0.016)
 for rail_index, x in enumerate((-0.18, 0.18), 1):
     box(f"Z_LinearRail_{rail_index}", (0.085, 4.00, 0.13), (x, 2.31, 0.35), RAIL, ycar, 0.012)
@@ -353,21 +401,32 @@ servo("Z_Servo", (0, 4.18, 0.02), ycar, "Y")
 cylinder("Z_Coupling", 0.12, 0.28, (0, 3.70, 0.16), LS_BLUE, ycar, "Y", 22, 0.009)
 bearing_support("Z_Fixed_Bearing", (0, 3.55, 0.16), ycar, "Y")
 bearing_support("Z_Floating_Bearing", (0, 0.58, 0.16), ycar, "Y")
-energy_chain("Z_EnergyChain", [(-0.39, 3.90, -0.24), (-0.39, 3.48, -0.24), (-0.39, 3.15, -0.48), (-0.39, 0.92, -0.48)], 15, ycar)
+energy_chain("Z_EnergyChain", [(-0.39, 3.90, -0.24), (-0.39, 3.48, -0.24), (-0.39, 3.15, -0.48), (-0.39, 0.92, -0.48)], 12, ycar)
 sensor("Z_Home_Sensor", (0.32, 4.04, 0.30), ycar, (0, 0, math.pi / 2))
 sensor("Z_Negative_Limit", (0.32, 0.55, 0.30), ycar, (0, 0, -math.pi / 2))
 
 # Moving Z slide and compact pneumatic parallel gripper.
-zslide = empty("Z_Slide", ycar)
+zslide = empty("Z_Slide", ycar, (0, 0.95, 0))
 zslide["axis"] = "Z"
 zslide["travelMm"] = 280
 box("Z_CarriagePlate", (0.94, 0.72, 0.88), (0, 0, 0), LS_BLUE, zslide, 0.058)
 for x in (-0.25, 0.25):
     for y in (-0.22, 0.22):
         box("Z_RailBlock", (0.27, 0.27, 0.28), (x, y, 0.32), STEEL, zslide, 0.020)
+for x in (-0.36, 0.36):
+    for y in (-0.27, 0.27):
+        fastener("Z_Carriage_Fastener", (x, y, -0.46), zslide, "Z", 0.030)
 box("Z_BallNut_Housing", (0.38, 0.38, 0.34), (0, 0, 0.16), ALU_DARK, zslide, 0.028)
-gripper = empty("Gripper", zslide, (0, -0.34, 0))
-gripper["component"] = "pneumatic parallel gripper"
+ram = empty("Z_Telescopic_InnerRam", zslide)
+for x in (-0.25, 0.25):
+    box("Z_Moving_SideGuide", (0.10, 1.30, 0.18), (x, 0.68, 0.22), RAIL, ram, 0.018)
+    box("Z_Moving_GuideWiper", (0.15, 0.12, 0.23), (x, 0.09, 0.22), RUBBER, ram, 0.014)
+box("Z_Moving_Crosshead", (0.68, 0.16, 0.42), (0, 1.25, 0.10), ALU_DARK, ram, 0.030)
+for index, y in enumerate((0.10, 0.24, 0.38, 0.52, 0.66, 0.80, 0.94, 1.08), 1):
+    box(f"Z_Bellows_{index:02}", (0.34, 0.07, 0.10), (0, y, 0.36), RUBBER, zslide, 0.010)
+box("Z_EOAT_MountingFlange", (0.70, 0.16, 0.70), (0, 1.25, 0), ALU_DARK, zslide, 0.032)
+gripper = empty("Gripper", zslide, (0, 1.35, 0))
+gripper["component"] = "vacuum-assisted pneumatic parallel gripper"
 cylinder("Gripper_Rotator", 0.23, 0.38, (0, -0.05, 0), SERVO, gripper, "Y", 24, 0.014)
 cylinder("Gripper_RotatorRing", 0.26, 0.08, (0, -0.26, 0), LS_BLUE, gripper, "Y", 24, 0.010)
 box("Gripper_CrossPlate", (1.02, 0.18, 0.72), (0, -0.33, 0), ALU_DARK, gripper, 0.040)
@@ -379,8 +438,17 @@ for x in (-0.28, 0.28):
     box("Jaw_Guide", (0.17, 0.12, 0.40), (x, -0.72, 0), RAIL, gripper, 0.016)
 tube("Gripper_Air_Blue", [(0.31, -0.43, 0.31), (0.50, -0.52, 0.32), (0.42, -0.67, 0.18)], 0.018, LS_BLUE, gripper)
 tube("Gripper_Air_Yellow", [(0.31, -0.43, 0.21), (0.51, -0.54, 0.15), (0.40, -0.67, -0.10)], 0.018, YELLOW, gripper)
-jawl = empty("Jaw_L", gripper, (-0.31, 0, 0))
-jawr = empty("Jaw_R", gripper, (0.31, 0, 0))
+box("Vacuum_Manifold", (0.74, 0.16, 0.46), (0, -0.82, 0), VACUUM_BLUE, gripper, 0.028)
+box("Vacuum_Ejector", (0.22, 0.30, 0.20), (0.42, -0.84, 0.24), BLACK, gripper, 0.024)
+box("Vacuum_PressureSwitch", (0.19, 0.22, 0.16), (-0.42, -0.84, 0.24), BLACK, gripper, 0.020)
+cylinder("Vacuum_Pressure_LED", 0.027, 0.018, (-0.42, -0.965, 0.29), SENSOR_RED, gripper, "Y", 16, 0.003)
+for index, (x, z) in enumerate(((-0.31, -0.22), (-0.31, 0.22), (0.31, -0.22), (0.31, 0.22))):
+    vacuum_cup(f"Vacuum_Cup_{index + 1}", (x, -1.16, z), gripper)
+    tube(f"Vacuum_Hose_{index + 1}", [(0, -0.84, 0), (x * 0.65, -0.97, z * 0.65), (x, -1.08, z)], 0.014, VACUUM_BLUE, gripper)
+jawl = empty("Jaw_L", gripper, (-0.43, 0, 0))
+jawr = empty("Jaw_R", gripper, (0.43, 0, 0))
+jawl["openX"], jawl["closedX"] = -0.43, -0.39
+jawr["openX"], jawr["closedX"] = 0.43, 0.39
 for prefix, jaw, side in (("Jaw_L", jawl, 1), ("Jaw_R", jawr, -1)):
     box(prefix + "_Carrier", (0.22, 0.25, 0.42), (0, -0.76, 0), STEEL, jaw, 0.022)
     box(prefix + "_Finger", (0.14, 0.70, 0.22), (0, -1.05, 0), STEEL, jaw, 0.022)
@@ -410,9 +478,22 @@ for x, z in ((-5.35, -3.15), (-5.35, 3.15), (5.35, -3.15), (5.35, 3.15)):
 box("Rear_Safety_Guard", (10.52, 2.35, 0.025), (0, 1.83, 3.15), GLASS, static, 0.004)
 box("Left_Safety_Guard", (0.025, 2.35, 5.92), (-5.35, 1.83, 0), GLASS, static, 0.004)
 box("Right_Safety_Guard", (0.025, 2.35, 2.05), (5.35, 1.83, 1.98), GLASS, static, 0.004)
+gate = empty("Front_Safety_Gate", static, (1.75, 0, -3.15))
+box("Gate_Polycarbonate", (3.20, 2.35, 0.025), (0, 1.83, 0), GLASS, gate, 0.004)
+for x in (-1.62, 1.62):
+    extrusion("Gate_Vertical_Frame", (0.13, 2.55, 0.13), (x, 1.78, 0), gate)
+for y in (0.53, 3.03):
+    extrusion("Gate_Horizontal_Frame", (3.37, 0.13, 0.13), (0, y, 0), gate)
+box("Gate_Handle", (0.09, 0.52, 0.12), (1.32, 1.77, -0.10), YELLOW, gate, 0.022)
+box("Gate_Interlock", (0.22, 0.42, 0.18), (-1.70, 2.16, 0.10), BLACK, gate, 0.025)
+box("Gate_Interlock_Actuator", (0.10, 0.24, 0.08), (-1.55, 2.16, 0.10), STEEL, gate, 0.012)
 cab = empty("LS_Control_Cabinet", static, (4.52, 0, -2.50))
 box("Cabinet", (1.42, 2.48, 0.82), (0, 1.66, 0), ALU, cab, 0.055)
 box("Cabinet_Door", (1.28, 2.27, 0.055), (0, 1.66, 0.438), ALU_DARK, cab, 0.022)
+for y in (0.82, 2.50):
+    cylinder("Cabinet_Hinge", 0.045, 0.18, (-0.65, y, 0.47), STEEL, cab, "Y", 16, 0.005)
+box("Cabinet_Equipment_Label", (0.72, 0.025, 0.20), (0, 2.69, 0.49), WHITE, cab, 0.008)
+box("Cabinet_Equipment_Label_Stripe", (0.62, 0.012, 0.045), (0, 2.67, 0.505), LS_BLUE, cab, 0.004)
 box("Cabinet_HMI_Bezel", (0.74, 0.48, 0.06), (0, 2.17, 0.485), BLACK, cab, 0.022)
 box("Cabinet_HMI_Screen", (0.62, 0.36, 0.025), (0, 2.17, 0.525), SCREEN, cab, 0.010)
 box("Cabinet_LS_Stripe", (0.86, 0.07, 0.025), (0, 1.82, 0.482), LS_BLUE, cab, 0.006)

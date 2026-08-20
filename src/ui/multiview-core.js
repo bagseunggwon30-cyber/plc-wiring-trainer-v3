@@ -54,7 +54,7 @@
     }else if(type==='SEL-3P'){
       NO('left',`${tag} A`,'C1','A',{deviceKind:'selector'});
       NO('right',`${tag} M`,'C2','M',{deviceKind:'selector'});
-    }else if(type==='MC'){
+    }else if(type==='MC'||type==='MC-22B-DC24'){
       COIL('coil',`${tag} COIL`,'A1','A2',{deviceKind:'contactor'});
       NO('aux-no',`${tag} 13-14`,'13','14',{deviceKind:'contactor'});
       NC('aux-nc',`${tag} 21-22`,'21','22',{deviceKind:'contactor'});
@@ -69,7 +69,7 @@
       COIL('coil',`${tag} COIL`,'2','7',{deviceKind:type==='TIMER'?'timer':'flicker'});
       CHANGE('c1',`${tag} 1/3/4`,'1','3','4',{deviceKind:'timer-contact'});
       CHANGE('c2',`${tag} 8/6/5`,'8','6','5',{deviceKind:'timer-contact'});
-    }else if(type==='EOCR'){
+    }else if(type==='EOCR'||type==='EOCR3DE-05DUH'){
       COIL('coil',`${tag} POWER`,'A1','A2',{deviceKind:'protection'});
       NC('trip-nc',`${tag} 95-96`,'95','96',{deviceKind:'protection'});
       if(existingTermSet(def).has('98'))NO('trip-no',`${tag} 97-98`,'97','98',{deviceKind:'protection'});
@@ -119,6 +119,89 @@
     return [...s];
   }
 
+  function filterSequenceElements(elements=[],options={}){
+    if(!options.controlOnly)return [...elements];
+    return elements.filter(item=>item?.deviceKind!=='main-contact');
+  }
+
+  function powerElementsForDevice(devId,dev={},def={}){
+    const type=dev.type||'';
+    const tag=deviceTag(devId,dev,def);
+    const valid=existingTermSet(def);
+    const out=[];
+    const add=(id,kind,label,poles,extra={})=>{
+      const terminals=(poles.every(pole=>pole.length===2)
+        ? [...poles.map(pole=>pole[0]),...poles.map(pole=>pole[1])]
+        : poles.flat()).map(String);
+      if(terminals.every(term=>valid.has(term)))out.push({id,kind,label,terminals,poles:poles.map(pair=>pair.map(String)),...extra});
+    };
+    if(type==='MCCB'){
+      add('power','breaker-3p',`${tag} · 3P`,[['L1','T1'],['L2','T2'],['L3','T3']],{deviceKind:'power-protection'});
+    }else if(type==='MCCB1P'){
+      add('power','breaker-2p',`${tag} · L/N`,[['L',"L'"],['N',"N'"]],{deviceKind:'power-protection'});
+    }else if(type==='FUSE'){
+      add('power','fuse-2p',`${tag} · L/N`,[['L-IN','L-OUT'],['N-IN','N-OUT']],{deviceKind:'power-protection'});
+    }else if(type==='FUSE-1'){
+      add('power','fuse-1p',tag,[['IN','OUT']],{deviceKind:'power-protection'});
+    }else if(type==='MC'||type==='MC-22B-DC24'){
+      add('power','contactor-3p',`${tag} · 3극`,[['1L1','2T1'],['3L2','4T2'],['5L3','6T3']],{deviceKind:'power-switch'});
+    }else if(type==='EOCR'){
+      add('power','overload-3p',`${tag} · R/S/T`,[['R-IN','R-OUT'],['S-IN','S-OUT'],['T-IN','T-OUT']],{deviceKind:'power-protection'});
+    }else if(type==='EOCR3DE-05DUH'){
+      add('power','overload-3p',`${tag} · L1/L2/L3`,[['L1-IN','L1-OUT'],['L2-IN','L2-OUT'],['L3-IN','L3-OUT']],{deviceKind:'power-protection'});
+    }else if(type==='MOTOR-3P'){
+      const phases=['U','V','W'];
+      if(phases.every(term=>valid.has(term))){
+        const terminals=valid.has('PE')?[...phases,'PE']:phases;
+        out.push({id:'power',kind:'motor-3p',label:`${tag} · M 3~`,terminals,poles:phases.map(term=>[term]),deviceKind:'power-load'});
+      }
+    }else if(type==='GND-BAR'||type==='TB-PE-10'||type==='UT-2.5-PE'){
+      const terminals=(def.terminals||[]).filter(term=>term.pol==='PE').map(term=>String(term.id));
+      if(terminals.length)out.push({id:'earth',kind:'earth',label:`${tag} · PE`,terminals,poles:terminals.map(term=>[term]),deviceKind:'protective-earth'});
+    }else if(type==='MDR-100'||type==='PSU24'||type==='TB-N-10'||type==='TB-PE-10'){
+      out.push(block('power',tag,(def.terminals||[]).map(term=>term.id),{deviceKind:'power'}));
+    }
+    return out;
+  }
+
+  function combinedSequenceElementsForDevice(devId,dev={},def={},options={}){
+    const power=powerElementsForDevice(devId,dev,def);
+    const control=filterSequenceElements(
+      sequenceElementsForDevice(devId,dev,def,options),
+      {controlOnly:true}
+    ).filter(item=>item.deviceKind!=='power');
+    return [...power,...control];
+  }
+
+  function buildSequenceCatalog(devices={},library={},wires=[],options={}){
+    const groups=[];
+    for(const [deviceId,device] of Object.entries(devices||{})){
+      const definition=library?.[device?.type];
+      if(!definition)continue;
+      const connectedTerminals=connectedTermsForDevice(deviceId,wires);
+      const elements=options.mode==='power'
+        ? powerElementsForDevice(deviceId,device,definition)
+        : options.mode==='combined'
+          ? combinedSequenceElementsForDevice(deviceId,device,definition,{connectedTerminals})
+          : filterSequenceElements(sequenceElementsForDevice(deviceId,device,definition,{connectedTerminals}),options);
+      if(!elements.length)continue;
+      groups.push({
+        deviceId,
+        type:device.type,
+        label:deviceTag(deviceId,device,definition),
+        category:definition.cat||'',
+        elements:elements.map(element=>({
+          id:element.id,
+          key:`${deviceId}::${element.id}`,
+          kind:element.kind,
+          label:element.label,
+          terminals:[...element.terminals]
+        }))
+      });
+    }
+    return groups;
+  }
+
   function buildIoRows(devices={},library={},wires=[],rackAddressResolver){
     const rows=[];
     for(const [id,dev] of Object.entries(devices||{})){
@@ -161,6 +244,7 @@
 
   return {
     deviceTag,termLabel,sequenceElementsForDevice,schematicNodeForDevice,
-    connectedTermsForDevice,buildIoRows,routeOrthogonal,normalizeDiagramLayouts,unique
+    connectedTermsForDevice,filterSequenceElements,powerElementsForDevice,combinedSequenceElementsForDevice,buildSequenceCatalog,
+    buildIoRows,routeOrthogonal,normalizeDiagramLayouts,unique
   };
 });

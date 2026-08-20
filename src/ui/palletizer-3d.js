@@ -241,8 +241,8 @@
     P.parts.proceduralModel.visible=false;P.parts.machine=model;P.parts.blenderModel=model;
     P.parts.xCarriage=xCarriage;P.parts.yCarriage=yCarriage;P.parts.zSlide=zSlide;P.parts.gripper=gripper;P.parts.jaws=[jawL,jawR];
     P.parts.axisBindings={X:resolveWorldAxisBinding(xCarriage,'X'),Y:resolveWorldAxisBinding(yCarriage,'Y'),Z:resolveWorldAxisBinding(zSlide,'Z')};
-    P.parts.jawBindings=[jawL,jawR].map(node=>({node,open:finite(node.position.x),closed:finite(node.position.x)*.55}));
-    gripper.add(P.parts.heldBox);gripper.updateMatrixWorld(true);const heldWorld=new Three.Vector3();gripper.getWorldPosition(heldWorld);heldWorld.y-=1.18;gripper.worldToLocal(heldWorld);P.parts.heldBox.position.copy(heldWorld);P.parts.heldBox.visible=false;
+    P.parts.jawBindings=[jawL,jawR].map(node=>({node,open:finite(node.userData?.openX,node.position.x),closed:finite(node.userData?.closedX,node.position.x*.91)}));
+    gripper.add(P.parts.heldBox);gripper.updateMatrixWorld(true);const heldWorld=new Three.Vector3();gripper.getWorldPosition(heldWorld);heldWorld.y-=1.516;gripper.worldToLocal(heldWorld);P.parts.heldBox.position.copy(heldWorld);P.parts.heldBox.visible=false;
     P.parts.detailStats={safetyPosts:4,energyChains:3,linearRails:6,servoMotors:3,gripperComponents:10};
     P.renderDirty=true;
   }
@@ -428,7 +428,7 @@
   function updateMachine(){
     if(!P.parts.axisBindings)return;const a=P.state.axes;
     for(const name of ['X','Y','Z']){const binding=P.parts.axisBindings[name];setAxisWorldCoordinate(binding,axisSceneCoordinate(name,a[name]));}
-    const closed=P.state.gripper.closed;for(const binding of P.parts.jawBindings||[])binding.node.position.x=closed?binding.closed:binding.open;
+    const closed=P.state.gripper.holding;for(const binding of P.parts.jawBindings||[])binding.node.position.x=closed?binding.closed:binding.open;
     P.parts.heldBox.visible=!!P.state.gripper.holding;P.parts.pickBox.visible=!P.state.gripper.holding&&P.state.pallet.nextIndex<Runtime.palletCapacity(P.state);
     setLed(P.parts.leds.xHome,a.X.negLimit,a.X.alarm);setLed(P.parts.leds.xLimit,a.X.posLimit,a.X.alarm);
     setLed(P.parts.leds.yHome,a.Y.negLimit,a.Y.alarm);setLed(P.parts.leds.yLimit,a.Y.posLimit,a.Y.alarm);

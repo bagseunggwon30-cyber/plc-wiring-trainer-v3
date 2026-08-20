@@ -27,6 +27,28 @@ test('Blender palletizer GLB exposes the exact nested runtime motion hierarchy',
   assert.equal(parentName('Jaw_R'),'Gripper');
 });
 
+test('Blender palletizer GLB includes production-scale mechanical and safety detail',()=>{
+  const json=parseGlbJson(glb),names=new Set(json.nodes.map(node=>node.name));
+  for(const name of [
+    'X_Axis_Nameplate',
+    'Column_BaseBracket_-5.0',
+    'Vacuum_Manifold',
+    'Vacuum_Cup_1',
+    'Vacuum_PressureSwitch',
+    'Z_Telescopic_InnerRam',
+    'Z_Bellows_01',
+    'Front_Safety_Gate',
+    'Gate_Interlock',
+    'Cabinet_Equipment_Label'
+  ])assert.equal(names.has(name),true,`${name} missing from high-detail palletizer asset`);
+});
+
+test('vacuum cups, held box, and auxiliary jaws share the calibrated pick contact plane',()=>{
+  assert.match(ui,/closed:finite\(node\.userData\?\.closedX,node\.position\.x\*\.91\)/);
+  assert.match(ui,/heldWorld\.y-=1\.516/);
+  assert.match(ui,/const closed=P\.state\.gripper\.holding/);
+});
+
 test('palletizer waits for a late imported-model loader and provides retry diagnostics',()=>{
   assert.match(ui,/plc-trainer-imported-models-ready/);
   assert.match(ui,/installModelLoaderWait\(\)/);

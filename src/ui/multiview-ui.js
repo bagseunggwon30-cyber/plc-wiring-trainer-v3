@@ -48,6 +48,7 @@
       #mv-io tr:nth-child(even){background:#f3f6f8}
       .mv-node .mv-box{fill:#fcfcfa;stroke:#3a4a56;stroke-width:1.5}
       .mv-node.selected .mv-box{stroke:#f60;stroke-width:2.5}
+      .mv-node.focused .mv-box{stroke:#168de2;stroke-width:3;filter:drop-shadow(0 0 4px #5ab8f5)}
       .mv-node-head{fill:#324b5e;cursor:move}
       .mv-node-title{fill:#fff;font-size:12px;font-weight:700;pointer-events:none}
       .mv-node-sub{fill:#50606a;font-size:9px;pointer-events:none}
@@ -67,11 +68,18 @@
       .mv-symbol-label{font-size:10px;fill:#23313b;font-weight:700;pointer-events:none;text-anchor:middle}
       .mv-ladder-rail{stroke:#aa2222;stroke-width:3;fill:none}
       .mv-ladder-label{font-size:11px;fill:#a22;font-weight:700}
+      .mv-power-rail-label{font-size:10px;font-weight:800}
+      .mv-sequence-section{stroke-width:1.4;stroke-dasharray:7 5}
+      .mv-sequence-section-title{font-size:14px;font-weight:800;letter-spacing:.4px}
+      .mv-junction-dot{fill:#111;stroke:#fff;stroke-width:1;pointer-events:none}
       .mv-grid-minor{stroke:#ecebe5;stroke-width:1}.mv-grid-major{stroke:#ddd9ce;stroke-width:1}
       body.mv-diagram #palette{background:#16222b}
       body.mv-palletizer-mode{grid-template-columns:0 minmax(0,1fr) 0!important;overflow:hidden}
+      body.mv-sequence-editor-mode{grid-template-columns:0 minmax(0,1fr) 0!important;overflow:hidden}
       body.mv-palletizer-mode header{min-width:0;max-width:100vw;overflow-x:hidden}
+      body.mv-sequence-editor-mode header{min-width:0;max-width:100vw;overflow-x:hidden}
       body.mv-palletizer-mode #palette,body.mv-palletizer-mode #right{visibility:hidden!important;overflow:hidden!important;box-sizing:border-box!important;min-width:0!important;width:0!important;padding:0!important;border:0!important;margin:0!important}
+      body.mv-sequence-editor-mode #palette,body.mv-sequence-editor-mode #right{visibility:hidden!important;overflow:hidden!important;box-sizing:border-box!important;min-width:0!important;width:0!important;padding:0!important;border:0!important;margin:0!important}
       body.mv-palletizer-mode #stage{min-width:0;min-height:0}
     `;
     document.head.appendChild(st);
@@ -86,7 +94,7 @@
     group.innerHTML='<span style="color:#8fb3c9;font-size:10px">보기</span>'+
       '<button class="mv-view-btn active" data-view="panel" title="실물 제어반 배치와 단자 결선">🧰 실물</button>'+
       '<button class="mv-view-btn" data-view="schematic" title="종이 결선도처럼 장비 심볼과 단자를 연결">📄 결선도</button>'+
-      '<button class="mv-view-btn" data-view="sequence" title="NO/NC/코일 중심 시퀀스 회로">🔁 시퀀스</button>'+
+      '<button class="mv-view-btn" data-view="sequence" title="빈 도면에서 동력·제어 회로를 직접 작성">✏️ 시퀀스 편집기</button>'+
       '<button class="mv-view-btn" data-view="io" title="PLC I/O 주소와 연결표">I/O</button>'+
       '<button class="mv-view-btn" data-view="palletizer" title="3축 팔레타이징·2축 서보·MPS·공압 제어 실습">🏭 자동화 실습실</button>';
     if(badge?.nextSibling)header.insertBefore(group,badge.nextSibling); else header.appendChild(group);
@@ -114,6 +122,7 @@
       </svg>
       <div id="mv-io"></div>
       <div id="mv-palletizer"></div>
+      <div id="mv-sequence-editor"></div>
       <div id="mv-hint">단자 ○ 클릭 → 다른 단자 ○ 클릭 = 실제 제어반의 같은 와이어가 생성됩니다. 심볼 제목을 드래그하면 종이 배치만 이동합니다.</div>`;
     stage.appendChild(wrap);
 
@@ -140,13 +149,15 @@
     wrap.classList.toggle('show',view!=='panel');
     io.classList.toggle('show',view==='io');
     palletizer?.classList.toggle('show',view==='palletizer');
-    svgEl.style.display=(view==='schematic'||view==='sequence')?'block':'none';
-    toolbar.style.display=(view==='schematic'||view==='sequence')?'flex':'none';
-    hint.style.display=(view==='schematic'||view==='sequence')?'block':'none';
+    svgEl.style.display=view==='schematic'?'block':'none';
+    toolbar.style.display=view==='schematic'?'flex':'none';
+    hint.style.display=view==='schematic'?'block':'none';
+    window.PLCTrainerSequenceEditor?.setVisible?.(view==='sequence');
     if(window.PLCTrainerAutomationLabs)window.PLCTrainerAutomationLabs.setVisible?.(view==='palletizer');
     else window.PLCTrainerPalletizer3D?.setVisible?.(view==='palletizer');
     document.body.classList.toggle('mv-diagram',view!=='panel');
     document.body.classList.toggle('mv-palletizer-mode',view==='palletizer');
+    document.body.classList.toggle('mv-sequence-editor-mode',view==='sequence');
     q('#mv-view-group')?.querySelectorAll('.mv-view-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
     if(view==='panel'){
       status('실물 제어반 보기 · 기존 장비/결선 편집');
@@ -155,9 +166,13 @@
     }
     MV.pending=null; MV.selectedWire=null;
     renderActive();
-    if(view==='schematic'||view==='sequence')requestAnimationFrame(()=>fitCurrent(false));
-    const title=view==='schematic'?'종이 결선도':view==='sequence'?'시퀀스 회로':view==='io'?'PLC I/O 연결표':'자동화 제어 실습실';
-    status(view==='palletizer'?`${title} · 3축/2축 서보 · MPS · 공압 · LS/Mitsubishi 내부 주소 이미지`:`${title} 보기 · 같은 S.wires Netlist와 실시간 동기화`);
+    if(view==='schematic')requestAnimationFrame(()=>fitCurrent(false));
+    const title=view==='schematic'?'종이 결선도':view==='sequence'?'전기 시퀀스 편집기':view==='io'?'PLC I/O 연결표':'자동화 제어 실습실';
+    status(view==='palletizer'
+      ?`${title} · 3축/2축 서보 · MPS · 공압 · LS/Mitsubishi 내부 주소 이미지`
+      :view==='sequence'
+        ?`${title} · 빈 도면에서 동력·제어 도형과 결선을 직접 작성`
+        :`${title} 보기 · 같은 S.wires Netlist와 실시간 동기화`);
   }
 
   function currentLayout(){ensureState();return S.diagramLayouts[MV.view]||{};}
@@ -201,6 +216,17 @@
     const tt=document.createElementNS(NS,'title');tt.textContent=`${label||termId} · ${pol||'일반'} · ${devId}.${termId}`;c.appendChild(tt);
   }
 
+  function drawVerticalPort(g,devId,termId,x,y,label,placement,pol){
+    const key=`${devId}.${termId}`;
+    MV.portMap.set(key,{x,y,dev:devId,term:String(termId),axis:'vertical'});
+    const live=typeof SIM!=='undefined'&&SIM.liveTerms?.has?.(key);
+    const c=svg('circle',{cx:x,cy:y,r:5.5,className:`mv-port${MV.pending&&MV.pending.dev===devId&&String(MV.pending.term)===String(termId)?' pending':''}${live?' live':''}`});
+    c.dataset.dev=devId;c.dataset.term=termId;c.dataset.port='1';g.appendChild(c);
+    const textY=placement==='top'?y-9:y+14;
+    g.appendChild(svg('text',{x,y:textY,'text-anchor':'middle',className:'mv-term-label'},String(termId)));
+    const tt=document.createElementNS(NS,'title');tt.textContent=`${label||termId} · ${pol||'일반'} · ${devId}.${termId}`;c.appendChild(tt);
+  }
+
   function renderSchematic(){
     const nodeG=q('#mv-nodes'), wireG=q('#mv-wires'); nodeG.innerHTML='';wireG.innerHTML='';MV.portMap.clear();MV.nodeBounds.clear();
     const models=schematicModels();ensureSchematicLayout(models);
@@ -225,12 +251,78 @@
     for(const [devId,dev] of Object.entries(S.devices)){
       const def=LIB[dev.type];if(!def)continue;
       const connected=Core.connectedTermsForDevice(devId,S.wires);
-      const elems=Core.sequenceElementsForDevice(devId,dev,def,{connectedTerminals:connected});
+      const elems=MV.sequenceMode==='power'
+        ? Core.powerElementsForDevice(devId,dev,def)
+        : MV.sequenceMode==='combined'
+          ? Core.combinedSequenceElementsForDevice(devId,dev,def,{connectedTerminals:connected})
+          : Core.filterSequenceElements(Core.sequenceElementsForDevice(devId,dev,def,{connectedTerminals:connected}),{controlOnly:!MV.showAllTerminals});
       for(const el of elems)arr.push({devId,dev,def,el,key:itemKey(devId,el.id)});
     }
     return arr;
   }
+
+  function setSequenceMode(mode){
+    MV.sequenceMode=mode==='power'?'power':mode==='control'?'control':'combined';MV.focusedSequenceKey=null;
+    q('#mv-sequence-combined')?.classList.toggle('active',MV.sequenceMode==='combined');
+    q('#mv-sequence-control')?.classList.toggle('active',MV.sequenceMode==='control');
+    q('#mv-sequence-power')?.classList.toggle('active',MV.sequenceMode==='power');
+    const all=q('#mv-all-terminals');if(all)all.style.display=MV.sequenceMode==='control'?'inline-block':'none';
+    renderActive();fitCurrent(false);
+    status(MV.sequenceMode==='power'
+      ? '동력 회로 · L/N·R/S/T·PE 실제 장비 단자 도형'
+      : MV.sequenceMode==='control'
+        ? '제어 시퀀스 · NO/NC·코일 실제 장비 단자 도형'
+        : '이전 자동 생성 시퀀스 보기는 더 이상 사용하지 않습니다.');
+  }
+
+  const sequenceKindLabel=kind=>({
+    'contact-no':'NO','contact-nc':'NC','contact-changeover':'전환','coil':'COIL',load:'LOAD',block:'I/O',
+    'breaker-3p':'MCCB 3P','breaker-2p':'MCCB 2P','fuse-2p':'FUSE 2P','fuse-1p':'FUSE',
+    'contactor-3p':'MC 3P','overload-3p':'EOCR','motor-3p':'M 3~',earth:'PE'
+  })[kind]||kind;
+
+  function renderSequenceLibrary(catalog){
+    const panel=q('#mv-sequence-library'),list=q('#mv-sequence-list'),summary=q('.mv-library-summary');
+    if(!panel||!list||MV.view!=='sequence')return;
+    const groups=catalog||Core.buildSequenceCatalog(S.devices,LIB,S.wires,{mode:MV.sequenceMode,controlOnly:!MV.showAllTerminals});
+    const query=String(q('#mv-sequence-search')?.value||'').trim().toLocaleLowerCase('ko');
+    const visible=[];
+    for(const group of groups){
+      const elements=group.elements.filter(element=>!query||`${group.label} ${group.type} ${element.label} ${element.kind} ${element.terminals.join(' ')}`.toLocaleLowerCase('ko').includes(query));
+      if(elements.length)visible.push({...group,elements});
+    }
+    list.replaceChildren();
+    const count=visible.reduce((sum,group)=>sum+group.elements.length,0);
+    const modeLabel=MV.sequenceMode==='power'?'동력':MV.sequenceMode==='control'?'제어':'통합';
+    summary.textContent=`${modeLabel} 장비 ${groups.length}대 · 사용 가능한 도형 ${count}개 · 실제 단자 연동`;
+    if(!visible.length){const empty=document.createElement('div');empty.className='mv-library-empty';empty.textContent='검색 조건에 맞는 장비 도형이 없습니다.';list.appendChild(empty);return;}
+    for(const group of visible){
+      const section=document.createElement('section');section.className='mv-library-device';
+      const heading=document.createElement('h4');heading.textContent=group.label;
+      const type=document.createElement('small');type.textContent=group.type;heading.appendChild(type);section.appendChild(heading);
+      for(const element of group.elements){
+        const button=document.createElement('button');button.type='button';button.className=`mv-library-symbol${MV.focusedSequenceKey===element.key?' active':''}`;button.dataset.key=element.key;
+        const kind=document.createElement('span');kind.className='mv-symbol-kind';kind.textContent=sequenceKindLabel(element.kind);
+        const label=document.createElement('span');label.textContent=`${element.label} · ${element.terminals.join(' / ')}`;
+        button.append(kind,label);button.onclick=()=>focusSequenceSymbol(element.key);section.appendChild(button);
+      }
+      list.appendChild(section);
+    }
+  }
+
+  function focusSequenceSymbol(key){
+    const bounds=MV.nodeBounds.get(key);if(!bounds)return;
+    MV.focusedSequenceKey=key;renderSequence();
+    const el=q('#mv-svg'),rect=el.getBoundingClientRect(),zoom=Math.max(.8,MV.pan.sequence.k);
+    MV.pan.sequence={x:bounds.x+bounds.w/2-rect.width/(2*zoom),y:bounds.y+bounds.h/2-rect.height/(2*zoom),k:zoom};
+    applyDiagramViewBox();status(`시퀀스 도형 선택: ${key} · 제목을 드래그해 배치하고 단자 ○를 연결하세요`);
+  }
   function seqSize(item){
+    if(['breaker-3p','contactor-3p','overload-3p'].includes(item.el.kind))return {w:230,h:130};
+    if(['breaker-2p','fuse-2p'].includes(item.el.kind))return {w:230,h:108};
+    if(item.el.kind==='fuse-1p')return {w:230,h:84};
+    if(item.el.kind==='motor-3p')return {w:210,h:150};
+    if(item.el.kind==='earth')return {w:230,h:Math.max(110,48+Math.ceil(item.el.terminals.length/2)*19)};
     if(item.el.kind==='block'){
       const half=Math.ceil(item.el.terminals.length/2);
       return {w:260,h:Math.max(85,50+half*19)};
@@ -283,14 +375,187 @@
     g.appendChild(svg('line',{x1:m-12,y1:y+12,x2:m+12,y2:y-12,className:'mv-symbol-line'}));
     g.appendChild(svg('line',{x1:m+18,y1:y,x2:p.x+size.w-18,y2:y,className:'mv-symbol-line'}));
   }
+
+  function terminalPol(item,term){return (item.def.terminals||[]).find(candidate=>String(candidate.id)===String(term))?.pol;}
+  function drawPowerSymbol(g,p,size,item){
+    const kind=item.el.kind;
+    g.appendChild(svg('rect',{x:p.x,y:p.y,width:size.w,height:size.h,rx:4,className:'mv-box'}));
+    const head=svg('rect',{x:p.x,y:p.y,width:size.w,height:24,rx:4,className:'mv-node-head'});head.dataset.dragKey=item.key;g.appendChild(head);
+    g.appendChild(svg('text',{x:p.x+size.w/2,y:p.y+17,className:'mv-symbol-label'},item.el.label));
+    if(kind==='motor-3p'){
+      const cx=p.x+size.w*.62,cy=p.y+82;
+      g.appendChild(svg('circle',{cx,cy,r:39,className:'mv-symbol-line'}));
+      g.appendChild(svg('text',{x:cx,y:cy-2,'text-anchor':'middle',className:'mv-symbol-label'},'M'));
+      g.appendChild(svg('text',{x:cx,y:cy+17,'text-anchor':'middle',className:'mv-term-label'},'3~'));
+      ['U','V','W'].filter(term=>item.el.terminals.includes(term)).forEach((term,index)=>{const y=p.y+50+index*25;drawPort(g,item.devId,term,p.x+8,y,Core.termLabel(item.def,term),'L',terminalPol(item,term));g.appendChild(svg('line',{x1:p.x+14,y1:y,x2:cx-35,y2:cy-20+index*20,className:'mv-symbol-line'}));});
+      if(item.el.terminals.includes('PE')){const y=p.y+126;drawPort(g,item.devId,'PE',p.x+size.w-8,y,Core.termLabel(item.def,'PE'),'R','PE');g.appendChild(svg('line',{x1:cx+25,y1:cy+30,x2:p.x+size.w-14,y2:y,className:'mv-symbol-line'}));}
+      return;
+    }
+    if(kind==='earth'){
+      const terminals=item.el.terminals,half=Math.ceil(terminals.length/2);
+      terminals.slice(0,half).forEach((term,index)=>drawPort(g,item.devId,term,p.x+8,p.y+45+index*19,Core.termLabel(item.def,term),'L','PE'));
+      terminals.slice(half).forEach((term,index)=>drawPort(g,item.devId,term,p.x+size.w-8,p.y+45+index*19,Core.termLabel(item.def,term),'R','PE'));
+      const x=p.x+size.w/2,y=p.y+size.h-20;g.appendChild(svg('line',{x1:x,y1:p.y+38,x2:x,y2:y-12,className:'mv-symbol-line'}));
+      [24,16,8].forEach((width,index)=>g.appendChild(svg('line',{x1:x-width/2,y1:y+index*5,x2:x+width/2,y2:y+index*5,className:'mv-symbol-line'})));
+      return;
+    }
+    const poles=item.el.poles||[];
+    poles.forEach((pole,index)=>{
+      if(pole.length<2)return;const [from,to]=pole,y=p.y+47+index*24,m=p.x+size.w/2;
+      drawPort(g,item.devId,from,p.x+8,y,Core.termLabel(item.def,from),'L',terminalPol(item,from));
+      drawPort(g,item.devId,to,p.x+size.w-8,y,Core.termLabel(item.def,to),'R',terminalPol(item,to));
+      g.appendChild(svg('line',{x1:p.x+14,y1:y,x2:m-20,y2:y,className:'mv-symbol-line'}));
+      g.appendChild(svg('line',{x1:m+20,y1:y,x2:p.x+size.w-14,y2:y,className:'mv-symbol-line'}));
+      if(kind.startsWith('breaker')){
+        g.appendChild(svg('circle',{cx:m-18,cy:y,r:2.5,fill:'#111'}));g.appendChild(svg('circle',{cx:m+18,cy:y,r:2.5,fill:'#111'}));
+        g.appendChild(svg('line',{x1:m-16,y1:y-2,x2:m+14,y2:y-13,className:'mv-contact-line'}));
+      }else if(kind==='contactor-3p'){
+        g.appendChild(svg('line',{x1:m-18,y1:y-12,x2:m-18,y2:y+12,className:'mv-contact-line'}));g.appendChild(svg('line',{x1:m+18,y1:y-12,x2:m+18,y2:y+12,className:'mv-contact-line'}));
+      }else if(kind==='overload-3p'){
+        g.appendChild(svg('path',{d:`M ${m-20} ${y} l 8 -9 l 8 18 l 8 -18 l 8 9`,className:'mv-symbol-line'}));
+      }else if(kind.startsWith('fuse')){
+        g.appendChild(svg('rect',{x:m-20,y:y-9,width:40,height:18,className:'mv-symbol-line'}));
+      }
+    });
+    if(kind==='contactor-3p'&&poles.length>1){const m=p.x+size.w/2;g.appendChild(svg('line',{x1:m,y1:p.y+36,x2:m,y2:p.y+106,stroke:'#555','stroke-dasharray':'4 4','stroke-width':1.2}));}
+  }
+
+  const classicPowerKinds=new Set(['breaker-3p','breaker-2p','fuse-2p','fuse-1p','contactor-3p','overload-3p','motor-3p','earth']);
+  const isClassicPowerItem=item=>classicPowerKinds.has(item.el.kind)||(item.el.kind==='block'&&item.el.deviceKind==='power');
+  const classicLayoutKey=key=>`combined::${key}`;
+  function classicSize(item){
+    if(['breaker-3p','contactor-3p','overload-3p'].includes(item.el.kind))return {w:180,h:122};
+    if(['breaker-2p','fuse-2p'].includes(item.el.kind))return {w:160,h:112};
+    if(item.el.kind==='fuse-1p')return {w:140,h:100};
+    if(item.el.kind==='motor-3p')return {w:190,h:158};
+    if(item.el.kind==='earth')return {w:150,h:118};
+    if(item.el.kind==='block')return {w:220,h:Math.max(92,52+Math.ceil(item.el.terminals.length/2)*18)};
+    return {w:142,h:item.el.kind==='contact-changeover'?116:100};
+  }
+  function ensureClassicSequenceLayout(items){
+    const lay=S.diagramLayouts.sequence;
+    const power=items.filter(isClassicPowerItem),control=items.filter(item=>!isClassicPowerItem(item));
+    const stages={
+      'breaker-3p':0,'breaker-2p':0,'fuse-2p':0,'fuse-1p':0,
+      'contactor-3p':1,'overload-3p':2,'motor-3p':3,earth:4,block:1
+    };
+    const stageCounts=new Map();
+    for(const item of power){
+      const stage=stages[item.el.kind]??1,index=stageCounts.get(stage)||0;stageCounts.set(stage,index+1);
+      const key=classicLayoutKey(item.key);if(!lay[key])lay[key]={x:70+index*220,y:150+stage*150};
+    }
+    const upstream=control.filter(item=>!['coil','load'].includes(item.el.kind));
+    const sinks=control.filter(item=>['coil','load'].includes(item.el.kind));
+    const columns=Math.min(6,Math.max(1,upstream.length,sinks.length));
+    upstream.forEach((item,index)=>{const key=classicLayoutKey(item.key);if(!lay[key])lay[key]={x:560+(index%6)*155,y:150+Math.floor(index/6)*118};});
+    sinks.forEach((item,index)=>{const key=classicLayoutKey(item.key);if(!lay[key])lay[key]={x:560+(index%6)*155,y:560+Math.floor(index/6)*118};});
+    return {power,control,controlColumns:columns,controlRows:Math.max(Math.ceil(upstream.length/6),Math.ceil(sinks.length/6),1)};
+  }
+  function drawClassicPowerSymbol(g,p,size,item){
+    const kind=item.el.kind;
+    g.appendChild(svg('rect',{x:p.x,y:p.y,width:size.w,height:size.h,rx:5,fill:'#fff','fill-opacity':.82,stroke:'#7892a5','stroke-width':1.1}));
+    const head=svg('rect',{x:p.x,y:p.y,width:size.w,height:23,rx:5,className:'mv-node-head'});head.dataset.dragKey=classicLayoutKey(item.key);g.appendChild(head);
+    g.appendChild(svg('text',{x:p.x+size.w/2,y:p.y+16,className:'mv-symbol-label'},item.el.label));
+    if(kind==='motor-3p'){
+      const phases=['U','V','W'].filter(term=>item.el.terminals.includes(term)),cx=p.x+size.w/2,cy=p.y+101;
+      phases.forEach((term,index)=>{const x=cx+(index-1)*38;drawVerticalPort(g,item.devId,term,x,p.y+36,Core.termLabel(item.def,term),'top',terminalPol(item,term));g.appendChild(svg('line',{x1:x,y1:p.y+42,x2:cx+(index-1)*20,y2:cy-35,className:'mv-symbol-line'}));});
+      g.appendChild(svg('circle',{cx,cy,r:37,className:'mv-symbol-line'}));g.appendChild(svg('text',{x:cx,y:cy-1,'text-anchor':'middle',className:'mv-symbol-label'},'M'));g.appendChild(svg('text',{x:cx,y:cy+16,'text-anchor':'middle',className:'mv-term-label'},'3~'));
+      if(item.el.terminals.includes('PE')){drawVerticalPort(g,item.devId,'PE',p.x+size.w-20,p.y+size.h-18,Core.termLabel(item.def,'PE'),'bottom','PE');g.appendChild(svg('line',{x1:cx+26,y1:cy+27,x2:p.x+size.w-20,y2:p.y+size.h-24,className:'mv-symbol-line'}));}
+      return;
+    }
+    if(kind==='earth'){
+      const terminals=item.el.terminals.slice(0,4),cx=p.x+size.w/2;
+      terminals.forEach((term,index)=>{const x=cx+(index-(terminals.length-1)/2)*30;drawVerticalPort(g,item.devId,term,x,p.y+36,Core.termLabel(item.def,term),'top','PE');g.appendChild(svg('line',{x1:x,y1:p.y+42,x2:cx,y2:p.y+70,className:'mv-symbol-line'}));});
+      g.appendChild(svg('line',{x1:cx,y1:p.y+70,x2:cx,y2:p.y+86,className:'mv-symbol-line'}));
+      [34,22,10].forEach((width,index)=>g.appendChild(svg('line',{x1:cx-width/2,y1:p.y+88+index*7,x2:cx+width/2,y2:p.y+88+index*7,className:'mv-symbol-line'})));
+      return;
+    }
+    if(kind==='block'){
+      const terms=item.el.terminals,half=Math.ceil(terms.length/2);
+      terms.slice(0,half).forEach((term,index)=>drawPort(g,item.devId,term,p.x+8,p.y+42+index*18,Core.termLabel(item.def,term),'L',terminalPol(item,term)));
+      terms.slice(half).forEach((term,index)=>drawPort(g,item.devId,term,p.x+size.w-8,p.y+42+index*18,Core.termLabel(item.def,term),'R',terminalPol(item,term)));
+      return;
+    }
+    const poles=item.el.poles||[],center=p.x+size.w/2,top=p.y+36,bottom=p.y+size.h-17;
+    poles.forEach((pole,index)=>{
+      if(pole.length<2)return;const [from,to]=pole,x=center+(index-(poles.length-1)/2)*42,mid=(top+bottom)/2;
+      drawVerticalPort(g,item.devId,from,x,top,Core.termLabel(item.def,from),'top',terminalPol(item,from));
+      drawVerticalPort(g,item.devId,to,x,bottom,Core.termLabel(item.def,to),'bottom',terminalPol(item,to));
+      g.appendChild(svg('line',{x1:x,y1:top+6,x2:x,y2:mid-18,className:'mv-symbol-line'}));g.appendChild(svg('line',{x1:x,y1:mid+18,x2:x,y2:bottom-6,className:'mv-symbol-line'}));
+      if(kind.startsWith('breaker')){g.appendChild(svg('circle',{cx:x,cy:mid-16,r:2.5,fill:'#111'}));g.appendChild(svg('circle',{cx:x,cy:mid+16,r:2.5,fill:'#111'}));g.appendChild(svg('line',{x1:x-1,y1:mid-14,x2:x+12,y2:mid+10,className:'mv-contact-line'}));}
+      else if(kind==='contactor-3p'){g.appendChild(svg('line',{x1:x-12,y1:mid-12,x2:x+12,y2:mid-12,className:'mv-contact-line'}));g.appendChild(svg('line',{x1:x-12,y1:mid+12,x2:x+12,y2:mid+12,className:'mv-contact-line'}));}
+      else if(kind==='overload-3p'){g.appendChild(svg('path',{d:`M ${x} ${mid-18} l -8 8 l 16 8 l -16 8 l 8 8`,className:'mv-symbol-line'}));}
+      else if(kind.startsWith('fuse'))g.appendChild(svg('rect',{x:x-9,y:mid-18,width:18,height:36,className:'mv-symbol-line'}));
+    });
+    if(poles.length>1&&['breaker-3p','contactor-3p'].includes(kind))g.appendChild(svg('line',{x1:center-52,y1:p.y+size.h/2,x2:center+52,y2:p.y+size.h/2,stroke:'#555','stroke-dasharray':'4 4','stroke-width':1.1}));
+  }
+  function drawClassicControlSymbol(g,p,size,item){
+    const kind=item.el.kind,cx=p.x+size.w/2,top=p.y+29,bottom=p.y+size.h-14,mid=(top+bottom)/2;
+    g.appendChild(svg('rect',{x:p.x,y:p.y,width:size.w,height:size.h,rx:5,fill:'#fff','fill-opacity':.86,stroke:'#b99f6b','stroke-width':1.1}));
+    const head=svg('rect',{x:p.x,y:p.y,width:size.w,height:22,rx:5,className:'mv-node-head'});head.dataset.dragKey=classicLayoutKey(item.key);g.appendChild(head);
+    g.appendChild(svg('text',{x:cx,y:p.y+15,className:'mv-symbol-label'},item.el.label));
+    if(kind==='block'){
+      const terms=item.el.terminals,half=Math.ceil(terms.length/2);
+      terms.slice(0,half).forEach((term,index)=>drawPort(g,item.devId,term,p.x+8,p.y+39+index*18,Core.termLabel(item.def,term),'L',terminalPol(item,term)));
+      terms.slice(half).forEach((term,index)=>drawPort(g,item.devId,term,p.x+size.w-8,p.y+39+index*18,Core.termLabel(item.def,term),'R',terminalPol(item,term)));
+      return;
+    }
+    if(kind==='contact-changeover'){
+      const [common,no,nc]=item.el.terminals;drawVerticalPort(g,item.devId,common,cx,top,Core.termLabel(item.def,common),'top',terminalPol(item,common));
+      drawVerticalPort(g,item.devId,no,cx-28,bottom,Core.termLabel(item.def,no),'bottom',terminalPol(item,no));drawVerticalPort(g,item.devId,nc,cx+28,bottom,Core.termLabel(item.def,nc),'bottom',terminalPol(item,nc));
+      g.appendChild(svg('line',{x1:cx,y1:top+6,x2:cx,y2:mid-8,className:'mv-symbol-line'}));g.appendChild(svg('line',{x1:cx,y1:mid-8,x2:cx-26,y2:bottom-8,className:'mv-contact-line'}));g.appendChild(svg('line',{x1:cx-28,y1:bottom-8,x2:cx-28,y2:bottom-5,className:'mv-symbol-line'}));g.appendChild(svg('line',{x1:cx+28,y1:mid+8,x2:cx+28,y2:bottom-5,className:'mv-symbol-line'}));return;
+    }
+    const [from,to]=item.el.terminals;drawVerticalPort(g,item.devId,from,cx,top,Core.termLabel(item.def,from),'top',terminalPol(item,from));drawVerticalPort(g,item.devId,to,cx,bottom,Core.termLabel(item.def,to),'bottom',terminalPol(item,to));
+    if(kind==='contact-no'||kind==='contact-nc'){
+      g.appendChild(svg('line',{x1:cx,y1:top+6,x2:cx,y2:mid-17,className:'mv-symbol-line'}));g.appendChild(svg('line',{x1:cx,y1:mid+17,x2:cx,y2:bottom-6,className:'mv-symbol-line'}));
+      g.appendChild(svg('circle',{cx,cy:mid-15,r:2.5,fill:'#111'}));g.appendChild(svg('circle',{cx,cy:mid+15,r:2.5,fill:'#111'}));g.appendChild(svg('line',{x1:cx-1,y1:mid-12,x2:cx+12,y2:mid+10,className:'mv-contact-line'}));
+      if(kind==='contact-nc')g.appendChild(svg('line',{x1:cx-14,y1:mid+13,x2:cx+14,y2:mid-13,className:'mv-contact-line'}));
+    }else if(kind==='coil'){
+      g.appendChild(svg('line',{x1:cx,y1:top+6,x2:cx,y2:mid-22,className:'mv-symbol-line'}));g.appendChild(svg('circle',{cx,cy:mid,r:22,className:'mv-symbol-line'}));g.appendChild(svg('text',{x:cx,y:mid+4,'text-anchor':'middle',className:'mv-symbol-label'},'COIL'));g.appendChild(svg('line',{x1:cx,y1:mid+22,x2:cx,y2:bottom-6,className:'mv-symbol-line'}));
+    }else if(kind==='load'){
+      g.appendChild(svg('line',{x1:cx,y1:top+6,x2:cx,y2:mid-20,className:'mv-symbol-line'}));g.appendChild(svg('circle',{cx,cy:mid,r:20,className:'mv-symbol-line'}));g.appendChild(svg('line',{x1:cx-13,y1:mid-13,x2:cx+13,y2:mid+13,className:'mv-symbol-line'}));g.appendChild(svg('line',{x1:cx-13,y1:mid+13,x2:cx+13,y2:mid-13,className:'mv-symbol-line'}));g.appendChild(svg('line',{x1:cx,y1:mid+20,x2:cx,y2:bottom-6,className:'mv-symbol-line'}));
+    }
+  }
+  function drawSequenceJunctions(group){
+    const counts=new Map();
+    for(const wire of S.wires||[])for(const ref of [wire.from,wire.to]){const key=`${ref.dev}.${ref.term}`;counts.set(key,(counts.get(key)||0)+1);}
+    for(const [key,count] of counts)if(count>1){const port=MV.portMap.get(key);if(port)group.appendChild(svg('circle',{cx:port.x,cy:port.y,r:4.2,className:'mv-junction-dot'}));}
+  }
+  function renderCombinedSequence(){
+    const nodeG=q('#mv-nodes'),wireG=q('#mv-wires'),overlayG=q('#mv-overlay');nodeG.innerHTML='';wireG.innerHTML='';overlayG.innerHTML='';MV.portMap.clear();MV.nodeBounds.clear();
+    const items=sequenceItems(),sections=ensureClassicSequenceLayout(items),controlColumns=sections.controlColumns,controlRight=Math.max(1120,560+controlColumns*155),sheetBottom=Math.max(840,720+(sections.controlRows-1)*118);
+    wireG.appendChild(svg('rect',{x:42,y:55,width:440,height:sheetBottom-20,rx:9,fill:'#eaf4fb',stroke:'#5e96ba',className:'mv-sequence-section'}));
+    wireG.appendChild(svg('text',{x:62,y:83,fill:'#23658e',className:'mv-sequence-section-title'},'3상 동력회로'));
+    wireG.appendChild(svg('rect',{x:510,y:55,width:controlRight-500,height:sheetBottom-20,rx:9,fill:'#fff8df',stroke:'#b58a32',className:'mv-sequence-section'}));
+    wireG.appendChild(svg('text',{x:530,y:83,fill:'#8a6112',className:'mv-sequence-section-title'},'제어 회로'));
+    [['R/L1','#8b4513'],['S/L2','#111'],['T/L3','#6b7280']].forEach(([label,color],index)=>{const x=120+index*40;wireG.appendChild(svg('text',{x,y:111,'text-anchor':'middle',fill:color,className:'mv-power-rail-label'},label));wireG.appendChild(svg('line',{x1:x,y1:116,x2:x,y2:142,stroke:color,'stroke-width':2.4}));});
+    wireG.appendChild(svg('line',{x1:545,y1:115,x2:controlRight-35,y2:115,stroke:'#a22','stroke-width':2.7}));wireG.appendChild(svg('text',{x:545,y:104,fill:'#a22',className:'mv-ladder-label'},'L / +24V 기준선'));
+    wireG.appendChild(svg('line',{x1:545,y1:sheetBottom-48,x2:controlRight-35,y2:sheetBottom-48,stroke:'#2463a0','stroke-width':2.7}));wireG.appendChild(svg('text',{x:545,y:sheetBottom-58,fill:'#2463a0',className:'mv-ladder-label'},'N / 0V 기준선'));
+    for(const item of items){
+      const p=layoutPoint(classicLayoutKey(item.key),100,100),size=classicSize(item),active=elementActive(item),g=svg('g',{className:`mv-node${active?' mv-symbol-active':''}${MV.focusedSequenceKey===item.key?' focused':''}`});g.dataset.key=item.key;g.dataset.dev=item.devId;
+      if(isClassicPowerItem(item))drawClassicPowerSymbol(g,p,size,item);else drawClassicControlSymbol(g,p,size,item);
+      nodeG.appendChild(g);MV.nodeBounds.set(item.key,{x:p.x,y:p.y,w:size.w,h:size.h});
+    }
+    drawSharedWires(wireG);drawSequenceJunctions(overlayG);
+    MV.nodeBounds.set('__sequence-rails',{x:42,y:55,w:controlRight-42,h:sheetBottom-20});
+    renderSequenceLibrary(Core.buildSequenceCatalog(S.devices,LIB,S.wires,{mode:'combined',controlOnly:true}));
+    q('#mv-title').textContent='이전 시퀀스 보기';
+    q('#mv-hint').textContent='왼쪽은 MCCB→MC→EOCR→3상 모터 동력부, 오른쪽은 PB·보조접점·타이머·코일 제어부입니다. 같은 장비 ID와 실제 단자 ○를 사용하며 검은 점은 실제 분기 접속점입니다.';
+  }
   function renderSequence(){
+    if(MV.sequenceMode==='combined'){renderCombinedSequence();return;}
     const nodeG=q('#mv-nodes'), wireG=q('#mv-wires');nodeG.innerHTML='';wireG.innerHTML='';MV.portMap.clear();MV.nodeBounds.clear();
     const items=sequenceItems();ensureSequenceLayout(items);
-    // ladder reference rails
-    nodeG.appendChild(svg('line',{x1:55,y1:45,x2:55,y2:Math.max(1200,items.length*80),className:'mv-ladder-rail'}));
-    nodeG.appendChild(svg('text',{x:35,y:35,className:'mv-ladder-label'},'+24V'));
+    const railHeight=Math.max(1200,items.length*80);
+    if(MV.sequenceMode==='control'){
+      nodeG.appendChild(svg('line',{x1:55,y1:45,x2:55,y2:railHeight,className:'mv-ladder-rail'}));
+      nodeG.appendChild(svg('text',{x:35,y:35,className:'mv-ladder-label'},'L / +24V'));
+    }else{
+      const phaseRails=[['R/L1','#8b4513'],['S/L2','#111'],['T/L3','#6b7280'],['N','#2563eb'],['PE','#15803d']];
+      phaseRails.forEach(([label,color],index)=>{const x=42+index*16;nodeG.appendChild(svg('line',{x1:x,y1:48,x2:x,y2:railHeight,stroke:color,'stroke-width':2.4,opacity:.78}));nodeG.appendChild(svg('text',{x,y:35,'text-anchor':'middle',fill:color,className:'mv-power-rail-label'},label));});
+    }
     for(const item of items){
-      const p=layoutPoint(item.key,100,100),size=seqSize(item),active=elementActive(item),g=svg('g',{className:`mv-node${active?' mv-symbol-active':''}`});g.dataset.key=item.key;g.dataset.dev=item.devId;
+      const p=layoutPoint(item.key,100,100),size=seqSize(item),active=elementActive(item),g=svg('g',{className:`mv-node${active?' mv-symbol-active':''}${MV.focusedSequenceKey===item.key?' focused':''}`});g.dataset.key=item.key;g.dataset.dev=item.devId;
       if(item.el.kind==='block'){
         g.appendChild(svg('rect',{x:p.x,y:p.y,width:size.w,height:size.h,rx:4,className:'mv-box'}));
         const head=svg('rect',{x:p.x,y:p.y,width:size.w,height:27,rx:4,className:'mv-node-head'});head.dataset.dragKey=item.key;g.appendChild(head);
@@ -298,6 +563,8 @@
         const terms=item.el.terminals,half=Math.ceil(terms.length/2);
         terms.slice(0,half).forEach((t,i)=>drawPort(g,item.devId,t,p.x,p.y+43+i*19,Core.termLabel(item.def,t),'L',(item.def.terminals||[]).find(x=>x.id===t)?.pol));
         terms.slice(half).forEach((t,i)=>drawPort(g,item.devId,t,p.x+size.w,p.y+43+i*19,Core.termLabel(item.def,t),'R',(item.def.terminals||[]).find(x=>x.id===t)?.pol));
+      }else if(['breaker-3p','breaker-2p','fuse-2p','fuse-1p','contactor-3p','overload-3p','motor-3p','earth'].includes(item.el.kind)){
+        drawPowerSymbol(g,p,size,item);
       }else{
         g.appendChild(svg('rect',{x:p.x,y:p.y,width:size.w,height:size.h,rx:4,className:'mv-box'}));
         const head=svg('rect',{x:p.x,y:p.y,width:size.w,height:24,rx:4,className:'mv-node-head'});head.dataset.dragKey=item.key;g.appendChild(head);
@@ -320,9 +587,18 @@
       }
       nodeG.appendChild(g);MV.nodeBounds.set(item.key,{x:p.x,y:p.y,w:size.w,h:size.h});
     }
+    const railX=Math.max(920,...[...MV.nodeBounds.values()].map(b=>b.x+b.w))+80;
+    if(MV.sequenceMode==='control'){
+      nodeG.appendChild(svg('line',{x1:railX,y1:45,x2:railX,y2:railHeight,className:'mv-ladder-rail'}));
+      nodeG.appendChild(svg('text',{x:railX-12,y:35,'text-anchor':'end',className:'mv-ladder-label'},'N / 0V'));
+    }
+    MV.nodeBounds.set('__sequence-rails',{x:42,y:35,w:railX-42,h:railHeight});
     drawSharedWires(wireG);
-    q('#mv-title').textContent='🔁 시퀀스 회로';
-    q('#mv-hint').textContent='NO/NC/코일은 실제 장비 단자 ID와 연결되어 있습니다. 접점 심볼에서 만든 선도 실물 제어반의 동일 단자 와이어가 됩니다.';
+    renderSequenceLibrary(Core.buildSequenceCatalog(S.devices,LIB,S.wires,{mode:MV.sequenceMode,controlOnly:!MV.showAllTerminals}));
+    q('#mv-title').textContent=MV.sequenceMode==='power'?'⚡ 동력 회로':'🔁 제어 시퀀스';
+    q('#mv-hint').textContent=MV.sequenceMode==='power'
+      ? 'R/S/T/N/PE 전원 기준과 현재 장비의 MCCB·MC·EOCR·모터·접지 도형입니다. 각 도형의 실제 단자 ○를 차례로 클릭해 동력선을 연결하세요.'
+      : '오른쪽 현재 장비 도형을 선택 → 제목을 드래그해 배치 → 단자 ○ 두 개를 차례로 클릭해 결선합니다. 전체 단자를 켜면 MC 주접점도 함께 표시됩니다.';
   }
 
   function wireNetLabel(wire){
@@ -359,13 +635,13 @@
     if(MV.view==='panel'||S.workspaceView==='panel')return;
     if(MV.view!==S.workspaceView)MV.view=S.workspaceView;
     if(MV.view==='schematic')renderSchematic();
-    else if(MV.view==='sequence')renderSequence();
+    else if(MV.view==='sequence')window.PLCTrainerSequenceEditor?.renderActive?.();
     else if(MV.view==='io')renderIo();
     else if(MV.view==='palletizer'){
       if(window.PLCTrainerAutomationLabs)window.PLCTrainerAutomationLabs.renderActive?.();
       else window.PLCTrainerPalletizer3D?.renderActive?.();
     }
-    if(MV.view==='schematic'||MV.view==='sequence')applyDiagramViewBox();
+    if(MV.view==='schematic')applyDiagramViewBox();
   }
 
   function clientWorld(ev){
