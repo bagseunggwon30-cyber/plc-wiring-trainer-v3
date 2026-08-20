@@ -100,15 +100,18 @@ describe('V2 editor to v3 prewire circuit adapter', () => {
   });
 
   it.each([
-    { profileId: 'ls-electric:xbc-dn32up', orderCode: 'XBC-DN32UP', mode: 'sinking', count: 16, firstOutput: 'P20' },
-    { profileId: 'ls-electric:xbc-dn60su', orderCode: 'XBC-DN60SU', mode: 'sinking', count: 24, firstOutput: 'P40' },
-    { profileId: 'ls-electric:xbc-dp32up', orderCode: 'XBC-DP32UP', mode: 'sourcing', count: 16, firstOutput: 'P20' },
+    { profileId: 'ls-electric:xbc-dn32up', orderCode: 'XBC-DN32UP', mode: 'sinking', count: 16, firstOutput: 'P20', supplyElementId: 'plc#output-supply', profileOnly: true },
+    { profileId: 'ls-electric:xbc-dn60su', orderCode: 'XBC-DN60SU', mode: 'sinking', count: 24, firstOutput: 'P40', supplyElementId: 'plc#output-supply', profileOnly: true },
+    { profileId: 'ls-electric:xbc-dp32up', orderCode: 'XBC-DP32UP', mode: 'sourcing', count: 16, firstOutput: 'P20', supplyElementId: 'plc#output-supply', profileOnly: true },
+    { profileId: 'ls-electric:xbc-dn32h', orderCode: 'XBC-DN32H', mode: 'sinking', count: 16, firstOutput: 'P20', supplyElementId: 'plc#output-supply:COM0', profileOnly: false },
   ])('maps $orderCode outputs as powered transistors rather than dry relay contacts', async ({
     profileId,
     orderCode,
     mode,
     count,
     firstOutput,
+    supplyElementId,
+    profileOnly,
   }) => {
     const plc = device('plc', profileId, { orderCode });
     const built = await buildPrewireCircuitV3(workshop([plc], []), DEVICE_PROFILES, DEVICE_PROFILES_V3);
@@ -118,7 +121,7 @@ describe('V2 editor to v3 prewire circuit adapter', () => {
     expect(outputs[0]).toMatchObject({
       mode,
       stateKey: `plc:${firstOutput}`,
-      supplyElementId: 'plc#output-supply',
+      supplyElementId,
       controlPowerElementId: 'plc#ac-input',
     });
     expect(built.document.elements.some((element) => element.id === `plc#${firstOutput}:relay`)).toBe(false);
@@ -129,7 +132,17 @@ describe('V2 editor to v3 prewire circuit adapter', () => {
         to: { elementId: 'plc#P40:transistor', terminalId: 'return' },
       }));
     }
-    expect(built.issues.map((entry) => entry.code)).toContain('PROFILE_REVIEW_CAPABILITY_INCOMPLETE');
+    if (orderCode === 'XBC-DN32H') {
+      expect(built.document.branches).toContainEqual(expect.objectContaining({
+        from: { elementId: 'plc', terminalId: 'P' },
+        to: { elementId: 'plc#output-supply:COM0', terminalId: 'positive' },
+      }));
+      expect(built.document.branches).toContainEqual(expect.objectContaining({
+        from: { elementId: 'plc', terminalId: 'COM0' },
+        to: { elementId: 'plc#P20:transistor', terminalId: 'return' },
+      }));
+    }
+    expect(built.issues.map((entry) => entry.code).includes('PROFILE_REVIEW_CAPABILITY_INCOMPLETE')).toBe(profileOnly);
   });
 
   it('emits distinct endpoint codes for L/N, source paralleling, PE, SG and signal direction', async () => {

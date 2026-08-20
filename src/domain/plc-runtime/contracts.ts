@@ -49,11 +49,20 @@ export interface PlcRuntimeConnection {
   connectedAt: string;
   projectSha256: string;
   projectIdentityVerified: boolean;
+  /** Echoed by the native host. Missing values keep the session diagnostic-only. */
+  sessionNonce?: string;
+  /** Changes whenever the native host process/session generation changes. */
+  hostEpoch?: string;
 }
 
 export interface PlcRuntimeSnapshot {
   sequence: number;
   capturedAt: string;
+  /** Native-host session evidence. Required by authoritative consumers. */
+  sessionId?: string;
+  sessionNonce?: string;
+  hostEpoch?: string;
+  projectSha256?: string;
   inputs: Readonly<Record<string, PlcRuntimeValue>>;
   outputs: Readonly<Record<string, PlcRuntimeValue>>;
   monitors: Readonly<Record<string, PlcRuntimeValue>>;

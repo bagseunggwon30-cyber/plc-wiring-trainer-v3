@@ -85,9 +85,52 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Get-XgSimProjectIdenti
 
 정식 대상은 Windows x64 오프라인 Electron입니다. `index.html` 더블클릭 실행은 지원하지 않습니다.
 
+### 집 또는 다른 PC에서 현재 작업 브랜치 받기
+
+처음 내려받는 PC에서는 PowerShell을 열고 다음 명령을 실행합니다. 현재 변경은 아직 `main`에 병합되지 않았으므로 `codex/home-sync-palletizer-20260813` 브랜치를 선택해야 합니다.
+
 ```powershell
+git clone https://github.com/bagseunggwon30-cyber/plc-wiring-trainer-v3.git
+Set-Location .\plc-wiring-trainer-v3
+git fetch origin
+git switch --track origin/codex/home-sync-palletizer-20260813
 npm ci
 npm start
+```
+
+이미 저장소를 내려받은 PC에서는 다음 명령으로 최신 작업을 이어받습니다.
+
+```powershell
+Set-Location .\plc-wiring-trainer-v3
+git fetch origin
+git switch codex/home-sync-palletizer-20260813
+git pull --ff-only
+npm ci
+npm start
+```
+
+브랜치가 `main`에 병합된 뒤에는 다음 명령만 사용하면 됩니다.
+
+```powershell
+git switch main
+git pull --ff-only
+npm ci
+npm start
+```
+
+Node.js가 설치되어 있지 않으면 `npm` 명령을 실행할 수 없습니다. 이 프로젝트는 `.nvmrc`에 기록된 Node.js 버전을 기준으로 하며, Node.js 설치 후 새 PowerShell 창에서 `node --version`과 `npm --version`이 출력되는지 먼저 확인합니다.
+
+### 실행·검증·빌드 명령
+
+```powershell
+npm ci
+
+# 결선 작업장과 3D 실습실 실행 (Visual Studio Build Tools 불필요)
+npm start
+
+# 선택 기능인 XG-SIM 공식 인터페이스까지 함께 실행
+# 사전 조건: Visual Studio 2022 Build Tools의 MSBuild와 .NET Framework 4.7.2 targeting pack
+npm run start:xgsim
 
 # 기존 회귀, v3 단위 테스트, 타입 검사, 렌더러/Worker 빌드
 npm run verify
@@ -101,9 +144,15 @@ npm run test:e2e
 # 모든 출시 게이트 뒤 새 포터블 산출물 생성
 npm run build
 
+# XG-SIM 호스트를 제외한 오프라인 포터블 생성
+# Visual Studio Build Tools가 없는 PC에서도 사용 가능
+npm run build:offline
+
 # 출시 게이트부터 다시 실행한 뒤 공유용 최소 ZIP 생성
 npm run package:share
 ```
+
+`npm start`와 `npm run build:offline`은 XG-SIM 호스트 실행 파일이 없어도 정상적으로 동작합니다. 이 경우 결선·검증·3D 실습 기능은 사용할 수 있고, 고급 도구의 XG-SIM 공식 인터페이스 진단만 연결 시 안전하게 차단됩니다. XG-SIM 호스트 빌드는 `vswhere`, `XGSIM_MSBUILD_PATH`, Visual Studio 2022 표준 설치 위치 순으로 MSBuild를 찾습니다.
 
 새 포터블 파일은 `release/결선작업장-<package.json version>-portable.exe`에 생성됩니다. 명령이 성공해도 기존 실행 파일은 자동으로 대체하지 마십시오. 외부 배포에는 별도 코드서명과 훈련 패널 대조 시험이 필요합니다.
 

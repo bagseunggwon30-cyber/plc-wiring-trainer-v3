@@ -72,6 +72,13 @@ import {
 import { createWiringAssistantPanel } from './v3/wiring-assistant-panel';
 import { createXgSimDiagnosticsPanel } from './plc-runtime/xgsim-diagnostics-panel';
 import { createXgSimFunctionTestPanel } from './plc-runtime/xgsim-function-test-panel';
+import { XgSimRuntimeAdapter } from './plc-runtime/xgsim-adapter';
+import { createPalletizerXgSimBridge } from './plc-runtime/palletizer-xgsim-bridge';
+import {
+  createPalletizerXgSimUiIntegration,
+  type PalletizerXgSimUiIntegration,
+  type PalletizerXgSimUiStatus,
+} from './plc-runtime/palletizer-xgsim-ui-integration';
 import { installEquipmentOrderPanel, type EquipmentOrderPanelController } from './equipment-order-panel';
 
 interface LegacyTrainerBridge {
@@ -693,6 +700,93 @@ export function installWorkflowApp(): void {
     onVisualClear: (reason) => window.dispatchEvent(new CustomEvent('xgsim-runtime-visual-clear', { detail: { reason } })),
   });
   advancedBody.appendChild(xgSimFunctionTest.element);
+  const productionControls = document.querySelector<HTMLElement>('#p3-production-controls');
+  const classicPalletizer = (window as unknown as { PLCTrainerPalletizer3D?: {
+    getProfile(): { id: string }; getRuntimePort(): ReturnType<typeof createPalletizerXgSimBridge> extends never ? never : Parameters<typeof createPalletizerXgSimBridge>[0]['runtime']; renderActive(): void;
+  } }).PLCTrainerPalletizer3D;
+  if (productionControls && classicPalletizer) {
+    const panel = document.createElement('section'); panel.id = 'p3-xgsim'; panel.className = 'p3-section';
+    const heading = document.createElement('h3'); heading.textContent = 'XG-SIM 로컬 연결';
+    const note = document.createElement('p'); note.textContent = 'D00000/D004xx/D005xx · Host v1 미지원(BLOCKED). 프로젝트 식별 미검증 · 관측 및 DI 시뮬레이션 전용. 선택 SHA는 연결 참조이며 검증 증거가 아닙니다.';
+    const consent = document.createElement('label'); const consentBox = document.createElement('input'); consentBox.type = 'checkbox'; consentBox.id = 'p3-xgsim-consent'; consent.append(consentBox, ' 로컬 시뮬레이션 연결 동의');
+    const select = document.createElement('button'); select.type = 'button'; select.id = 'p3-xgsim-select-project'; select.textContent = '프로젝트 선택'; select.disabled = true;
+    const connect = document.createElement('button'); connect.type = 'button'; connect.id = 'p3-xgsim-connect'; connect.textContent = '연결'; connect.disabled = true;
+    const disconnect = document.createElement('button'); disconnect.type = 'button'; disconnect.id = 'p3-xgsim-disconnect'; disconnect.textContent = '안전 연결해제'; disconnect.disabled = true;
+    const status = document.createElement('output'); status.id = 'p3-xgsim-status'; status.setAttribute('aria-live', 'polite'); status.textContent = '대기 · 프로젝트 선택 및 동의 필요';
+    panel.append(heading, note, consent, select, connect, disconnect, status); productionControls.appendChild(panel);
+    let selected: Awaited<ReturnType<NonNullable<typeof window.WorkshopDesktop>['xgSim']['selectProject']>> | null = null;
+    let controller: PalletizerXgSimUiIntegration | null = null;
+    const palletizerAdapter = new XgSimRuntimeAdapter();
+    let poll: number | null = null;
+    let connecting = false;
+    let xgSimState: PalletizerXgSimUiStatus['state'] = 'disconnected';
+    const clearPoll = (): void => { if (poll !== null) { window.clearInterval(poll); poll = null; } };
+    const safeDisconnect = async (): Promise<void> => {
+      clearPoll();
+      if (controller) await controller.disconnect();
+      disconnect.disabled = true;
+      connecting = false;
+      select.disabled = !consentBox.checked;
+      connect.disabled = !consentBox.checked || selected?.selected !== true || !selected?.reference;
+    };
+    consentBox.onchange = () => {
+      select.disabled = connecting || !consentBox.checked;
+      connect.disabled = connecting || !consentBox.checked || selected?.selected !== true || !selected?.reference;
+    };
+    select.onclick = () => void (async () => {
+      if (connecting) return;
+      if (!window.WorkshopDesktop?.xgSim) { status.textContent = 'BLOCKED · Desktop XG-SIM bridge unavailable'; return; }
+      selected = await window.WorkshopDesktop.xgSim.selectProject();
+      const ref = selected.reference;
+      connect.disabled = !selected.selected || !ref;
+      status.textContent = ref ? `선택 참조 · ${ref.fileName} · SHA-256 ${ref.sha256.slice(0, 12)}… · 프로젝트 식별 미검증` : '프로젝트 선택이 취소되었습니다.';
+    })();
+    connect.onclick = () => void (async () => {
+      if (connecting) return;
+      const ref = selected?.reference;
+      if (!ref || !window.WorkshopDesktop?.xgSim) return;
+      connecting = true;
+      connect.disabled = true;
+      select.disabled = true;
+      controller = createPalletizerXgSimUiIntegration({
+        classic: classicPalletizer,
+        selectProject: async () => ({ selected: selected?.selected === true, reference: selected?.reference }),
+        bridgeFactory: ({ runtime, expectedIdentity, inputChannels }) => createPalletizerXgSimBridge({
+          adapter: palletizerAdapter, runtime, expectedIdentity, inputChannels,
+        }),
+        probe: (request) => palletizerAdapter.probe(request),
+        readSnapshot: () => palletizerAdapter.readSnapshot(),
+        runtimeTarget: { cpuModel: 'XGB-XBCU', base: 0, slot: 1 },
+        setStatus: (next) => {
+          xgSimState = next.state;
+          const identity = next.identityVerified === false
+            ? ' · 프로젝트 식별 미검증(Host v1) · 관측/DI 시뮬레이션 전용'
+            : '';
+          status.textContent = `${next.state.toUpperCase()}${next.reason ? ` · ${next.reason}` : ''}${identity}${next.blocked.length ? ` · BLOCKED ${next.blocked.join(', ')}` : ''}`;
+        },
+      });
+      let sessionOpened = false;
+      try {
+        await controller.connect({ localSimulationConsented: consentBox.checked });
+        sessionOpened = true;
+        clearPoll();
+        if (xgSimState === 'connected') {
+          poll = window.setInterval(() => { void controller?.pollOnce(); }, 100);
+        }
+        disconnect.disabled = false;
+      } catch (error) {
+        status.textContent = `BLOCKED · ${error instanceof Error ? error.message : String(error)}`;
+      } finally {
+        connecting = false;
+        select.disabled = !consentBox.checked;
+        connect.disabled = sessionOpened || !consentBox.checked || selected?.selected !== true || !selected?.reference;
+      }
+    })();
+    disconnect.onclick = () => void safeDisconnect();
+    window.addEventListener('palletizer-profile-changed', () => { clearPoll(); void controller?.onProfileChanged(); });
+    window.addEventListener('palletizer-view-hidden', () => { clearPoll(); void controller?.onViewHidden(); });
+    window.addEventListener('pagehide', () => { void safeDisconnect(); }, { once: true });
+  }
   if (counter) header.insertBefore(advanced, counter); else header.appendChild(advanced);
 
   const legacySave = saveButton.onclick;

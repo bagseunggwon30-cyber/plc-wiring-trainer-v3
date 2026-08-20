@@ -46,13 +46,21 @@
     'mps-complete-station.glb': 'MPS 통합 스테이션',
     'servo2-workshop.glb': '2축 서보 워크숍',
     'workpiece-steel.glb': '강재 워크',
-    'workpiece-plastic.glb': '수지 워크'
+    'workpiece-plastic.glb': '수지 워크',
+    'xbc-dr32h.glb': 'LS ELECTRIC XBC-DR32H PLC',
+    'mdr-100-24.glb': 'MEAN WELL MDR-100-24 전원공급기',
+    'mc-22b-dc24.glb': 'LS ELECTRIC MC-22b DC24V 전자접촉기',
+    'my2n-d2-dc24.glb': 'OMRON MY2N-D2 DC24V 릴레이',
+    'eocr3de-05duh.glb': 'Schneider EOCR3DE-05DUH',
+    'ut-2-5-3044076.glb': 'Phoenix Contact UT 2,5 단자대',
+    'ut-2-5-pe-3044092.glb': 'Phoenix Contact UT 2,5-PE 접지 단자대',
+    'ut-4-hesi-3046032.glb': 'Phoenix Contact UT 4-HESI 퓨즈 단자대'
   });
   const EQUIPMENT_GROUPS = Object.freeze([
-    ['control', '제어·전원', /(?:plc|servo-amplifier|sscnet|relay|timer|counter|smps|switch-box|buzzer|tower)/],
+    ['control', '제어·전원', /(?:plc|xbc|mdr|mc-22|my2n|eocr|servo-amplifier|sscnet|relay|timer|counter|smps|switch-box|buzzer|tower)/],
     ['sensor', '센서·스위치', /(?:sensor|limit-switch)/],
     ['pneumatic', '공압 장비', /(?:cylinder|valve|service-unit|air-distributor|speed-controller)/],
-    ['accessory', '결선·계측 부속', /(?:banana-plug|ruler)/],
+    ['accessory', '결선·계측 부속', /(?:banana-plug|ruler|ut-)/],
     ['plant', '설비·워크', /(?:mps|servo2-workshop|workpiece|workblock)/]
   ]);
   const CAMERA_DISTANCE = 16.17;
@@ -63,6 +71,16 @@
     space: Object.freeze({ focus: [0, .82, 0], pitch: 90, yaw: 0, scale: 1 }),
     f1: Object.freeze({ focus: [5.72e-6, .819996, 0], pitch: 24.9, yaw: 20.2, scale: .9 }),
     f2: Object.freeze({ focus: [0, .87, 0], pitch: 27.33, yaw: 332.5, scale: .76 })
+  });
+  // The projected footprint is wider than the 10.8 unit bench because the
+  // oblique views include depth. Keep this local to the discrete lab so the
+  // audited shared camera presets retain their existing framing elsewhere.
+  const DISCRETE_CAMERA_BOUNDS = Object.freeze({ width: 12.6, depth: 6.3, padding: 1.08, maxScale: 14 });
+  const DISCRETE_CAMERA_PRESETS = Object.freeze({
+    default: Object.freeze({ focus: [0, .86, 0], pitch: 32, yaw: 18, fit: true }),
+    space: Object.freeze({ focus: [0, .42, 0], pitch: 89.999, yaw: 0, fit: true }),
+    f1: Object.freeze({ focus: [0, .86, 0], pitch: 26, yaw: 20, fit: true }),
+    f2: Object.freeze({ focus: [0, .86, 0], pitch: 30, yaw: 332, fit: true })
   });
   const MPS_OUTPUT_LABELS = Object.freeze([
     '공급 F', '공급 R', '드릴 승강', '분배 F', '분배 R', '배출 F', '배출 R',
@@ -91,7 +109,7 @@
     host: null, hub: null, content: null, activeLab: 'servo2', visible: false, initialized: false,
     state: null, renderer: null, canvasHost: null, raf: 0, lastTime: 0, lastUi: 0, lastSave: 0,
     scenes: {}, editors: {}, editorMarkers: {}, drag: null, editorDrag: null,
-    resizeObserver: null, importedLoaded: false, equipmentCatalog: [], equipmentLoadToken: 0
+    resizeObserver: null, labAssetLoads: null, equipmentCatalog: [], equipmentLoadToken: 0
   };
   const q = (selector, root = document) => root.querySelector(selector);
   const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -99,6 +117,12 @@
   const wrapDegrees = value => ((value % 360) + 360) % 360;
   const normalizeMpsWorkpieceStyle = value => value === 'block' ? 'block' : 'compact';
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+  function discreteFitScale(aspect) {
+    const safeAspect = Math.max(Number(aspect) || 1, .6);
+    const sceneSpan = Math.max(DISCRETE_CAMERA_BOUNDS.width / safeAspect, DISCRETE_CAMERA_BOUNDS.depth);
+    return clamp(sceneSpan * DISCRETE_CAMERA_BOUNDS.padding, 7, DISCRETE_CAMERA_BOUNDS.maxScale);
+  }
 
   function loadSaved() {
     let saved = null;
@@ -180,8 +204,9 @@
     document.head.appendChild(style);
   }
 
-  function cameraPresetButtons() {
-    return `<div class="al-camera-presets" aria-label="카메라 프리셋"><button class="al-camera-preset" data-camera-preset="space" title="상단 보기 (Space)">SPACE 상단</button><button class="al-camera-preset" data-camera-preset="f1" title="프리셋 1 (F1)">F1</button><button class="al-camera-preset" data-camera-preset="f2" title="프리셋 2 (F2)">F2</button></div>`;
+  function cameraPresetButtons(lab) {
+    const discrete = lab === 'discrete';
+    return `<div class="al-camera-presets" aria-label="카메라 프리셋"><button class="al-camera-preset" data-camera-preset="space" title="${discrete ? '전체 장비 상단 보기' : '상단 보기'} (Space)">${discrete ? 'SPACE 전체 상단' : 'SPACE 상단'}</button><button class="al-camera-preset" data-camera-preset="f1" title="${discrete ? '전체 장비 사선 보기' : '프리셋 1'} (F1)">F1</button><button class="al-camera-preset" data-camera-preset="f2" title="${discrete ? '전체 장비 반대 사선 보기' : '프리셋 2'} (F2)">F2</button></div>`;
   }
 
   function cameraHintElement(extra = '', legacyHint = '우클릭: 회전 · 가운데 드래그: 이동 · 휠: 확대/축소') {
@@ -233,19 +258,19 @@
   }
 
   function discretePane() {
-    return `<div class="al-pane-grid"><div class="al-scene" data-scene="discrete"><div class="al-scene-title"><b>24V 이산 I/O 결선 실습대</b><span>실제 결선 토폴로지 · 선택 PLC만 활성</span></div>${cameraPresetButtons()}${editorToolbar('discrete')}${cameraHintElement(' · 4=결선 · 2=장비 이동 · 연결선이 전기 판정에 반영됨')}</div><aside class="al-side">
+    return `<div class="al-pane-grid"><div class="al-scene" data-scene="discrete"><div class="al-scene-title"><b>24V 이산 I/O 결선 실습대</b><span>실제 결선 토폴로지 · 선택 PLC만 활성</span></div>${cameraPresetButtons('discrete')}${editorToolbar('discrete')}${cameraHintElement(' · SPACE=전체 장비 · 4=결선 · 2=장비 이동 · 연결선이 전기 판정에 반영됨')}</div><aside class="al-side">
       <section class="al-section"><div class="al-status" id="al-discrete-status"><b>기준 결선 필요</b><span>POWER OFF</span></div><label class="al-profile">PLC 제조사 선택<select id="al-discrete-profile" data-discrete-profile><option value="ls">LS XGB / XG5000</option><option value="mitsubishi">Mitsubishi QnU / MELSOFT</option></select></label><label class="al-profile">입력 공통 방식<select id="al-discrete-input-mode"><option value="sink">싱크 COM · PNP 입력</option><option value="source">소스 COM · NPN 입력</option></select></label><div class="al-actions"><button class="al-btn run" data-discrete-action="power">DC 24V ON</button><button class="al-btn" data-discrete-action="reference">기준 결선</button><button class="al-btn stop" data-discrete-action="outputs-off">출력 전체 OFF</button><button class="al-btn" data-discrete-action="clear">결선 지우기</button></div></section>
       <section class="al-section"><h3>현장 입력 11점 <small>버튼·센서·리미트</small></h3><div class="al-checks">${DISCRETE_INPUTS.map(([key, label]) => `<label class="al-check"><input type="checkbox" data-discrete-input="${key}"><span data-discrete-input-label="${key}">${esc(label)}</span></label>`).join('')}</div></section>
       <section class="al-section"><h3>선택 PLC 출력 13점 <small>다른 제조사 주소 거부</small></h3><div class="al-output-grid">${DISCRETE_OUTPUTS.map(([key, label]) => `<label class="al-output"><input type="checkbox" data-discrete-output="${key}"><span data-discrete-output-label="${key}">${esc(label)}</span></label>`).join('')}</div></section>
       <section class="al-section"><h3>타이머·카운터 <small>3D FND 런타임 오버레이</small></h3><div class="al-fields"><label class="al-field">타이머 설정 s<input id="al-discrete-timer-preset" type="number" min=".1" max="99.9" step=".1" value="3"></label><label class="al-field">카운터 설정<input id="al-discrete-counter-preset" type="number" min="1" max="999" step="1" value="5"></label><button class="al-btn" data-discrete-action="counter-reset">카운터 RESET</button></div><div class="al-counters" style="margin-top:6px"><div class="al-counter"><b id="al-discrete-timer-value">0.0</b><span>TIMER s</span></div><div class="al-counter"><b id="al-discrete-counter-value">0</b><span>COUNT</span></div><div class="al-counter"><b id="al-discrete-wire-count">0</b><span>WIRES</span></div></div></section>
       <section class="al-section"><h3>가상 멀티미터 <small>3D 적·흑 프로브</small></h3><label class="al-profile">측정 모드<select id="al-discrete-meter-mode"><option value="voltage">DC 전압</option><option value="continuity">연속성 · 전원 OFF</option></select></label><button class="al-btn" data-discrete-action="probe-reference" style="width:100%">프로브를 +24V / 24G에 시험 연결</button><div class="al-status" id="al-discrete-meter" style="margin-top:7px"><b>프로브 미연결</b><span>BLOCKED</span></div><div class="al-asset-note">프로브 TIP을 원하는 단자에 결선하면 실제 결선 그래프를 따라 측정합니다. 연속성 모드는 통전 중 자동 차단됩니다.</div></section>
-      <section class="al-section"><h3>전기 토폴로지 진단</h3><div class="al-log" id="al-discrete-issues"></div><table class="al-memory" id="al-discrete-memory"></table><div class="al-asset-note">SoV 3D 외형은 교육용입니다. 화면의 Mitsubishi 모듈 외형을 LS 장비로 오인하지 않도록, 선택 제조사 주소표와 세션만 바뀝니다. 정확한 검토 통과는 별도 매뉴얼 기반 장비 프로필이 필요합니다.</div></section>
+      <section class="al-section"><h3>전기 토폴로지 진단</h3><div class="al-log" id="al-discrete-issues"></div><table class="al-memory" id="al-discrete-memory"></table><div class="al-asset-note">Blender 5.2로 만든 MDR-100-24 · XBC-DR32H · MY2N-D2는 매뉴얼 단자 표면에 직접 결선되며 기준 결선에서 작동합니다. MC-22b · EOCR · Phoenix 단자대도 실제 단자 표면에 자유 결선할 수 있습니다. EOCR 과전류 트립·보호 동작은 설정값 근거가 없어 이 실습에서는 판정하지 않습니다. Mitsubishi 선택은 주소 런타임용이며 3D 기준 장비는 LS XBC입니다.</div></section>
     </aside></div>`;
   }
 
   function equipmentPane() {
     return `<div class="al-pane-grid"><div class="al-scene" data-scene="equipment3d"><div class="al-scene-title"><b>3D 장비 검사실</b><span>SELECTIVE ASSETS · LAZY LOAD</span></div>${cameraPresetButtons()}${cameraHintElement(' · 장비는 한 번에 1개만 표시')}</div><aside class="al-side">
-      <section class="al-section"><div class="al-status" id="al-equipment-status"><b>장비 목록 준비</b><span>LOCAL</span></div><select class="al-equipment-select" id="al-equipment-select" size="14" aria-label="3D 장비 선택"><option>자산 매니페스트 읽는 중…</option></select><dl class="al-equipment-meta"><dt>모델</dt><dd id="al-equipment-root">—</dd><dt>메시</dt><dd id="al-equipment-mesh">—</dd><dt>파일</dt><dd id="al-equipment-file">—</dd><dt>검토 등급</dt><dd>교육용 3D 외형</dd></dl><div class="al-asset-note">이 화면은 실제 3D 외형을 관찰하는 교육용 자산 검사실입니다. 단자 ID·전기 정격·검토 통과 근거는 제조사 매뉴얼 기반 프로필과 SVG 오버레이만 사용합니다.</div></section>
+      <section class="al-section"><div class="al-status" id="al-equipment-status"><b>장비 목록 준비</b><span>LOCAL</span></div><select class="al-equipment-select" id="al-equipment-select" size="14" aria-label="3D 장비 선택"><option>자산 매니페스트 읽는 중…</option></select><dl class="al-equipment-meta"><dt>모델</dt><dd id="al-equipment-root">—</dd><dt>메시</dt><dd id="al-equipment-mesh">—</dd><dt>파일</dt><dd id="al-equipment-file">—</dd><dt>검토 등급</dt><dd id="al-equipment-grade">—</dd></dl><div class="al-asset-note">Blender 5.2 매뉴얼 기반 모델은 실습실에서 실제 3D 단자 표면에 직접 결선합니다. 기존 일반 자산은 외형 관찰용이며, 전기 정격과 결선 판정은 제조사 매뉴얼 기반 프로필을 사용합니다.</div></section>
     </aside></div>`;
   }
 
@@ -300,11 +325,14 @@
     const root = new Three.Group(); root.name = `${name}-lab`; scene.add(root);
     const proxyRoot = new Three.Group(); proxyRoot.name = `${name}-functional-proxy`; root.add(proxyRoot);
     const dynamicRoot = new Three.Group(); dynamicRoot.name = `${name}-dynamic`; root.add(dynamicRoot);
-    return { scene, camera, root, proxyRoot, dynamicRoot, parts: {}, orbit: { yaw: preset.yaw, pitch: preset.pitch, scale: preset.scale }, target: new Three.Vector3(...preset.focus), aspect: 1 };
+    return { lab: name, scene, camera, root, proxyRoot, dynamicRoot, parts: {}, orbit: { yaw: preset.yaw, pitch: preset.pitch, scale: preset.scale }, target: new Three.Vector3(...preset.focus), aspect: 1 };
   }
 
   function createServoScene() {
     const data = baseScene('servo2'), root = data.proxyRoot;
+    // The LS drive bodies are taller than the former flat terminal cards; keep
+    // both the real equipment front and the motion rig inside the default view.
+    data.orbit = { yaw: 360, pitch: 10.67, scale: 1.08 }; data.target.set(0, .91, .02);
     const frame = material(0x77848b, .72, .3), rail = material(0xc5d0d6, .85, .18), blue = material(0x1b75a7, .4, .35), dark = material(0x1a252c, .5, .45);
     box(root, [10, .32, 6.2], [0, .3, 0], dark); for (const x of [-4.6, 4.6]) for (const z of [-2.6, 2.6]) box(root, [.25, 1.1, .25], [x, -.25, z], frame);
     box(root, [8.8, .22, .4], [0, 1.03, 1.2], frame); box(root, [8.5, .1, .2], [0, 1.2, 1.2], rail);
@@ -372,7 +400,8 @@
 
   function createDiscreteScene() {
     const data = baseScene('discrete'), root = data.proxyRoot;
-    data.orbit = { yaw: 18, pitch: 32, scale: .88 }; data.target.set(0, .86, 0);
+    const preset = DISCRETE_CAMERA_PRESETS.default;
+    data.orbit = { yaw: preset.yaw, pitch: preset.pitch, scale: discreteFitScale(data.aspect) }; data.target.set(...preset.focus); data.cameraFit = 'default';
     box(root, [10.8, .22, 6.3], [0, .18, 0], material(0x202a31, .55, .62));
     box(root, [10.2, .10, 5.7], [0, .34, 0], material(0x8f9aa0, .55, .55));
     for (const z of [-1.85, 0, 1.85]) box(root, [9.7, .08, .10], [0, .42, z], material(0xbec9ce, .82, .22));
@@ -398,9 +427,26 @@
     const engine = window.PLCTrainerSovEditorEngine;
     if (!engine?.create) return;
     A.editorMarkers = { servo2: [], mps: [], pneumatic: [], discrete: [] };
+    A.editorSocketCues = { servo2: null, mps: null, pneumatic: null, discrete: null };
     A.editorModules = { servo2: new Map(), mps: new Map(), pneumatic: new Map(), discrete: new Map() };
     for (const lab of ['servo2', 'mps', 'pneumatic', 'discrete']) {
-      const editor = engine.create({ three: Three, lab, scene: A.scenes[lab].scene, gridSize: .025, tubeRadius: .003 });
+      const editor = engine.create({
+        three: Three,
+        lab,
+        scene: A.scenes[lab].scene,
+        gridSize: .025,
+        tubeRadius: .003,
+        solidElectricWires: true,
+        wireRadius: .0042
+      });
+      const cue = new Three.Group(); cue.name = `${lab}-banana-plug-hover-cue`; cue.visible = false;
+      const cueShell = new Three.Mesh(
+        new Three.SphereGeometry(.018, 14, 10),
+        new Three.MeshStandardMaterial({ color: 0x52f0a5, emissive: 0x52f0a5, emissiveIntensity: .9, roughness: .28, transparent: true, opacity: .9, depthTest: false })
+      );
+      const cueTip = new Three.Mesh(new Three.SphereGeometry(.007, 10, 8), new Three.MeshBasicMaterial({ color: 0x10232c, depthTest: false }));
+      cueTip.position.z = .014; cue.add(cueShell, cueTip); cue.userData.shell = cueShell; cue.renderOrder = 40;
+      A.scenes[lab].scene.add(cue); A.editorSocketCues[lab] = cue;
       editor.on('change', event => {
         if (lab === 'servo2' && ['connection-create', 'connection-delete'].includes(event.reason)) { syncServoTopology(); updateUi(true); }
         if (lab === 'discrete') syncDiscreteTopology();
@@ -415,15 +461,16 @@
     const editor = A.editors[lab];
     if (!editor || editor.modules.has(id) || !object) return;
     const anchors = anchorSpecs.map((spec, index) => {
-      const anchorId = spec.id || String(index), terminalTarget = spec.hitObject || window.PLCTrainerSovEditorEngine.createAnchorHitTarget({
+      const anchorId = spec.id || String(index), terminalTarget = window.PLCTrainerSovEditorEngine.createAnchorHitTarget({
         three: Three,
-        radius: spec.hitRadius || .012,
+        radius: spec.hitRadius == null ? (spec.kind === 'air' ? .028 : .024) : Math.max(.001, spec.hitRadius),
         name: `${id}-${spec.tag || index}-terminal-hole`
       });
-      if (!spec.hitObject) { terminalTarget.position.fromArray(spec.position); object.add(terminalTarget); }
+      terminalTarget.position.fromArray(spec.position); object.add(terminalTarget);
       terminalTarget.userData.sovAnchor = { moduleId: id, anchorId, kind: spec.kind };
       terminalTarget.userData.sovPickEnabled = false;
       terminalTarget.userData.sovTerminalSurface = !!spec.hitObject;
+      terminalTarget.userData.sovPhysicalTerminal = spec.hitObject || null;
       A.editorMarkers[lab].push(terminalTarget);
       return {
         id: anchorId,
@@ -431,6 +478,7 @@
         object,
         localPosition: spec.position,
         tag: spec.tag || anchorId,
+        maxConductors: spec.maxConductors,
         metadata: spec.metadata
       };
     });
@@ -444,6 +492,49 @@
 
   function rowAnchors(prefix, count, y, z, startX, endX, kind = 'electric') {
     return Array.from({ length: count }, (_, index) => ({ id: `${prefix}${index}`, tag: `${prefix}${index}`, kind, position: [startX + (endX - startX) * (count === 1 ? 0 : index / (count - 1)), y, z] }));
+  }
+
+  function findExactImportedNode(root, name) {
+    let match = null;
+    const terminalId = name.startsWith('terminal:') ? name.slice('terminal:'.length) : null;
+    const sanitizedName = Three.PropertyBinding?.sanitizeNodeName?.(name) || name;
+    root?.traverse?.(object => {
+      if (match) return;
+      if (object.name === name || object.name === sanitizedName || (terminalId && object.userData?.terminalId === terminalId)) match = object;
+    });
+    return match;
+  }
+
+  function terminalSurface(node) {
+    if (node?.isMesh) return node;
+    let surface = null;
+    node?.traverse?.(object => { if (!surface && object.isMesh) surface = object; });
+    return surface;
+  }
+
+  function bindManualTerminalAnchors(payload, specs) {
+    payload.wrapper.updateMatrixWorld(true);
+    return specs.map(spec => {
+      const node = findExactImportedNode(spec.root || payload.model, `terminal:${spec.terminalId}`);
+      const hitObject = terminalSurface(node);
+      if (!hitObject) {
+        console.warn(`${payload.model.name}: manual terminal surface ${spec.terminalId} is missing; using a guarded fallback anchor`);
+        return { ...spec, kind: spec.kind || 'electric', position: spec.position || [0, 0, 0] };
+      }
+      hitObject.updateWorldMatrix(true, false);
+      const position = hitObject.getWorldPosition(new Three.Vector3());
+      payload.wrapper.worldToLocal(position);
+      return { ...spec, kind: spec.kind || 'electric', position: position.toArray(), hitObject };
+    });
+  }
+  function cloneModelMaterials(root) {
+    root?.traverse?.(object => {
+      if (!object.isMesh || !object.material) return;
+      object.material = Array.isArray(object.material)
+        ? object.material.map(source => source.clone())
+        : object.material.clone();
+    });
+    return root;
   }
 
   function syncDiscreteTopology() {
@@ -554,21 +645,71 @@
       pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1); raycaster.setFromCamera(pointer, scene.camera); return raycaster.ray;
     };
     const activeEditor = () => A.editors[A.activeLab];
-    const pickAnchorTarget = () => raycaster.intersectObjects(
-      (A.editorMarkers[A.activeLab] || []).filter(target => target.userData.sovPickEnabled),
-      false
-    )[0]?.object || null;
+    const activeTargets = () => (A.editorMarkers[A.activeLab] || []).filter(target => target.userData.sovPickEnabled);
+    const pickAnchorTarget = event => {
+      const targets = activeTargets(), direct = raycaster.intersectObjects(targets, false)[0]?.object;
+      if (direct || !event) return direct || null;
+      const scene = A.scenes[A.activeLab], rect = canvas.getBoundingClientRect(), world = new Three.Vector3(), projected = new Three.Vector3();
+      let nearest = null, nearestDistance = 30;
+      for (const target of targets) {
+        target.getWorldPosition(world); projected.copy(world).project(scene.camera);
+        if (projected.z < -1 || projected.z > 1) continue;
+        const x = rect.left + (projected.x + 1) * rect.width / 2, y = rect.top + (1 - projected.y) * rect.height / 2;
+        const distance = Math.hypot(event.clientX - x, event.clientY - y);
+        if (distance < nearestDistance) { nearest = target; nearestDistance = distance; }
+      }
+      return nearest;
+    };
+    const anchorStatus = (editor, ref) => {
+      if (!ref) return { valid: false, message: '' };
+      const anchor = editor.anchors.get(`${ref.moduleId}::${ref.anchorId}`);
+      if (!anchor) return { valid: false, message: '등록되지 않은 단자' };
+      if (anchor.connectionId) return { valid: false, message: '이미 결선된 단자' };
+      const pending = editor.pendingConnection?.anchor;
+      if (pending === anchor) return { valid: false, message: '시작 단자와 동일함' };
+      if (pending && pending.kind !== anchor.kind) return { valid: false, message: '결선 종류가 다름' };
+      return { valid: true, message: pending ? '연결 가능 · 클릭하여 결선' : '빈 단자 · 클릭하여 시작' };
+    };
+    const showSocketCue = (editor, point, status, visible = true) => {
+      const cue = A.editorSocketCues[A.activeLab]; if (!cue) return;
+      cue.visible = visible; if (!visible || !point) return;
+      cue.position.copy(point); cue.scale.setScalar(status.valid ? 1 : 1.18);
+      const color = status.valid ? 0x52f0a5 : 0xff5f55;
+      cue.userData.shell.material.color.setHex(color); cue.userData.shell.material.emissive.setHex(color);
+    };
+    const pickConnectionVisual = (event, editor) => {
+      const visuals = [...editor.connections.values()].map(connection => connection.visual);
+      const direct = raycaster.intersectObjects(visuals, true)[0]?.object;
+      if (direct) return direct;
+      const scene = A.scenes[A.activeLab], rect = canvas.getBoundingClientRect(), local = new Three.Vector3(), world = new Three.Vector3(), projected = new Three.Vector3();
+      let nearest = null, nearestDistance = 14;
+      for (const visual of visuals) {
+        const positions = visual.geometry?.getAttribute?.('position'); if (!positions) continue;
+        const step = Math.max(1, Math.floor(positions.count / 72));
+        for (let index = 0; index < positions.count; index += step) {
+          local.fromBufferAttribute(positions, index); world.copy(local); visual.localToWorld(world); projected.copy(world).project(scene.camera);
+          if (projected.z < -1 || projected.z > 1) continue;
+          const x = rect.left + (projected.x + 1) * rect.width / 2, y = rect.top + (1 - projected.y) * rect.height / 2;
+          const distance = Math.hypot(event.clientX - x, event.clientY - y);
+          if (distance < nearestDistance) { nearest = visual; nearestDistance = distance; }
+        }
+      }
+      return nearest;
+    };
     canvas.addEventListener('pointerdown', event => {
       if (event.button !== 0 || A.activeLab === 'palletizer3d') return;
       const editor = activeEditor(), ray = rayFromEvent(event); if (!editor || !ray) return;
       if (editor.mode === 'WIRE' || editor.mode === 'AIR') {
-        const ref = pickAnchorTarget()?.userData?.sovAnchor;
+        const target = pickAnchorTarget(event), ref = target?.userData?.sovAnchor, status = anchorStatus(editor, ref);
         if (!ref) return;
-        event.preventDefault(); if (editor.pendingConnection) editor.completeConnection(ref); else editor.beginConnection(ref); schedule(); updateEditorUi(); persist(); return;
+        event.preventDefault();
+        if (!status.valid) { showSocketCue(editor, editor.anchorWorldPosition(ref), status); canvas.title = `${ref.moduleId} · ${ref.anchorId} · ${status.message}`; return; }
+        if (editor.pendingConnection) editor.completeConnection(ref); else editor.beginConnection(ref);
+        schedule(); updateEditorUi(); persist(); return;
       }
       if (editor.mode === 'DELETE_WIRE') {
-        const visuals = [...editor.connections.values()].map(connection => connection.visual), hit = raycaster.intersectObjects(visuals, true)[0];
-        if (hit?.object?.userData?.connectionId) { event.preventDefault(); editor.deleteLink(hit.object.userData.connectionId); schedule(); persist(true); } return;
+        const visual = pickConnectionVisual(event, editor);
+        if (visual?.userData?.connectionId) { event.preventDefault(); editor.deleteLink(visual.userData.connectionId); schedule(); persist(true); } return;
       }
       if (editor.mode === 'MOVE' || editor.mode === 'DELETE_MODULE') {
         const objects = [...A.editorModules[A.activeLab].values()], hit = raycaster.intersectObjects(objects, true)[0]; let picked = hit?.object;
@@ -584,9 +725,11 @@
       if (A.editorDrag?.editor === editor) { editor.updateMove(ray); schedule(); return; }
       let anchorTarget = null;
       if (editor.mode === 'WIRE' || editor.mode === 'AIR') {
-        anchorTarget = pickAnchorTarget(); const ref = anchorTarget?.userData?.sovAnchor;
-        canvas.style.cursor = ref ? 'crosshair' : 'default';
-        canvas.title = ref ? `${ref.moduleId} · ${ref.anchorId}` : '';
+        anchorTarget = pickAnchorTarget(event); const ref = anchorTarget?.userData?.sovAnchor, status = anchorStatus(editor, ref);
+        canvas.style.cursor = ref ? (status.valid ? 'crosshair' : 'not-allowed') : 'default';
+        canvas.title = ref ? `${ref.moduleId} · ${ref.anchorId} · ${status.message}` : '';
+        if (ref) showSocketCue(editor, editor.anchorWorldPosition(ref), status);
+        else if (!editor.pendingConnection) showSocketCue(editor, null, status, false);
       } else { canvas.style.cursor = 'default'; canvas.title = ''; }
       if (editor.pendingConnection) {
         const ref = anchorTarget?.userData?.sovAnchor;
@@ -597,10 +740,14 @@
           const plane = new Three.Plane().setFromNormalAndCoplanarPoint(normal.negate(), start);
           hit = ray.intersectPlane(plane, new Three.Vector3());
         }
-        if (hit) { editor.updateConnectionPreview(hit); schedule(); }
+        if (hit) {
+          editor.updateConnectionPreview(hit);
+          if (!ref) showSocketCue(editor, hit, { valid: true }, true);
+          schedule();
+        }
       }
     });
-    canvas.addEventListener('pointerleave', () => { canvas.style.cursor = 'default'; canvas.title = ''; });
+    canvas.addEventListener('pointerleave', () => { canvas.style.cursor = 'default'; canvas.title = ''; const cue = A.editorSocketCues[A.activeLab]; if (cue) cue.visible = false; });
     const endMove = event => { if (!A.editorDrag || (event.pointerId != null && event.pointerId !== A.editorDrag.pointerId)) return; A.editorDrag.editor.endMove(); A.editorDrag = null; schedule(); persist(true); };
     canvas.addEventListener('pointerup', endMove); canvas.addEventListener('pointercancel', endMove); canvas.addEventListener('lostpointercapture', endMove);
   }
@@ -619,6 +766,7 @@
       if (lab === 'servo2') {
         for (const connection of editor.connections.values()) connection.visual.visible = !isLegacyServoPlaceholder(connection);
       }
+      if (A.editorSocketCues?.[lab] && (editor.mode === 'CONTROL' || (lab !== A.activeLab))) A.editorSocketCues[lab].visible = false;
       editor.connectionRoot.visible = editor.mode !== 'CONTROL';
     }
   }
@@ -630,7 +778,6 @@
     A.renderer.domElement.tabIndex = 0; installCameraControls();
     A.scenes.servo2 = createServoScene(); A.scenes.mps = createMpsScene(); A.scenes.pneumatic = createPneumaticScene(); A.scenes.discrete = createDiscreteScene(); A.scenes.equipment3d = createEquipmentScene();
     createEditors(); installEditorControls();
-    loadImportedAssets();
     return true;
   }
 
@@ -677,9 +824,20 @@
 
   async function addImported(lab, filename, targetSize, position, rotation = [0, 0, 0], opacity = 1, onLoaded = null, options = {}) {
     try {
-      const loader = window.PLCTrainerImportedModels;
-      if (!loader || A.scenes[lab]?.parts?.[`asset-${filename}`]) return;
+      const loader = window.PLCTrainerImportedModels, scene = A.scenes[lab], assetKey = `asset-${filename}`;
+      if (!loader || !scene?.parts) return;
+      const existing = scene.parts[assetKey];
+      if (existing) return existing;
+      // A failed bundle is allowed to retry while an earlier loader request is
+      // still settling.  Stamp this request so a late completion cannot attach
+      // an obsolete model (or run its registration callback) after the retry.
+      const assetLoadTokens = scene.parts.__assetLoadTokens ??= Object.create(null);
+      const loadToken = {};
+      assetLoadTokens[assetKey] = loadToken;
       const model = await loader.loadModel(filename, { name: filename });
+      const currentParts = A.scenes[lab]?.parts;
+      if (!currentParts || currentParts.__assetLoadTokens?.[assetKey] !== loadToken) return currentParts?.[assetKey];
+      if (currentParts[assetKey]) return currentParts[assetKey];
       const wrapper = new Three.Group(); model.rotation.set(...rotation); wrapper.add(model); model.updateMatrixWorld(true);
       let bounds = new Three.Box3().setFromObject(model), scale = 1, center = new Three.Vector3();
       if (!options.authoredCoordinates) {
@@ -688,10 +846,17 @@
       }
       wrapper.position.set(...position);
       model.traverse?.(object => { if (!object.isMesh) return; object.castShadow = true; object.receiveShadow = true; if (opacity < 1 && object.material) { for (const mat of Array.isArray(object.material) ? object.material : [object.material]) { mat.transparent = true; mat.opacity = opacity; mat.depthWrite = opacity > .6; } } });
-      A.scenes[lab].root.add(wrapper); A.scenes[lab].parts[`asset-${filename}`] = wrapper; schedule();
+      // Keep the ownership guard immediately adjacent to the scene mutation:
+      // the async continuation may otherwise race a replacement retry.
+      if (A.scenes[lab]?.parts?.__assetLoadTokens?.[assetKey] !== loadToken) return A.scenes[lab]?.parts?.[assetKey];
+      if (A.scenes[lab]?.parts?.[assetKey]) return A.scenes[lab].parts[assetKey];
+      A.scenes[lab].root.add(wrapper); A.scenes[lab].parts[assetKey] = wrapper; schedule();
       onLoaded?.({ wrapper, model, scale, center });
       return wrapper;
-    } catch (error) { console.warn(`Imported model ${filename} could not be loaded`, error); }
+    } catch (error) {
+      console.warn(`Imported model ${filename} could not be loaded`, error);
+      if (options.rethrow) throw error;
+    }
   }
 
   async function loadWorkpieceTemplates() {
@@ -722,29 +887,92 @@
     sprite.scale.set(width, height, 1); sprite.renderOrder = 18; sprite.userData.panelLabel = { text, texture }; return sprite;
   }
 
+  function mountL7SA004AModel(group, model, targetHeight, frontZ) {
+    model.name = 'l7sa004a-production-v3-optimized';
+    // Blender's product camera looks toward the -Y face. After glTF's Y-up
+    // conversion that face points away from this lab's +Z front convention.
+    model.rotation.y += Math.PI;
+    model.updateMatrixWorld(true);
+    const initialBounds = new Three.Box3().setFromObject(model), initialSize = new Three.Vector3(); initialBounds.getSize(initialSize);
+    model.scale.multiplyScalar(targetHeight / Math.max(initialSize.y, .001)); model.updateMatrixWorld(true);
+    const fittedBounds = new Three.Box3().setFromObject(model), center = new Three.Vector3(); fittedBounds.getCenter(center);
+    model.position.x -= center.x; model.position.y -= fittedBounds.min.y; model.position.z += frontZ - fittedBounds.max.z;
+    group.add(model); group.updateWorldMatrix(true, true); model.updateWorldMatrix(true, true);
+    const finalBounds = new Three.Box3().setFromObject(model), finalSize = new Three.Vector3(); finalBounds.getSize(finalSize);
+    return { model, dimensions: { width: finalSize.x, height: finalSize.y, depth: finalSize.z } };
+  }
+
+  function importedTerminalPosition(group, model, name) {
+    const node = model?.getObjectByName?.(name); if (!node) return null;
+    group.updateWorldMatrix(true, true); node.updateWorldMatrix(true, false);
+    return group.worldToLocal(node.getWorldPosition(new Three.Vector3()));
+  }
+
   function createPulseTerminalModule(root, profileId, id, title, terminals, position, options = {}) {
-    const group = new Three.Group(); group.name = `${id}-manual-terminal-overlay`; group.position.set(...position); root.add(group);
-    const width = options.width || .18, height = options.height || .17;
-    box(group, [width, height, .025], [0, height / 2, 0], material(options.color || 0x384a55, .32, .38), `${id}-panel`);
-    const titleLabel = createPanelLabel(title, width * .92, .034, { border: options.accent || '#65b8dd' }); titleLabel.position.set(0, height - .022, .018); group.add(titleLabel);
+    const group = new Three.Group(); group.name = `${id}-three-dimensional-equipment`; group.position.set(...position); root.add(group);
+    const modelKind = options.modelKind || 'terminal-panel';
+    const drive = modelKind === 'l7sa004a', controller = modelKind === 'xbf-pd02a';
+    const width = options.width || (drive ? .105 : .19), height = options.height || (drive ? .225 : .19), depth = options.depth || (drive ? .145 : .105);
+    const importedDrive = drive && options.importedModel;
+    const bodyMaterial = material(drive ? 0xe1e3df : 0xd1d8d8, .28, .5), sideMaterial = material(drive ? 0xaeb4b2 : 0x87979c, .55, .34);
+    const faceMaterial = material(drive ? 0x20272a : 0xe2e7e6, .2, .48), connectorMaterial = material(0x20282c, .35, .35), metalMaterial = material(0xcbd6da, .82, .18);
+    let importedModelInfo = null;
+    if (importedDrive) importedModelInfo = mountL7SA004AModel(group, options.importedModel, height, depth / 2);
+    else {
+      box(group, [width, height, depth], [0, height / 2, 0], bodyMaterial, `${id}-housing`);
+      box(group, [width * .94, height * .92, .014], [0, height / 2, depth / 2 + .007], faceMaterial, `${id}-front-cover`);
+      box(group, [.009, height * .96, depth * .94], [-width / 2 - .004, height / 2, 0], sideMaterial, `${id}-left-chassis`);
+      box(group, [.009, height * .96, depth * .94], [width / 2 + .004, height / 2, 0], sideMaterial, `${id}-right-chassis`);
+    }
+    if (drive && !importedDrive) {
+      // L7SA004A 38×169×173 mm 비례의 슬림 서보 드라이브: 표시창, 키패드, CN1/엔코더·모터 커넥터와 방열 슬롯.
+      box(group, [width * .72, .038, .008], [0, height - .04, depth / 2 + .017], material(0x10181d, .2, .28), `${id}-display-bezel`);
+      const display = createPanelLabel('rdy', width * .5, .021, { background: '#071014', border: '#3d5964', color: '#8cf5dc', font: 'bold 42px Consolas, monospace' });
+      display.position.set(0, height - .04, depth / 2 + .023); group.add(display);
+      for (let index = 0; index < 4; index += 1) cylinder(group, .0052, .004, [-.025 + index * .017, height - .075, depth / 2 + .019], material(index === 0 ? 0x53e590 : 0x738087, .15, .35, { emissive: index === 0 ? 0x174b32 : 0x000000 }), 'z');
+      for (let index = 0; index < 7; index += 1) box(group, [.004, .052, depth * .72], [-width / 2 - .010, .045 + index * .023, 0], sideMaterial, `${id}-heatsink-fin-${index}`);
+      box(group, [width * .72, .049, .016], [0, .112, depth / 2 + .018], connectorMaterial, `${id}-cn1`);
+      const cn1 = createPanelLabel('CN1  I/O', width * .62, .018, { background: '#172125', border: '#73878c', color: '#dce8ea', font: 'bold 28px Consolas, monospace' }); cn1.position.set(0, .13, depth / 2 + .028); group.add(cn1);
+      box(group, [width * .34, .028, .018], [-width * .22, .025, depth / 2 + .018], material(0x315d79, .28, .42), `${id}-encoder-connector`);
+      box(group, [width * .34, .028, .018], [width * .22, .025, depth / 2 + .018], material(0x386a52, .28, .42), `${id}-motor-connector`);
+    } else if (controller) {
+      // XBF-PD02A 전면은 RUN/X_AXIS/Y_AXIS LED와 Smart Link용 외부 배선 커넥터를 가진 확장 모듈이다.
+      box(group, [width * .9, .022, .01], [0, height - .034, depth / 2 + .018], material(0x12689a, .35, .38), `${id}-ls-blue-band`);
+      const ledNames = ['RUN', 'X', 'Y'];
+      ledNames.forEach((name, index) => {
+        cylinder(group, .006, .005, [-.044 + index * .044, height - .066, depth / 2 + .019], material(index === 0 ? 0x49e88a : 0x25383f, .12, .36, { emissive: index === 0 ? 0x174b32 : 0 }), 'z');
+        const ledLabel = createPanelLabel(name, .033, .012, { background: 'rgba(0,0,0,0)', border: 'rgba(0,0,0,0)', color: '#30434b', font: 'bold 32px Consolas, monospace' }); ledLabel.position.set(-.044 + index * .044, height - .082, depth / 2 + .025); group.add(ledLabel);
+      });
+      box(group, [width * .78, .073, .018], [0, .066, depth / 2 + .018], connectorMaterial, `${id}-smart-link-connector`);
+      for (let index = 0; index < 2; index += 1) box(group, [.012, .084, .015], [(index ? 1 : -1) * width * .43, .066, depth / 2 + .016], sideMaterial, `${id}-connector-latch-${index}`);
+    }
+    const titleLabel = createPanelLabel(title, width * .9, .026, { background: drive ? '#20282c' : '#165f89', border: options.accent || '#65b8dd', color: '#f4fafb', font: 'bold 34px Consolas, monospace' });
+    titleLabel.position.set(0, importedDrive ? height + .019 : height - .014, depth / 2 + .027); group.add(titleLabel);
     const columns = terminals.length > 4 ? 4 : terminals.length, rows = Math.ceil(terminals.length / columns), anchors = [];
+    const l7AnchorNames = { 'PF+': 'TERM_CN1_09_PF_POS', 'PF-': 'TERM_CN1_10_PF_NEG', 'PR+': 'TERM_CN1_11_PR_POS', 'PR-': 'TERM_CN1_12_PR_NEG' };
     terminals.forEach((terminal, index) => {
       const row = Math.floor(index / columns), column = index % columns;
-      const x = columns === 1 ? 0 : -width * .35 + width * .70 * column / (columns - 1);
-      const y = height - .065 - row * (rows > 1 ? .055 : 0);
+      const importedPosition = importedDrive ? importedTerminalPosition(group, importedModelInfo.model, l7AnchorNames[terminal.anchorId]) : null;
+      const x = importedPosition?.x ?? (columns === 1 ? 0 : -width * .31 + width * .62 * column / (columns - 1));
+      const y = importedPosition?.y ?? (drive ? .101 - row * .03 : .081 - row * (rows > 1 ? .035 : 0));
+      const z = importedPosition?.z ?? (depth / 2 + .034);
       const plus = terminal.polarity === '+';
-      const terminalSurface = cylinder(group, .011, .012, [x, y, .022], material(plus ? 0xb94939 : 0x315c92, .72, .25), 'z');
-      const label = createPanelLabel(`${terminal.terminal} ${terminal.signal}`, width / Math.max(columns, 3) * .92, .022, { color: plus ? '#ffb3a6' : '#a9d0ff', border: plus ? '#9a4237' : '#355f90', font: 'bold 28px Consolas, monospace' });
-      label.position.set(x, y - .024, .021); group.add(label);
+      const terminalSurface = cylinder(group, importedDrive ? .0023 : drive ? .0065 : .0072, importedDrive ? .0014 : .009, [x, y, importedDrive ? z + .0007 : depth / 2 + .024], metalMaterial, 'z');
+      cylinder(group, importedDrive ? .00125 : drive ? .0036 : .0041, importedDrive ? .0018 : .011, [x, y, importedDrive ? z + .0013 : depth / 2 + .029], material(plus ? 0x8c2f27 : 0x244a70, .1, .42), 'z');
+      const label = createPanelLabel(importedDrive ? `${terminal.terminal.replace('CN1-', '')} ${terminal.signal}` : `${terminal.terminal} ${terminal.signal}`, importedDrive ? .029 : width / Math.max(columns, 3) * .96, importedDrive ? .009 : .014, { background: 'rgba(14,22,26,.96)', color: plus ? '#ffb3a6' : '#a9d0ff', border: plus ? '#9a4237' : '#355f90', font: 'bold 25px Consolas, monospace' });
+      const pinNumber = Number(String(terminal.terminal).split('-').pop());
+      label.position.set(importedDrive ? x + (pinNumber % 2 ? -.019 : .019) : x, importedDrive ? y : y - .014, importedDrive ? z + .004 : depth / 2 + .034); group.add(label);
       anchors.push({
         id: terminal.anchorId,
         tag: `${terminal.terminal} ${terminal.signal}`,
         kind: 'electric',
-        position: [x, y, .028],
+        position: [x, y, importedDrive ? z + .002 : depth / 2 + .034],
+        hitRadius: importedDrive ? .0032 : undefined,
         hitObject: terminalSurface,
-        metadata: { routing: { style: 'terminal-panel' } }
+        metadata: { routing: { style: importedDrive ? 'cn1-pin' : 'terminal-panel' } }
       });
     });
+    group.userData.equipmentModel = { profileId, modelKind, model: title, dimensions: importedModelInfo?.dimensions || { width, height, depth }, terminals: terminals.length, sourceAsset: importedDrive ? 'l7sa004a-production-v3.glb' : null, evidence: controller ? 'LS-XBF-PD02A-OFFICIAL-PRODUCT-PAGE' : importedDrive ? 'USER-BLENDER-5.2-L7SA004A-PRODUCTION-V3' : drive ? 'LS-XDL-L7S-CATALOG' : 'TRAINING-OVERLAY' };
     registerEditorModule('servo2', id, group, anchors, false);
     return group;
   }
@@ -756,7 +984,7 @@
     });
   }
 
-  function loadServoPulsePanels() {
+  async function loadServoPulsePanels() {
     const scene = A.scenes.servo2, parts = scene?.parts;
     if (!parts || parts.pulseRoots) return;
     parts.pulseRoots = {};
@@ -766,10 +994,20 @@
       const sources = uniquePulseTerminals(map.pairs.flatMap(pair => pair.source));
       const xTargets = uniquePulseTerminals(map.pairs.filter(pair => pair.axis === 'X').flatMap(pair => pair.target));
       const yTargets = uniquePulseTerminals(map.pairs.filter(pair => pair.axis === 'Y').flatMap(pair => pair.target));
-      createPulseTerminalModule(root, profileId, map.controller.moduleId, map.controller.model, sources, [-.25, 0, 0], { width: .21, accent: profileId === 'ls' ? '#4db9e8' : '#e25e5e' });
-      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.X, `${map.amplifier.model} X`, xTargets, [.035, 0, 0], { width: .17, accent: '#e6a64d' });
-      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.Y, `${map.amplifier.model} Y`, yTargets, [.265, 0, 0], { width: .17, accent: '#e6a64d' });
-      const evidence = createPanelLabel(`${map.evidence.manualId} · 교육용 단자 오버레이`, .46, .026, { color: '#9fc5d8', border: '#456477', font: '26px Consolas, monospace' });
+      let l7AxisX = null, l7AxisY = null;
+      if (profileId === 'ls' && window.PLCTrainerImportedModels) {
+        try {
+          [l7AxisX, l7AxisY] = await Promise.all([
+            window.PLCTrainerImportedModels.loadModel('l7sa004a-production-v3.glb', { name: 'L7SA004A-axis-x' }),
+            window.PLCTrainerImportedModels.loadModel('l7sa004a-production-v3.glb', { name: 'L7SA004A-axis-y' })
+          ]);
+        } catch (error) { console.warn('Optimized L7SA004A model could not be loaded; using the procedural fallback', error); }
+      }
+      createPulseTerminalModule(root, profileId, map.controller.moduleId, map.controller.model, sources, [-.25, 0, 0], { modelKind: profileId === 'ls' ? 'xbf-pd02a' : 'terminal-panel', width: .19, height: .19, depth: .105, accent: profileId === 'ls' ? '#4db9e8' : '#e25e5e' });
+      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.X, `${map.amplifier.model} X`, xTargets, [.035, 0, 0], { modelKind: profileId === 'ls' ? 'l7sa004a' : 'terminal-panel', importedModel: l7AxisX, width: profileId === 'ls' ? .105 : .17, height: profileId === 'ls' ? .225 : .17, depth: profileId === 'ls' ? .145 : .025, accent: '#e6a64d' });
+      createPulseTerminalModule(root, profileId, map.amplifier.moduleIds.Y, `${map.amplifier.model} Y`, yTargets, [.265, 0, 0], { modelKind: profileId === 'ls' ? 'l7sa004a' : 'terminal-panel', importedModel: l7AxisY, width: profileId === 'ls' ? .105 : .17, height: profileId === 'ls' ? .225 : .17, depth: profileId === 'ls' ? .145 : .025, accent: '#e6a64d' });
+      const evidenceText = profileId === 'ls' && l7AxisX && l7AxisY ? `${map.evidence.manualId} · Blender v3 최적화 · CN1 실핀 결선` : `${map.evidence.manualId} · 교육용 단자 오버레이`;
+      const evidence = createPanelLabel(evidenceText, .46, .026, { color: '#9fc5d8', border: '#456477', font: '26px Consolas, monospace' });
       evidence.position.set(0, -.028, .02); root.add(evidence);
       parts.pulseRoots[profileId] = root;
     }
@@ -823,9 +1061,14 @@
 
   function updateEquipmentDetails(entry) {
     if (!entry || !A.hub) return;
-    q('#al-equipment-root', A.hub).textContent = entry.root || '—';
-    q('#al-equipment-mesh', A.hub).textContent = `${Number(entry.nodeCount || 0).toLocaleString()} nodes · ${Number(entry.triangleCount || 0).toLocaleString()} triangles`;
-    q('#al-equipment-file', A.hub).textContent = `${entry.file} · ${(Number(entry.bytes || 0) / 1024).toFixed(1)} KiB`;
+    q('#al-equipment-root', A.hub).textContent = entry.model || entry.root || '—';
+    q('#al-equipment-mesh', A.hub).textContent = Array.isArray(entry.terminalNodes)
+      ? `${entry.terminalNodes.length} manual terminals · PDF ${entry.evidence?.pages?.join(', ') || '—'}쪽`
+      : `${Number(entry.nodeCount || 0).toLocaleString()} nodes · ${Number(entry.triangleCount || 0).toLocaleString()} triangles`;
+    q('#al-equipment-file', A.hub).textContent = `${entry.file} · ${(Number(entry.bytes || 0) / 1024).toFixed(1)} KiB${entry.assetCollection === 'manual-backed' ? ' · Blender 5.2' : ''}`;
+    q('#al-equipment-grade', A.hub).textContent = entry.assetCollection === 'manual-backed'
+      ? '매뉴얼 치수·단자 근거 3D'
+      : '교육용 3D 외형';
   }
 
   async function showEquipmentModel(filename) {
@@ -845,7 +1088,10 @@
           for (const mat of Array.isArray(object.material) ? object.material : [object.material]) mat.dispose?.();
         });
       }
-      model.rotation.set(0, 0, 0); model.scale.setScalar(1); model.position.set(0, 0, 0); model.updateMatrixWorld(true);
+      // Blender's -Y authored front becomes +Z in glTF. This viewer's default
+      // camera sits on -Z, so manual-backed equipment needs a half turn to show
+      // its labeled face and terminal banks instead of its rear enclosure.
+      model.rotation.set(0, entry.assetCollection === 'manual-backed' ? Math.PI : 0, 0); model.scale.setScalar(1); model.position.set(0, 0, 0); model.updateMatrixWorld(true);
       let bounds = new Three.Box3().setFromObject(model), size = new Three.Vector3(); bounds.getSize(size);
       const maxDimension = Math.max(size.x, size.y, size.z) || 1;
       model.scale.multiplyScalar(.76 / maxDimension); model.updateMatrixWorld(true);
@@ -859,7 +1105,8 @@
       updateCamera(scene); updateEquipmentDetails(entry);
       A.state.equipment.selected = filename;
       const select = q('#al-equipment-select', A.hub); if (select) select.value = filename;
-      q('b', statusBox).textContent = EQUIPMENT_LABELS[filename] || filename; q('span', statusBox).textContent = '교육용 3D 외형';
+      q('b', statusBox).textContent = EQUIPMENT_LABELS[filename] || filename;
+      q('span', statusBox).textContent = entry.assetCollection === 'manual-backed' ? '매뉴얼 치수·단자 근거 3D' : '교육용 3D 외형';
       schedule(); persist(true);
     } catch (error) {
       if (token !== A.equipmentLoadToken) return;
@@ -900,6 +1147,7 @@
 
   async function loadDiscreteAssets() {
     const electric = (id, position, tag = id) => ({ id, tag, kind: 'electric', position });
+    const manual = (id, terminalId, position, tag = terminalId, root = null) => ({ id, terminalId, tag, kind: 'electric', position, root });
     const sensorAnchors = [electric('P24', [-.16, .16, .08]), electric('N24', [0, .16, .08]), electric('OUT', [.16, .16, .08])];
     const sensorSpecs = [
       ['photo-npn', 'photo-sensor-npn.glb', [-3.7, .88, -.15]], ['photo-pnp', 'photo-sensor-pnp.glb', [-2.7, .88, -.15]],
@@ -907,13 +1155,33 @@
       ['capacitive-npn', 'capacitive-sensor-npn.glb', [.3, .88, -.15]], ['capacitive-pnp', 'capacitive-sensor-pnp.glb', [1.3, .88, -.15]]
     ];
     const parts = A.scenes.discrete.parts, tasks = [];
-    const add = (id, filename, size, position, anchors, onLoaded = null) => {
-      tasks.push(addImported('discrete', filename, size, position, [0, 0, 0], 1, payload => {
-        parts.imported[id] = payload; registerEditorModule('discrete', id, payload.wrapper, anchors, true); onLoaded?.(payload);
-      }));
+    const add = (id, filename, size, position, anchors, onLoaded = null, options = {}) => {
+      const install = payload => {
+        const resolvedAnchors = typeof anchors === 'function' ? anchors(payload) : anchors;
+        parts.imported[id] = payload;
+        registerEditorModule('discrete', id, payload.wrapper, resolvedAnchors || [], true);
+        onLoaded?.(payload);
+      };
+      const importOptions = { ...options, rethrow: true };
+      delete importOptions.fallback;
+      delete importOptions.fallbackRotation;
+      const assetRotation = Array.isArray(options.rotation) ? options.rotation : [0, 0, 0];
+      const fallbackRotation = Array.isArray(options.fallbackRotation) ? options.fallbackRotation : [0, 0, 0];
+      const task = addImported('discrete', filename, size, position, assetRotation, 1, install, importOptions).catch(async error => {
+        if (!options.fallback) return undefined;
+        console.warn(`${filename} manual-backed model failed; using ${options.fallback} fallback`, error);
+        return addImported('discrete', options.fallback, size, position, fallbackRotation, 1, install, { ...importOptions, rethrow: false });
+      });
+      tasks.push(task);
     };
 
-    add('source', 'smps.glb', 1.35, [-4.15, .92, 1.65], [electric('P24', [-.18, .22, .15]), electric('N24', [.18, .22, .15])]);
+    add('source', 'mdr-100-24.glb', 1.35, [-4.15, .92, 1.65], payload => bindManualTerminalAnchors(payload, [
+      manual('P24', 'V+1', [-.18, .22, .15], 'MDR V+1 · +24 V DC'),
+      manual('N24', 'V-1', [.18, .22, .15], 'MDR V-1 · 0 V DC'),
+      manual('L', 'L', [-.30, .12, .15], 'AC L'), manual('N', 'N', [-.22, .12, .15], 'AC N'), manual('PE', 'PE', [-.14, .12, .15], '보호접지 PE'),
+      manual('V+2', 'V+2', [.02, .12, .15]), manual('V-2', 'V-2', [.10, .12, .15]),
+      manual('DCOK-A', 'DCOK-A', [.22, .12, .15]), manual('DCOK-B', 'DCOK-B', [.30, .12, .15])
+    ]), null, { rotation: [0, Math.PI, 0] });
     const power = new Three.Group(); power.name = '24V-distribution-terminal'; power.position.set(0, .55, .72); A.scenes.discrete.root.add(power);
     box(power, [8.15, .08, .38], [0, 0, 0], material(0x303b42, .5, .45));
     for (let index = 0; index < 20; index += 1) {
@@ -924,19 +1192,48 @@
     registerEditorModule('discrete', 'power', power, [
       ...rowAnchors('P24-', 20, .10, -.09, -3.8, 3.8), ...rowAnchors('N24-', 20, .10, .09, -3.8, 3.8)
     ], true);
-    add('plc', 'mitsubishi-q-plc-module.glb', 1.65, [-2.25, 1.03, 1.65], [
-      electric('P24', [-.68, .38, .16]), electric('N24', [-.52, .38, .16]), electric('COM', [-.36, .38, .16]),
-      ...rowAnchors('I', 11, .20, .16, -.68, .68), ...rowAnchors('O', 13, .02, .16, -.68, .68)
-    ]);
+    add('plc', 'xbc-dr32h.glb', 1.65, [-2.25, 1.03, 1.65], payload => {
+      const specs = [
+        manual('P24', '24V', [-.68, .38, .16], 'XBC 24V · PLC 전원 +'),
+        manual('N24', '24G', [-.52, .38, .16], 'XBC 24G · PLC 전원 -'),
+        manual('COM', 'COMI', [-.36, .38, .16], 'XBC COMI · 입력 공통')
+      ];
+      for (let index = 0; index < 11; index += 1) {
+        const terminalId = `P0${index.toString(16).toUpperCase()}`;
+        specs.push(manual(`I${index}`, terminalId, [-.68 + 1.36 * index / 10, .20, .16], `${terminalId} · I${index}`));
+      }
+      for (let index = 0; index < 13; index += 1) {
+        const terminalId = `P2${index.toString(16).toUpperCase()}`;
+        specs.push(manual(`O${index}`, terminalId, [-.68 + 1.36 * index / 12, .02, .16], `${terminalId} · O${index}`));
+      }
+      for (const [index, terminalId] of ['L', 'N', 'PE', 'NC', 'P0B', 'P0C', 'P0D', 'P0E', 'P0F', 'P2D', 'P2E', 'P2F', 'COM0', 'COM1', 'COM2', 'COM3', 'RX', 'TX', 'SG', '485+', '485-'].entries()) {
+        specs.push(manual(terminalId, terminalId, [-.68 + 1.36 * (index % 11) / 10, -.12 - Math.floor(index / 11) * .10, .16]));
+      }
+      return bindManualTerminalAnchors(payload, specs);
+    }, null, { fallback: 'mitsubishi-q-plc-module.glb', rotation: [0, Math.PI, 0] });
     add('switch', 'switch-box.glb', 1.25, [.05, .93, 1.65], [
       electric('S1-IN', [-.48, .18, .14]), electric('S1-OUT', [-.32, .18, .14]),
       electric('S2-IN', [-.08, .18, .14]), electric('S2-OUT', [.08, .18, .14]),
       electric('S3-IN', [.32, .18, .14]), electric('S3-OUT', [.48, .18, .14])
     ]);
-    add('relay', 'relay-module.glb', 1.25, [1.65, .93, 1.65], [
-      electric('RY1+', [-.42, .19, .14]), electric('RY1-', [-.28, .19, .14]), electric('RY2+', [-.07, .19, .14]),
-      electric('RY2-', [.07, .19, .14]), electric('RY3+', [.28, .19, .14]), electric('RY3-', [.42, .19, .14])
-    ]);
+    add('relay', 'my2n-d2-dc24.glb', .72, [1.65, .93, 1.65], payload => {
+      const basePosition = payload.model.position.clone(), models = [payload.model];
+      for (let index = 1; index < 3; index += 1) {
+        const clone = cloneModelMaterials(payload.model.clone(true));
+        payload.wrapper.add(clone); models.push(clone);
+      }
+      const specs = [];
+      models.forEach((model, index) => {
+        model.name = `MY2N-D2 relay ${index + 1}`;
+        model.position.copy(basePosition); model.position.x += (index - 1) * .48;
+        for (const terminalId of ['1', '5', '9', '4', '8', '12', '13', '14']) {
+          const runtimeId = terminalId === '13' ? `RY${index + 1}-` : terminalId === '14' ? `RY${index + 1}+` : `RY${index + 1}:${terminalId}`;
+          specs.push(manual(runtimeId, terminalId, [(index - 1) * .34, .18, .14], `MY2N ${index + 1} · ${terminalId}`, model));
+        }
+      });
+      parts.manualRelayModels = models;
+      return bindManualTerminalAnchors(payload, specs);
+    }, null, { rotation: [0, Math.PI, 0] });
     add('timer', 'timer-box.glb', 1.2, [3.05, .92, 1.65], [
       electric('P24', [-.38, .17, .14]), electric('N24', [-.13, .17, .14]), electric('IN', [.13, .17, .14]), electric('DONE', [.38, .17, .14])
     ], ({ wrapper }) => { const overlay = createFndOverlay('TIMER'); overlay.position.set(0, .53, .03); wrapper.add(overlay); parts.fnd.timer = overlay; });
@@ -952,6 +1249,22 @@
       electric('G+', [-.5, .18, .14]), electric('Y+', [-.3, .18, .14]), electric('R+', [-.1, .18, .14]), electric('W+', [.1, .18, .14]), electric('BZ+', [.3, .18, .14]), electric('COM', [.5, .18, .14])
     ]);
     add('tower', 'tower-lamp.glb', 1.45, [.55, 1.02, -1.7], [electric('G+', [-.32, .12, .12]), electric('Y+', [-.1, .12, .12]), electric('R+', [.12, .12, .12]), electric('COM', [.34, .12, .12])]);
+    add('manual-mc', 'mc-22b-dc24.glb', 1.02, [1.7, .94, -1.7], payload => bindManualTerminalAnchors(payload,
+      ['1L1', '2T1', '3L2', '4T2', '5L3', '6T3', '13', '14', '21', '22', 'A1', 'A2'].map((terminalId, index) => manual(terminalId, terminalId, [-.36 + .72 * (index % 6) / 5, .15 - Math.floor(index / 6) * .12, .12], `MC-22b · ${terminalId}`))
+    ), null, { rotation: [0, Math.PI, 0] });
+    add('manual-eocr', 'eocr3de-05duh.glb', 1.02, [2.75, .94, -1.7], payload => bindManualTerminalAnchors(payload,
+      ['L1-IN', 'L1-OUT', 'L2-IN', 'L2-OUT', 'L3-IN', 'L3-OUT', 'A1', 'A2', '95', '96', '97', '98', '07', '08'].map((terminalId, index) => manual(terminalId, terminalId, [-.36 + .72 * (index % 7) / 6, .15 - Math.floor(index / 7) * .12, .12], `EOCR · ${terminalId}`))
+    ), null, { rotation: [0, Math.PI, 0] });
+    add('manual-ut', 'ut-2-5-3044076.glb', .72, [3.65, .76, -1.7], payload => bindManualTerminalAnchors(payload, [
+      manual('1', '1', [-.05, .12, .08], 'UT 2,5 · 1'), manual('2', '2', [.05, .12, .08], 'UT 2,5 · 2')
+    ]), null, { rotation: [0, Math.PI, 0] });
+    add('manual-ut-pe', 'ut-2-5-pe-3044092.glb', .72, [3.92, .76, -1.7], payload => bindManualTerminalAnchors(payload, [
+      manual('1', '1', [-.05, .12, .08], 'UT 2,5-PE · 1'), manual('2', '2', [.05, .12, .08], 'UT 2,5-PE · 2')
+    ]), null, { rotation: [0, Math.PI, 0] });
+    add('manual-ut-fuse', 'ut-4-hesi-3046032.glb', .78, [4.22, .78, -1.7], payload => bindManualTerminalAnchors(payload, [
+      manual('1', '1', [-.05, .12, .08], 'UT 4-HESI · 1'), manual('2', '2', [.05, .12, .08], 'UT 4-HESI · 2')
+    ]), null, { rotation: [0, Math.PI, 0] });
+    add('ruler', 'ruler.glb', 1.5, [0, .56, -2.65], []);
     add('probe-black', 'banana-plug-black.glb', .48, [-3.25, .68, -1.68], [electric('TIP', [0, .1, .18])], ({ model }) => {
       const redModel = model.clone(true), redWrapper = new Three.Group();
       redModel.traverse?.(object => {
@@ -965,24 +1278,23 @@
       A.scenes.discrete.root.add(redWrapper); parts.imported['probe-red'] = { wrapper: redWrapper, model: redModel };
       registerEditorModule('discrete', 'probe-red', redWrapper, [electric('TIP', [0, .1, .18])], true);
     });
-    add('ruler', 'ruler.glb', 1.5, [3.55, .64, -1.72], []);
-
     await Promise.all(tasks);
     const saved = A.state?.editor?.discrete;
     if (saved) { try { A.editors.discrete.importState(saved, { strict: false }); } catch (error) { console.warn('Discrete editor state could not be restored', error); } }
     syncDiscreteTopology(); updateDiscreteScene(); updateUi(true); schedule();
   }
 
-  function loadImportedAssets() {
-    if (A.importedLoaded) return;
-    if (!window.PLCTrainerImportedModels) { window.addEventListener('plc-trainer-imported-models-ready', loadImportedAssets, { once: true }); return; }
-    A.importedLoaded = true;
-    void loadEquipmentCatalog();
-    void loadDiscreteAssets();
+  function restoreEditorState(lab) {
+    const saved = A.state?.editor?.[lab], editor = A.editors[lab];
+    if (!saved || !editor) return;
+    try { editor.importState(saved, { strict: false }); } catch (error) { console.warn(`${lab} editor state could not be restored`, error); }
+  }
+
+  async function loadServoAssets() {
     // The imported GLBs contain equipment only.  Their Unity root transform is
     // restored here so the original orthographic camera presets remain valid,
     // without packaging the classroom, desks, chairs or other scenery.
-    addImported('servo2', 'servo2-workshop.glb', null, [0, .8, -.1548], [0, 0, 0], 1, ({ model, wrapper }) => {
+    const workshop = addImported('servo2', 'servo2-workshop.glb', null, [0, .8, -.1548], [0, 0, 0], 1, ({ model, wrapper }) => {
       const parts = A.scenes.servo2.parts, axis1 = findImportedNode(model, /Axis1_Move__go608/i), axis2 = findImportedNode(model, /Axis2_Move__go1188/i);
       parts.importedAxes = { axis1, axis2, axis1Base: axis1?.position.clone(), axis2Base: axis2?.position.clone() };
       registerEditorModule('servo2', 'servo-motion-kit', wrapper, [
@@ -994,8 +1306,12 @@
       A.scenes.servo2.proxyRoot.visible = false;
     }, { authoredCoordinates: true });
     loadServoPulsePanels();
-    void loadServoNetworkAssets();
-    addImported('mps', 'mps-complete-station.glb', null, [-.106, .79, -.102], [0, 0, 0], 1, ({ model }) => {
+    await Promise.all([workshop, loadServoNetworkAssets()]);
+    restoreEditorState('servo2');
+  }
+
+  async function loadMpsAssets() {
+    const station = addImported('mps', 'mps-complete-station.glb', null, [-.106, .79, -.102], [0, 0, 0], 1, ({ model }) => {
       A.scenes.mps.parts.importedPlant = bindMpsImportedPlant(model);
       const wrapper = model.parent;
       registerEditorModule('mps', 'mps-station', wrapper, [
@@ -1006,25 +1322,28 @@
       ], false);
       A.scenes.mps.proxyRoot.visible = false;
     }, { authoredCoordinates: true });
-    loadWorkpieceTemplates();
+    await Promise.all([station, loadWorkpieceTemplates()]);
+    restoreEditorState('mps');
+  }
 
+  async function loadPneumaticAssets() {
     // PneumaticWorld only contains an empty table and classroom scenery.  The
     // useful equipment is authored as prefabs, so load those pieces directly.
-    A.scenes.pneumatic.proxyRoot.visible = false;
-    addImported('pneumatic', 'service-unit.glb', null, [-.48, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'service-unit', wrapper, [{ id: 'OUT', tag: 'Out', kind: 'air', position: [.072, .125, 0] }], true), { authoredCoordinates: true });
-    addImported('pneumatic', 'air-distributor.glb', null, [-.26, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'air-distributor', wrapper, [
+    const assets = [];
+    assets.push(addImported('pneumatic', 'service-unit.glb', null, [-.48, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'service-unit', wrapper, [{ id: 'OUT', tag: 'Out', kind: 'air', position: [.072, .125, 0] }], true), { authoredCoordinates: true, rethrow: true }));
+    assets.push(addImported('pneumatic', 'air-distributor.glb', null, [-.26, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'air-distributor', wrapper, [
       { id: 'IN', tag: 'IN/PP', kind: 'air', position: [-.05, .035, 0] },
       ...Array.from({ length: 8 }, (_, index) => ({ id: `P${index + 1}`, tag: `OUT/P${index + 1}`, kind: 'air', position: [.05, .015 + (index % 2) * .025, -.035 + Math.floor(index / 2) * .023] }))
-    ], true), { authoredCoordinates: true });
-    addImported('pneumatic', 'valve-5-2-single.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => {
+    ], true), { authoredCoordinates: true, rethrow: true }));
+    assets.push(addImported('pneumatic', 'valve-5-2-single.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => {
       A.scenes.pneumatic.parts.importedValves.single = wrapper;
       registerEditorModule('pneumatic', 'valve-single', wrapper, [
         { id: 'PP', tag: 'PP', kind: 'air', position: [0, .085, .033] }, { id: 'PA', tag: 'PA', kind: 'air', position: [-.04, .085, -.033] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.04, .085, -.033] },
         { id: 'A-P24', tag: 'PA/P24', kind: 'electric', position: [-.073, .05, .02] }, { id: 'A-N24', tag: 'PA/N24', kind: 'electric', position: [-.073, .025, .02] }
       ], true);
       syncPneumaticValveVisual();
-    }, { authoredCoordinates: true });
-    addImported('pneumatic', 'valve-5-2-double.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => {
+    }, { authoredCoordinates: true, rethrow: true }));
+    assets.push(addImported('pneumatic', 'valve-5-2-double.glb', null, [-.08, .84, .08], [0, 0, 0], 1, ({ wrapper }) => {
       A.scenes.pneumatic.parts.importedValves.double = wrapper;
       registerEditorModule('pneumatic', 'valve-double', wrapper, [
         { id: 'PP', tag: 'PP', kind: 'air', position: [0, .085, .033] }, { id: 'PA', tag: 'PA', kind: 'air', position: [-.04, .085, -.033] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.04, .085, -.033] },
@@ -1032,13 +1351,41 @@
         { id: 'B-P24', tag: 'PB/P24', kind: 'electric', position: [.073, .05, .02] }, { id: 'B-N24', tag: 'PB/N24', kind: 'electric', position: [.073, .025, .02] }
       ], true);
       syncPneumaticValveVisual();
-    }, { authoredCoordinates: true });
-    addImported('pneumatic', 'speed-controller.glb', null, [.12, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'speed-controller', wrapper, [{ id: 'IN', tag: 'IN', kind: 'air', position: [-.045, .04, 0] }, { id: 'OUT', tag: 'OUT', kind: 'air', position: [.045, .04, 0] }], true), { authoredCoordinates: true });
-    addImported('pneumatic', 'double-acting-cylinder.glb', null, [.4, .84, .08], [0, 0, 0], 1, ({ model, wrapper }) => {
+    }, { authoredCoordinates: true, rethrow: true }));
+    assets.push(addImported('pneumatic', 'speed-controller.glb', null, [.12, .84, .08], [0, 0, 0], 1, ({ wrapper }) => registerEditorModule('pneumatic', 'speed-controller', wrapper, [{ id: 'IN', tag: 'IN', kind: 'air', position: [-.045, .04, 0] }, { id: 'OUT', tag: 'OUT', kind: 'air', position: [.045, .04, 0] }], true), { authoredCoordinates: true, rethrow: true }));
+    assets.push(addImported('pneumatic', 'double-acting-cylinder.glb', null, [.4, .84, .08], [0, 0, 0], 1, ({ model, wrapper }) => {
       const rod = findImportedNode(model, /(?:Rod|Piston|Shaft).*__go/i);
       A.scenes.pneumatic.parts.importedCylinder = { wrapper, rod, base: rod?.position.clone() };
       registerEditorModule('pneumatic', 'double-cylinder', wrapper, [{ id: 'PA', tag: 'PA', kind: 'air', position: [-.14, .045, .035] }, { id: 'PB', tag: 'PB', kind: 'air', position: [.085, .045, .035] }], true);
-    }, { authoredCoordinates: true });
+    }, { authoredCoordinates: true, rethrow: true }));
+    await Promise.all(assets);
+    A.scenes.pneumatic.proxyRoot.visible = false;
+    restoreEditorState('pneumatic'); syncPneumaticValveVisual();
+  }
+
+  async function loadEquipmentAssets() {
+    await loadEquipmentCatalog();
+  }
+
+  const LAB_ASSET_LOADERS = Object.freeze({
+    servo2: loadServoAssets, mps: loadMpsAssets, pneumatic: loadPneumaticAssets,
+    discrete: loadDiscreteAssets, equipment3d: loadEquipmentAssets
+  });
+
+  async function ensureLabAssets(lab) {
+    const loader = LAB_ASSET_LOADERS[lab];
+    if (!loader) return;
+    A.labAssetLoads ??= Object.create(null);
+    if (A.labAssetLoads[lab]) return A.labAssetLoads[lab];
+    const load = Promise.resolve(
+      window.PLCTrainerImportedModels ? undefined : new Promise(resolve => window.addEventListener('plc-trainer-imported-models-ready', resolve, { once: true }))
+    ).then(() => loader());
+    const memoized = load.catch(error => {
+      if (A.labAssetLoads[lab] === memoized) delete A.labAssetLoads[lab];
+      throw error;
+    });
+    A.labAssetLoads[lab] = memoized;
+    return memoized;
   }
 
   function installCameraControls() {
@@ -1094,7 +1441,9 @@
       event.preventDefault();
       const step = event.deltaY < 0 ? 1 : -1;
       const scaleCurve = Math.max(.0339661, .0339661 + (scene.orbit.scale - .450001) * .104327);
-      scene.orbit.scale = clamp(scene.orbit.scale - scaleCurve * step, .1, 7);
+      const maxScale = scene.lab === 'discrete' ? DISCRETE_CAMERA_BOUNDS.maxScale : 7;
+      scene.cameraFit = null;
+      scene.orbit.scale = clamp(scene.orbit.scale - scaleCurve * step, .1, maxScale);
       updateCameraProjection(scene); schedule();
     }, { passive: false });
     document.addEventListener('keydown', event => {
@@ -1124,9 +1473,10 @@
     return preset;
   }
   function applyCameraPreset(scene, name) {
-    const preset = CAMERA_PRESETS[name];
+    const preset = scene?.lab === 'discrete' ? DISCRETE_CAMERA_PRESETS[name] : CAMERA_PRESETS[name];
     if (!scene || !preset) return;
-    scene.target.set(...preset.focus); scene.orbit.pitch = preset.pitch; scene.orbit.yaw = preset.yaw; scene.orbit.scale = preset.scale;
+    scene.target.set(...preset.focus); scene.orbit.pitch = preset.pitch; scene.orbit.yaw = preset.yaw; scene.orbit.scale = preset.fit ? discreteFitScale(scene.aspect) : preset.scale;
+    scene.cameraFit = preset.fit ? name : null;
     updateCamera(scene);
   }
   function updateCameraProjection(scene) {
@@ -1288,6 +1638,7 @@
   function setLab(lab) {
     if (!LABS.includes(lab)) lab = 'servo2';
     A.activeLab = lab; A.state.activeLab = lab;
+    void ensureLabAssets(lab);
     qa('.al-tab', A.hub).forEach(button => button.classList.toggle('active', button.dataset.lab === lab));
     qa('.al-pane', A.hub).forEach(pane => pane.classList.toggle('active', pane.dataset.labPane === lab));
     window.PLCTrainerPalletizer3D?.setVisible?.(A.visible && lab === 'palletizer3d');
@@ -1416,7 +1767,10 @@
     const output = key => !!(state.outputs?.[key] ?? state.effectiveOutputs?.[key]);
     const input = key => !!(state.inputs?.[key] ?? state.effectiveInputs?.[key] ?? state.physicalInputs?.[key]);
     const imported = parts.imported || {}, node = (id, pattern) => findImportedNode(imported[id]?.model, pattern);
-    for (const [index, key] of ['relay1', 'relay2', 'relay3'].entries()) setImportedLamp(node('relay', new RegExp(`RY${index + 1}`, 'i')), output(key));
+    for (const [index, key] of ['relay1', 'relay2', 'relay3'].entries()) {
+      const exactIndicator = findImportedNode(parts.manualRelayModels?.[index], /runtime:coil-indicator|coil.*indicator/i);
+      setImportedLamp(exactIndicator || node('relay', new RegExp(`RY${index + 1}`, 'i')), output(key));
+    }
     setImportedLamp(node('timer', /(?:OUT|RUN).*LED|LED.*(?:OUT|RUN)/i), output('timer'));
     setImportedLamp(node('counter', /(?:Signal Input|Include).*LED/i), output('counter'), 0xff9e43);
     const sensorMap = [['photo-npn', 'photoNpn'], ['photo-pnp', 'photoPnp'], ['inductive-npn', 'inductiveNpn'], ['inductive-pnp', 'inductivePnp'], ['capacitive-npn', 'capacitiveNpn'], ['capacitive-pnp', 'capacitivePnp']];
@@ -1543,8 +1897,8 @@
     if (hasMotion()) schedule();
   }
   function schedule() { if (!A.raf) A.raf = requestAnimationFrame(animate); }
-  function resize() { if (!A.renderer || !A.canvasHost) return; const rect = A.canvasHost.getBoundingClientRect(); if (rect.width < 20 || rect.height < 20) return; A.renderer.setSize(rect.width, rect.height, false); const scene = A.scenes[A.activeLab]; if (scene) { scene.aspect = rect.width / rect.height; updateCameraProjection(scene); } }
-  function setVisible(visible) { A.visible = !!visible; if (!A.initialized) return; A.lastTime = 0; A.host?.classList.toggle('show', A.visible); window.PLCTrainerPalletizer3D?.setVisible?.(A.visible && A.activeLab === 'palletizer3d'); if (A.visible) { setLab(A.activeLab); resize(); schedule(); } else persist(true); }
+  function resize() { if (!A.renderer || !A.canvasHost) return; const rect = A.canvasHost.getBoundingClientRect(); if (rect.width < 20 || rect.height < 20) return; A.renderer.setSize(rect.width, rect.height, false); const scene = A.scenes[A.activeLab]; if (scene) { scene.aspect = rect.width / rect.height; if (scene.cameraFit) scene.orbit.scale = discreteFitScale(scene.aspect); updateCameraProjection(scene); } }
+  function setVisible(visible) { A.visible = !!visible; if (!A.initialized) return; A.lastTime = 0; A.host?.classList.toggle('show', A.visible); window.PLCTrainerPalletizer3D?.setVisible?.(A.visible && A.activeLab === 'palletizer3d'); if (A.visible) { void ensureLabAssets(A.activeLab); setLab(A.activeLab); resize(); schedule(); } else persist(true); }
   function renderActive() { if (!A.initialized) return; updateScenes(); updateUi(true); if (A.visible) schedule(); }
   function syncMpsWorkpiecePhysicalSize() {
     const style = normalizeMpsWorkpieceStyle(A.state?.appearance?.mpsWorkpieceStyle);
@@ -1566,13 +1920,46 @@
       };
     });
   }
+  function connectionTargetDiagnostics(lab, editor) {
+    const scene = A.scenes[lab], canvas = A.renderer?.domElement, rect = canvas?.getBoundingClientRect?.();
+    if (!scene?.camera || !rect?.width || !rect?.height || !editor) return [];
+    return [...editor.connections.values()].map(connection => {
+      const visual = connection.visual, positions = visual.geometry?.getAttribute?.('position'), points = [];
+      if (positions) {
+        const step = Math.max(1, Math.floor(positions.count / 32)), local = new Three.Vector3(), world = new Three.Vector3();
+        for (let index = 0; index < positions.count; index += step) {
+          local.fromBufferAttribute(positions, index); world.copy(local); visual.localToWorld(world); world.project(scene.camera);
+          if (world.z < -1 || world.z > 1) continue;
+          points.push({ x: Math.round((rect.left + (world.x + 1) * rect.width / 2) * 10) / 10, y: Math.round((rect.top + (1 - world.y) * rect.height / 2) * 10) / 10 });
+        }
+      }
+      return { connectionId: connection.id, visual: visual.userData.sovEditorVisual, points };
+    });
+  }
+  function objectFitsCameraView(scene, object) {
+    if (!scene?.camera || !object) return false;
+    const bounds = new Three.Box3().setFromObject(object);
+    if (bounds.isEmpty()) return false;
+    for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
+      const projected = new Three.Vector3(x, y, z).project(scene.camera);
+      if (Math.abs(projected.x) > 1 || Math.abs(projected.y) > 1 || Math.abs(projected.z) > 1) return false;
+    }
+    return true;
+  }
   function getSceneDiagnostics() {
     const plant = A.scenes.mps?.parts?.importedPlant;
     const servo = A.state?.labs?.servo2, commissioning = servo ? Servo.evaluateCommissioning(servo) : null;
     return {
       activeLab: A.activeLab,
       cameraNavigationPreset: A.state?.cameraNavigationPreset || '3ds-max',
+      cameras: Object.fromEntries(Object.entries(A.scenes).map(([lab, scene]) => [lab, {
+        aspect: scene.aspect,
+        scale: scene.orbit.scale,
+        fitPreset: scene.cameraFit || null,
+        proxyRootFitsView: lab === 'discrete' ? objectFitsCameraView(scene, scene.proxyRoot) : null
+      }])),
       editors: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, { mode: editor.mode, modules: editor.modules.size, connections: editor.connections.size }])),
+      connectionTargets: Object.fromEntries(Object.entries(A.editors).map(([lab, editor]) => [lab, connectionTargetDiagnostics(lab, editor)])),
       terminalTargets: Object.fromEntries(Object.entries(A.editorMarkers).map(([lab, targets]) => [lab, {
         total: targets.length,
         enabled: targets.filter(target => target.userData.sovPickEnabled).length,
@@ -1583,6 +1970,7 @@
       servo2: servo ? {
         profileId: servo.profileId,
         commandInterface: Servo.getProfile(servo).commandInterface,
+        equipmentModels: (A.scenes.servo2?.parts?.pulseRoots?.[servo.profileId]?.children || []).map(object => object.userData?.equipmentModel).filter(Boolean),
         outputsSafe: Object.values(servo.axes).every(axis => !axis.servoOn),
         training: Servo.getTrainingSession(servo),
         commissioning: {
@@ -1632,7 +2020,11 @@
   }
 
   function init() {
-    injectCss(); A.state = loadSaved(); syncMpsWorkpiecePhysicalSize(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return; A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
+    injectCss(); A.state = loadSaved(); syncMpsWorkpiecePhysicalSize(); A.activeLab = A.state.activeLab; if (!injectUi()) return; bindUi(); setCameraNavigationPreset(A.state.cameraNavigationPreset, { persist: false }); A.initialized = createRenderer(); if (!A.initialized) return;
+    const primeEquipmentCatalog = () => { void loadEquipmentCatalog(); };
+    if (window.PLCTrainerImportedModels) primeEquipmentCatalog();
+    else window.addEventListener('plc-trainer-imported-models-ready', primeEquipmentCatalog, { once: true });
+    A.resizeObserver = new ResizeObserver(() => { if (A.visible) resize(); }); A.resizeObserver.observe(A.content); setLab(A.activeLab); updateScenes(); updateUi(true); persist(true);
   }
 
   window.PLCTrainerAutomationLabs = { version: '2.14.0', setVisible, setLab, renderActive, resize, exportState, importState, setCameraNavigationPreset, getEditor, getSceneDiagnostics, get activeLab() { return A.activeLab; }, get state() { return A.state; } };

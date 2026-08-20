@@ -60,18 +60,16 @@ test('calibration and workshop save/load helpers exist', () => {
   assert.match(html, /id="m-calib-load"/);
 });
 
-test('XBC input overlay exposes only the 24 manual terminals and marks the fabricated spare screw unused', () => {
-  assert.match(html, /id:'P0F',x:468\.9,y:86[^\n]*hit:\{x:468\.9,y:86,r:14\}/);
-  assert.match(html, /id:'24V',x:584\.5,y:86/);
-  assert.match(html, /id:'24G',x:584\.5,y:140/);
-  assert.match(html, /id:'PE',x:182\.5,y:466[^\n]*hit:\{x:182\.5,y:466,r:14\}/);
-  assert.match(html, /disabledTerminalSpots:\[\s*\{x:506\.4,y:86,label:'미사용'/);
-  assert.match(html, /\{x:545\.9,y:86,label:'미사용'/);
-  assert.match(html, /\{x:193,y:141,label:'미사용'/);
-  assert.match(html, /imageLabelCorrections:\[\s*\{x:121,y:164,label:'485\+'/);
+test('XBC input overlay follows the measured two-row PPT screw centres', () => {
+  assert.match(html, /terminalMarkerStyle:'screw-center-ring',terminalMarkerRadius:5\.2/);
+  assert.match(html, /id:'P0F',x:612\.2,y:72\.8/);
+  assert.match(html, /id:'24G',x:654\.7,y:72\.8/);
+  assert.match(html, /id:'24V',x:666\.7,y:109\.9/);
+  assert.match(html, /id:'PE',x:196\.4,y:490\.7/);
+  assert.match(html, /id:'P',x:238\.3,y:490\.7[^\n]*label:'P \(DC12\/24V\)'/);
   assert.doesNotMatch(html, /id:'24G-TOP'/);
   assert.doesNotMatch(html, /id:'PE2'/);
-  assert.match(html, /const REVIEW_PROFILE_TERMINAL_TYPES=new Set\(\['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DR32H','EXP2-700','XBL-C41A','XBF-AH04A','XBF-PD02A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2\.5','UT-2\.5-PE','UT-4-HESI'\]\)/);
+  assert.match(html, /const REVIEW_PROFILE_TERMINAL_TYPES=new Set\(\['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DN32H','XBC-DR32H','EXP2-700','XBL-C41A','XBF-AH04A','XBF-PD02A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2\.5','UT-2\.5-PE','UT-4-HESI'\]\)/);
   assert.match(html, /fuseLinkOrderCode/);
   assert.match(html, /LIB\[type\]\.assetId&&LIB\[type\]\.geometryHash/);
   assert.match(html, /function geometryOnlyCalibrationEntry\(type,entry\)/);

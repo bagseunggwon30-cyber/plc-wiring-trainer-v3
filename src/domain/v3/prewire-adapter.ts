@@ -839,8 +839,9 @@ export async function buildPrewireCircuitV3(
 
     const isXbcUTransistor = device.profileId === 'ls-electric:xbc-dn32up'
       || device.profileId === 'ls-electric:xbc-dp32up';
+    const isXbcDn32h = device.profileId === 'ls-electric:xbc-dn32h';
     const isXbcDn60Su = device.profileId === 'ls-electric:xbc-dn60su';
-    const isXbcPlc = device.profileId === 'ls-electric:xbc-dr32h' || isXbcUTransistor || isXbcDn60Su;
+    const isXbcPlc = device.profileId === 'ls-electric:xbc-dr32h' || isXbcUTransistor || isXbcDn32h || isXbcDn60Su;
     const hasAcInput = device.profileId === 'mean-well:mdr-100-24' || isXbcPlc;
     if (hasAcInput) {
       const acInputId = `${device.id}#ac-input`;
@@ -891,24 +892,28 @@ export async function buildPrewireCircuitV3(
         addAlias(branches, `input:${device.id}:${terminal.id}:signal`, device.id, terminal.id, elementId, 'signal');
         addAlias(branches, `input:${device.id}:${terminal.id}:common`, device.id, inputCommon, elementId, 'common');
       }
-      if (isXbcUTransistor || isXbcDn60Su) {
+      if (isXbcUTransistor || isXbcDn32h || isXbcDn60Su) {
         const sinking = device.profileId !== 'ls-electric:xbc-dp32up';
-        const supplyPositiveTerminal = isXbcDn60Su ? '24V' : sinking ? 'VOUT' : 'COMO';
-        const supplyReturnTerminal = isXbcDn60Su ? '24G' : sinking ? 'COMO' : '0VOUT';
-        const supplyElementId = `${device.id}#output-supply`;
-        elements.push({
-          kind: 'load', id: supplyElementId, positiveTerminal: 'positive', returnTerminal: 'return',
-          role: 'module-supply', parentDeviceId: device.id, required: 'scenario', onThresholdVoltage: 10.2,
-        });
-        parentByElement.set(supplyElementId, device.id);
-        addAlias(branches, `output-supply:${device.id}:+`, device.id, supplyPositiveTerminal, supplyElementId, 'positive');
-        addAlias(branches, `output-supply:${device.id}:0`, device.id, supplyReturnTerminal, supplyElementId, 'return');
+        const supplyPositiveTerminal = isXbcDn32h ? 'P' : isXbcDn60Su ? '24V' : sinking ? 'VOUT' : 'COMO';
+        const defaultSupplyReturnTerminal = isXbcDn32h ? 'COM0' : isXbcDn60Su ? '24G' : sinking ? 'COMO' : '0VOUT';
         const outputTerminals = profile.terminals.filter((entry) => isXbcDn60Su
           ? entry.role === 'output' && /^P(?:4[0-9A-F]|5[0-7])$/.test(entry.id)
           : /^P2[0-9A-F]$/.test(entry.id));
         for (const terminal of outputTerminals) {
-          const transistorReturnTerminal = isXbcDn60Su ? terminal.comGroup ?? '' : supplyReturnTerminal;
+          const transistorReturnTerminal = (isXbcDn60Su || isXbcDn32h)
+            ? terminal.comGroup ?? ''
+            : defaultSupplyReturnTerminal;
           if (!transistorReturnTerminal) continue;
+          const supplyElementId = `${device.id}#output-supply${isXbcDn32h ? `:${transistorReturnTerminal}` : ''}`;
+          if (!parentByElement.has(supplyElementId)) {
+            elements.push({
+              kind: 'load', id: supplyElementId, positiveTerminal: 'positive', returnTerminal: 'return',
+              role: 'module-supply', parentDeviceId: device.id, required: 'scenario', onThresholdVoltage: 10.2,
+            });
+            parentByElement.set(supplyElementId, device.id);
+            addAlias(branches, `output-supply:${device.id}:${isXbcDn32h ? transistorReturnTerminal : 'shared'}:+`, device.id, supplyPositiveTerminal, supplyElementId, 'positive');
+            addAlias(branches, `output-supply:${device.id}:${isXbcDn32h ? transistorReturnTerminal : 'shared'}:0`, device.id, transistorReturnTerminal, supplyElementId, 'return');
+          }
           const elementId = `${device.id}#${terminal.id}:transistor`;
           elements.push({
             kind: 'transistor-output', id: elementId,

@@ -1,0 +1,433 @@
+{
+  "schemaVersion": 1,
+  "sourceTool": "Blender 5.2",
+  "sourceBlend": "manual-backed-equipment.blend",
+  "units": "millimeters",
+  "models": [
+    {
+      "file": "xbc-dr32h.glb",
+      "model": "XBC-DR32H",
+      "kind": "plc",
+      "physicalDimensionsMm": {
+        "width": 114,
+        "height": 100,
+        "depth": 64
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -57.0,
+          -50.000001,
+          -32.000002
+        ],
+        "max": [
+          57.0,
+          50.000001,
+          32.000002
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf",
+        "pages": [
+          39,
+          43,
+          95,
+          96,
+          125,
+          130,
+          253
+        ]
+      },
+      "terminalNodes": [
+        "L",
+        "N",
+        "PE",
+        "NC",
+        "24V",
+        "24G",
+        "COMI",
+        "P00",
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P0A",
+        "P0B",
+        "P0C",
+        "P0D",
+        "P0E",
+        "P0F",
+        "P20",
+        "P21",
+        "P22",
+        "P23",
+        "P24",
+        "P25",
+        "P26",
+        "P27",
+        "P28",
+        "P29",
+        "P2A",
+        "P2B",
+        "P2C",
+        "P2D",
+        "P2E",
+        "P2F",
+        "COM0",
+        "COM1",
+        "COM2",
+        "COM3",
+        "RX",
+        "TX",
+        "SG",
+        "485+",
+        "485-"
+      ],
+      "nodeCount": 328,
+      "bytes": 1252832,
+      "sha256": "ce205b5bb4ae5488c7394c4c1ad5a621842e3e1215422f6c4f76e1ffd519478f"
+    },
+    {
+      "file": "mdr-100-24.glb",
+      "model": "MDR-100-24",
+      "kind": "power-supply",
+      "physicalDimensionsMm": {
+        "width": 55,
+        "height": 90,
+        "depth": 100
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -27.5,
+          -45.000002,
+          -50.000001
+        ],
+        "max": [
+          27.5,
+          45.000002,
+          50.000001
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/01_MDR-100-24_MeanWell_SPEC.pdf",
+        "pages": [
+          1,
+          2
+        ]
+      },
+      "terminalNodes": [
+        "L",
+        "N",
+        "PE",
+        "V+1",
+        "V+2",
+        "V-1",
+        "V-2",
+        "DCOK-A",
+        "DCOK-B"
+      ],
+      "nodeCount": 119,
+      "bytes": 367184,
+      "sha256": "c864d010eef38e6460d88bb56cef391d5d1ba9eea6d525c2fa8737ce4a7d62c9"
+    },
+    {
+      "file": "mc-22b-dc24.glb",
+      "model": "MC-22b DC24V 1a1b",
+      "kind": "contactor",
+      "physicalDimensionsMm": {
+        "width": 45,
+        "height": 73.5,
+        "depth": 103.6
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -22.499999,
+          -36.75,
+          -51.800001
+        ],
+        "max": [
+          22.500001,
+          34.75,
+          51.800001
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/08_LS_Metasol_MC_Contactor_Catalog.pdf",
+        "pages": [
+          10,
+          18,
+          22,
+          75,
+          125
+        ]
+      },
+      "terminalNodes": [
+        "1L1",
+        "2T1",
+        "3L2",
+        "4T2",
+        "5L3",
+        "6T3",
+        "13",
+        "14",
+        "21",
+        "22",
+        "A1",
+        "A2"
+      ],
+      "nodeCount": 53,
+      "bytes": 185728,
+      "sha256": "e39cefc2645fddfc17e057f258a97bb9759149e1801991d8b336a38807c62e1a"
+    },
+    {
+      "file": "my2n-d2-dc24.glb",
+      "model": "MY2N-D2 DC24V",
+      "kind": "relay",
+      "physicalDimensionsMm": {
+        "width": 21.5,
+        "height": 36,
+        "depth": 28
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -10.75,
+          -17.999999,
+          -14.0
+        ],
+        "max": [
+          10.75,
+          17.999999,
+          14.0
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/official/Omron_MY_Series_J219-E1.pdf",
+        "pages": [
+          8,
+          10,
+          20
+        ]
+      },
+      "terminalNodes": [
+        "1",
+        "5",
+        "9",
+        "4",
+        "8",
+        "12",
+        "13",
+        "14"
+      ],
+      "nodeCount": 27,
+      "bytes": 84128,
+      "sha256": "8ab186251c2f83be031f0b8a453f5fbae59c9f713637ba0240f23e0196b7d4fa"
+    },
+    {
+      "file": "eocr3de-05duh.glb",
+      "model": "EOCR3DE-05DUH",
+      "kind": "overload-relay",
+      "physicalDimensionsMm": {
+        "width": 70,
+        "height": 70,
+        "depth": 106
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -35.0,
+          -35.0,
+          -53.000003
+        ],
+        "max": [
+          35.0,
+          35.0,
+          53.000003
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/official/Schneider_EOCR_Digital_E_Instruction_2023.pdf",
+        "pages": [
+          1,
+          2
+        ]
+      },
+      "terminalNodes": [
+        "L1-IN",
+        "L1-OUT",
+        "L2-IN",
+        "L2-OUT",
+        "L3-IN",
+        "L3-OUT",
+        "A1",
+        "A2",
+        "95",
+        "96",
+        "97",
+        "98",
+        "07",
+        "08"
+      ],
+      "nodeCount": 59,
+      "bytes": 311904,
+      "sha256": "f0435f80d01a33f1e415f8cccce01fafa71919c6ce4d26e7ccd5f3ed966ef1af"
+    },
+    {
+      "file": "ut-2-5-3044076.glb",
+      "model": "UT 2,5 / 3044076",
+      "kind": "terminal-block",
+      "physicalDimensionsMm": {
+        "width": 5.2,
+        "height": 47.7,
+        "depth": 46.9
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -2.6,
+          -23.170788,
+          -23.45
+        ],
+        "max": [
+          2.6,
+          22.8,
+          23.45
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/official/Phoenix_UT-2.5_3044076.pdf",
+        "pages": [
+          1,
+          2,
+          3,
+          4,
+          7
+        ]
+      },
+      "terminalNodes": [
+        "1",
+        "2"
+      ],
+      "nodeCount": 30,
+      "bytes": 72008,
+      "sha256": "ab32e40792d6e2d952e25bbbf45afee54498498a330cd62d2b32e61751e9f054"
+    },
+    {
+      "file": "ut-2-5-pe-3044092.glb",
+      "model": "UT 2,5-PE / 3044092",
+      "kind": "pe-terminal-block",
+      "physicalDimensionsMm": {
+        "width": 5.2,
+        "height": 47.7,
+        "depth": 46.9
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -2.6,
+          -23.170788,
+          -23.45
+        ],
+        "max": [
+          2.6,
+          22.8,
+          23.45
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/official/Phoenix_UT-2.5-PE_3044092.pdf",
+        "pages": [
+          1,
+          2,
+          3,
+          5
+        ]
+      },
+      "terminalNodes": [
+        "1",
+        "2"
+      ],
+      "nodeCount": 40,
+      "bytes": 87456,
+      "sha256": "6fca8f64588313cfaa17b92e36d21b0026bc5bc5b0d339e7695a2012c97d6013"
+    },
+    {
+      "file": "ut-4-hesi-3046032.glb",
+      "model": "UT 4-HESI (5X20) / 3046032",
+      "kind": "fused-terminal-block",
+      "physicalDimensionsMm": {
+        "width": 6.2,
+        "height": 57.8,
+        "depth": 75.6
+      },
+      "boundsAxes": [
+        "width",
+        "height",
+        "depth"
+      ],
+      "boundsMm": {
+        "min": [
+          -3.1,
+          -28.174447,
+          -37.799999
+        ],
+        "max": [
+          3.1,
+          28.572733,
+          37.799999
+        ]
+      },
+      "evidence": {
+        "manual": "pdf/official/Phoenix_UT-4-HESI-5x20_3046032.pdf",
+        "pages": [
+          1,
+          2,
+          3,
+          8
+        ]
+      },
+      "terminalNodes": [
+        "1",
+        "2"
+      ],
+      "nodeCount": 35,
+      "bytes": 88292,
+      "sha256": "abf56727bafefbf8c273a6ee35fddeac23e8d923ec8e275bf0dde14b37d744d5"
+    }
+  ]
+}

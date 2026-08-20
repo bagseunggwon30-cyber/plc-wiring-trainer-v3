@@ -401,10 +401,97 @@ function xbcDn60SuProfile(): DeviceProfile {
   };
 }
 
+function xbcDn32hProfile(): DeviceProfile {
+  const inputs = Array.from({ length: 16 }, (_, index) => {
+    const id = `P0${index.toString(16).toUpperCase()}`;
+    return terminal(id, id, 'signal', 'signal', 'input', {
+      polarity: 'signal-positive', comGroup: 'COMI', channel: id,
+      ratedVoltage: { min: 20.4, max: 28.8, unit: 'VDC' },
+    });
+  });
+  const outputs = Array.from({ length: 16 }, (_, index) => {
+    const id = `P2${index.toString(16).toUpperCase()}`;
+    return terminal(id, id, 'signal', 'signal', 'output', {
+      polarity: 'signal-return', outputMode: 'sinking-transistor',
+      comGroup: `COM${Math.floor(index / 4)}`, channel: id,
+      ratedVoltage: { min: 10.2, max: 26.4, unit: 'VDC' },
+    });
+  });
+  const outputCommons = Array.from({ length: 4 }, (_, index) => terminal(
+    `COM${index}`,
+    `COM${index}`,
+    'dc',
+    '0V',
+    'common',
+    {
+      polarity: 'return', commonType: 'dc-output-common',
+      outputMode: 'sinking-transistor', comGroup: `COM${index}`,
+    },
+  ));
+  return {
+    profileId: 'ls-electric:xbc-dn32h',
+    version: '1.0.0',
+    manufacturer: 'LS ELECTRIC',
+    model: 'XBC-DN32H',
+    evidence: {
+      level: 'manual-verified',
+      documents: [{
+        documentId: '02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf',
+        revision: 'XGB High-end type hardware manual repository copy',
+        pages: [28, 125, 134, 135, 253],
+        sha256: '4C1BBB7C60CC2DC80221B67CFE7AD11CA360C9DB12B7F1B36171CF12C8BF18AA',
+        notes: 'PDF pages 28, 125, 134-135 and 253: exact DN32H classification, 16-point source/sink input block, 16-point NPN sink output block, TB1-TB24 assignment and 114x100x64 mm envelope.',
+      }],
+      ...reviewedExact,
+      note: 'The retained official H-type manual covers both XBC-DR32H and XBC-DN32H. Output semantics intentionally differ: DN32H is four-group NPN sinking transistor output.',
+    },
+    boundary: false,
+    includeInBom: true,
+    terminals: [
+      terminal('L', 'L', 'ac', 'L1', 'supply-input', { phase: 'L1', ratedVoltage: { min: 85, max: 264, unit: 'VAC' } }),
+      terminal('N', 'N', 'ac', 'N', 'supply-input', { phase: 'N', ratedVoltage: { min: 85, max: 264, unit: 'VAC' } }),
+      terminal('PE', 'PE', 'pe', 'PE', 'protective-earth'),
+      terminal('P', 'P DC12/24V', 'dc', '+24V', 'supply-input', { ratedVoltage: { min: 10.8, max: 26.4, unit: 'VDC' } }),
+      terminal('24V', '24V', 'dc', '+24V', 'source', { ratedVoltage: { min: 24, max: 24, unit: 'VDC' } }),
+      terminal('24G', '24G', 'dc', '0V', 'source', { ratedVoltage: { min: 0, max: 0, unit: 'VDC' } }),
+      terminal('COMI', 'COM', 'floating', 'floating', 'common', {
+        polarity: 'configurable', commonType: 'configurable-dc', comGroup: 'COMI',
+      }),
+      ...inputs,
+      ...outputs,
+      ...outputCommons,
+      terminal('RX', 'RX', 'communication', 'signal', 'communication', { protocol: 'RS232', channel: 'RX' }),
+      terminal('TX', 'TX', 'communication', 'signal', 'communication', { protocol: 'RS232', channel: 'TX' }),
+      terminal('SG', 'SG', 'communication', 'signal', 'common', {
+        polarity: 'reference', commonType: 'communication-reference', protocol: 'RS232', channel: 'SG',
+      }),
+      terminal('485+', '485+', 'communication', 'signal', 'communication', {
+        polarity: 'data-positive', protocol: 'RS485', channel: 'A',
+      }),
+      terminal('485-', '485-', 'communication', 'signal', 'communication', {
+        polarity: 'data-negative', protocol: 'RS485', channel: 'B',
+      }),
+    ],
+    internalLinks: [],
+    behavior: {
+      kind: 'plc-transistor', outputMode: 'sinking-transistor', internal24VCurrentA: 0.4,
+      inputComTerminals: ['COMI'],
+      outputSupplyTerminals: { positive: 'P', returns: ['COM0', 'COM1', 'COM2', 'COM3'] },
+      inputRatings: { onVoltageV: 19, onCurrentA: 0.003, offVoltageV: 6, offCurrentA: 0.001 },
+      outputRatings: {
+        generalPointCurrentA: 0.5, positioningPointCurrentA: 0.1,
+        commonCurrentA: 2, offLeakageCurrentA: 0.0001, onVoltageDropV: 0.4,
+      },
+      dimensionsMm: { width: 114, height: 100, depth: 64 },
+    },
+  };
+}
+
 const profiles: DeviceProfile[] = [
   xbcUTransistorProfile('ls-electric:xbc-dn32up', 'XBC-DN32UP', 'sinking-transistor'),
   xbcUTransistorProfile('ls-electric:xbc-dp32up', 'XBC-DP32UP', 'sourcing-transistor'),
   xbcDn60SuProfile(),
+  xbcDn32hProfile(),
   {
     profileId: 'ls-electric:xbc-dr32h',
     version: '1.0.0',

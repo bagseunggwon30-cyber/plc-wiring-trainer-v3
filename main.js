@@ -2,6 +2,7 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, session } = require('electron');
 const { writeFile } = require('fs/promises');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { version } = require('./package.json');
 const { XgSimSessionService } = require('./src/main/xgsim-session-service');
 const { inspectXgSimProjectFile } = require('./src/main/xgsim-project-file');
@@ -60,6 +61,9 @@ function installOfflineSessionPolicy() {
     callback({ cancel: true });
   });
   session.defaultSession.webRequest.onErrorOccurred((details) => {
+    // A renderer reload or view teardown can cancel an in-flight local GLB.
+    // That is expected navigation cleanup, not an offline/runtime load failure.
+    if (details.error === 'net::ERR_ABORTED' && details.url.startsWith('file:')) return;
     networkAudit.failedRequests.push(`session:${details.url} · ${details.error}`);
   });
 }
@@ -67,6 +71,8 @@ function installOfflineSessionPolicy() {
 installMainProcessNetworkAudit();
 
 function createWindow() {
+  const rendererEntry = path.join(__dirname, 'build', 'renderer', 'index.html');
+  const rendererUrl = pathToFileURL(rendererEntry).href;
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
@@ -77,11 +83,20 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'build', 'renderer', 'index.html'));
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-attach-webview', event => event.preventDefault());
+  const preventExternalNavigation = (event, targetUrl) => {
+    if (targetUrl !== rendererUrl) event.preventDefault();
+  };
+  mainWindow.webContents.on('will-navigate', preventExternalNavigation);
+  mainWindow.webContents.on('will-redirect', preventExternalNavigation);
+  void mainWindow.loadFile(rendererEntry);
 
   // 앱 메뉴
   const template = [
@@ -102,7 +117,9 @@ function createWindow() {
         { role: 'resetZoom', label: '기본 크기' },
         { type: 'separator' },
         { role: 'togglefullscreen', label: '전체화면' },
-        { role: 'toggleDevTools', label: '개발자 도구' },
+        ...(!app.isPackaged || process.env.WIRING_ENABLE_DEVTOOLS === '1'
+          ? [{ role: 'toggleDevTools', label: '개발자 도구' }]
+          : []),
       ]
     },
     {

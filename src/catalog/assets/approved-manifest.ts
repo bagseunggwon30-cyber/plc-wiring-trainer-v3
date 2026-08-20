@@ -7,6 +7,32 @@ import { approvedAssetAllowlist } from '../v3-asset-manifest';
  */
 export const APPROVED_ASSET_MANIFEST = approvedAssetAllowlist([
   {
+    assetId: 'manual:xbc-dn32h-ppt-open-front-clean-v3',
+    model: 'LS ELECTRIC XBC-DN32H',
+    view: 'front',
+    path: 'assets/devices/manual/xbc-dn32h-ppt-open-front-clean.png',
+    sha256: '5E14FFB3F74D5DA95731A14D6A5A94ACC127521E8FDEBEB7BEEC22C6708B25AC',
+    pixelDimensions: { width: 1202, height: 743 },
+    physicalDimensionsMm: { width: 114, height: 100, depth: 64 },
+    prompt: 'User-provided PPT open-cover H-type line drawing. Top and bottom terminal covers are absent, the communication door is open, and all exposed screw centres remain visible. DN32H-only legends are flattened into a clean derivative so runtime SVG correction boxes are unnecessary.',
+    generatedAt: '2026-08-21T00:00:00.000Z',
+    approval: { status: 'pending' },
+    geometryHash: '5E14FFB3F74D5DA95731A14D6A5A94ACC127521E8FDEBEB7BEEC22C6708B25AC',
+  },
+  {
+    assetId: 'manual:xbc-dr32h-ppt-open-front-transparent-v3',
+    model: 'LS ELECTRIC XBC-DR32H',
+    view: 'front',
+    path: 'assets/devices/manual/xbc-dr32h-ppt-open-front-transparent.png',
+    sha256: 'E6447B4A5B19E562FFB38BDB93278808F138E9AFB9898056C749246E647575A1',
+    pixelDimensions: { width: 1202, height: 743 },
+    physicalDimensionsMm: { width: 114, height: 90, depth: 64 },
+    prompt: 'Original 1202x743 open-cover XBC-DR32H front drawing extracted from the user-provided 결선수정(백승혁).pptx. Only near-white pixels connected to the outer canvas are converted to genuine alpha, preserving the PLC body and all original text without redrawing. The 48 terminal centres reuse the measured PPT coordinate basis; relay-output semantics remain defined by the DR32H profile.',
+    generatedAt: '2026-08-21T00:00:00.000Z',
+    approval: { status: 'pending' },
+    geometryHash: 'E6447B4A5B19E562FFB38BDB93278808F138E9AFB9898056C749246E647575A1',
+  },
+  {
     assetId: 'codex:xbc-dn60su-imagen-v1',
     model: 'LS ELECTRIC XBC-DN60SU',
     view: 'front',

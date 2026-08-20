@@ -51,6 +51,11 @@ test('palletizer requires one explicit PLC vendor profile and renders only that 
   assert.doesNotMatch(ui,/XG5000 주소 이미지/);
 });
 
+test('palletizer model includes functional industrial details without classroom scenery',()=>{
+  for(const token of ['function extrusion(','function cableChain(','energy-chain-link','industrial-safety-guard','ls-electric-control-cabinet','detailStats.linearRails','detailStats.gripperComponents','getDiagnostics'])assert.match(ui,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.doesNotMatch(ui,/classroom|chair|desk|student/i);
+});
+
 test('new browser scripts parse as classic JavaScript',()=>{
   assert.doesNotThrow(()=>new Function(read('src/runtime/palletizer-runtime.js')));
   assert.doesNotThrow(()=>new Function(multiview));

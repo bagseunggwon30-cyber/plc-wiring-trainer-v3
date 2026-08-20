@@ -105,6 +105,11 @@ svg.canvas.pan:active{cursor:grabbing}
 .device-body-shadow{fill:rgba(0,0,0,0.04);stroke:none}
 .terminal{fill:rgba(255,255,255,.9);stroke:#111;stroke-width:1.6;cursor:crosshair;filter:drop-shadow(0 1px 2px rgba(0,0,0,.28))}
 .terminal:hover{r:10;stroke-width:2.4;stroke:#f60}
+.terminal.manual-terminal-marker{fill:rgba(255,255,255,.04);stroke:rgba(0,132,145,.9);stroke-width:1.15;filter:drop-shadow(0 0 1px rgba(0,70,78,.45));vector-effect:non-scaling-stroke}
+.terminal.manual-terminal-marker:hover{fill:rgba(255,152,0,.07);stroke:#f59e0b;stroke-width:2}
+.terminal-hit.manual-terminal-hit:hover{fill:rgba(255,152,0,.025);stroke:rgba(245,158,11,.32);stroke-width:1.5}
+.terminal-marker-center{fill:#00a6b2;stroke:rgba(255,255,255,.95);stroke-width:.55;pointer-events:none;vector-effect:non-scaling-stroke}
+.manual-terminal-marker:hover+.terminal-marker-center,.manual-terminal-hit:hover~.terminal-marker-center{fill:#f59e0b}
 .terminal.pending{fill:#fa0;stroke:#a40;stroke-width:2}
 .terminal.wire-target-ok:not(.terminal-hit){fill:#dff7e5;stroke:#16843f;stroke-width:2.5}
 .terminal.wire-target-warn:not(.terminal-hit){fill:#fff0c2;stroke:#d97706;stroke-width:2.8;stroke-dasharray:3 2}
@@ -365,6 +370,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <button id="m-board-free" class="mode-btn" title="자유 배치 모드">🆓 자유</button>
 <button id="m-board-dist" class="mode-btn" title="배전 모드: 버스 선택 후 단자 클릭">🔌 배전</button>
 <button id="tpl-basic-panel" title="기본 3단 레일 + 도어 템플릿">🏗 기본제어반</button>
+<button id="tpl-xbc-dn32h-mdr" title="MDR-100-24와 XBC-DN32H 출력부의 두 가닥 최소 전원 결선">⚡ DN32H 결선예제</button>
 <button id="b-rail-config" title="레일 개수 · 횡 열 직접 설정">⚙ 레일설정</button>
 </span>
 
@@ -1651,6 +1657,7 @@ for(const [type,profileId] of Object.entries({
   'XBC-DN32UP':'ls-electric:xbc-dn32up',
   'XBC-DN60SU':'ls-electric:xbc-dn60su',
   'XBC-DP32UP':'ls-electric:xbc-dp32up',
+  'XBC-DN32H':'ls-electric:xbc-dn32h',
   'XBC-DR32H':'ls-electric:xbc-dr32h',
   'EXP2-700':'ls-electric:exp2-0700d',
   'XBF-AH04A':'ls-electric:xbf-ah04a',
@@ -1988,69 +1995,61 @@ Object.assign(LIB['GND-BAR'],{
   allCommon:true
 });
 
+const XBC_DR32H_TOP_TERMINAL_Y=72.8;
 Object.assign(LIB['XBC-DR32H'],{
-  w:700,h:560,image:IMG+'trimmed/xbc-dr32h-24g-v2.png',imageBox:{x:41.4,y:52.4,w:635.1,h:492.6},imageHasLabels:true,
-  // 원본 스킨에는 실제 24점 단자대에 없는 나사/24G 문자가 그려져 있다.
-  // 이미지는 보존하고 비활성 오버레이로만 명확히 구분한다.
-  disabledTerminalSpots:[
-    {x:506.4,y:86,label:'미사용'},
-    {x:545.9,y:86,label:'미사용',mask:{x:526,y:101,w:40,h:19}},
-    {x:193,y:141,label:'미사용',mask:{x:174,y:151,w:38,h:20}},
-    {x:506.4,y:141,label:'미사용'}
-  ],
-  imageLabelCorrections:[
-    {x:121,y:164,label:'485+',mask:{x:103,y:151,w:36,h:20}},
-    {x:157,y:164,label:'485-',mask:{x:139,y:151,w:36,h:20}}
-  ],
+  w:840,h:520,image:IMG+'manual/xbc-dr32h-ppt-open-front-transparent.png',imageBox:{x:0,y:0,w:840,h:520},imageHasLabels:true,
+  exactProfile:true,defaultConfiguration:{orderCode:'XBC-DR32H'},workshopProfileId:'ls-electric:xbc-dr32h',
+  assetId:'manual:xbc-dr32h-ppt-open-front-transparent-v3',geometryHash:'E6447B4A5B19E562FFB38BDB93278808F138E9AFB9898056C749246E647575A1',assetApproval:'pending',manualOverlay:true,
+  terminalMarkerStyle:'screw-center-ring',terminalMarkerRadius:5.2,
   terminals:[
-    {id:'RX',x:121,y:86,side:'T',label:'RX',pol:'COMM'},
-    {id:'TX',x:157,y:86,side:'T',label:'TX',pol:'COMM'},
-    {id:'SG',x:193,y:86,side:'T',label:'SG',pol:'COMM'},
-    {id:'P01',x:228,y:86,side:'T',label:'P01',pol:'DI'},
-    {id:'P03',x:264,y:86,side:'T',label:'P03',pol:'DI'},
-    {id:'P05',x:299,y:86,side:'T',label:'P05',pol:'DI'},
-    {id:'P07',x:334,y:86,side:'T',label:'P07',pol:'DI'},
-    {id:'P09',x:370,y:86,side:'T',label:'P09',pol:'DI'},
-    {id:'P0B',x:405,y:86,side:'T',label:'P0B',pol:'DI'},
-    {id:'P0D',x:434.6,y:86,side:'T',label:'P0D',pol:'DI'},
-    {id:'P0F',x:468.9,y:86,side:'T',label:'P0F',pol:'DI',hit:{x:468.9,y:86,r:14}},
-    {id:'24V',x:584.5,y:86,side:'T',label:'24V',pol:'DC+'},
-    {id:'485+',x:121,y:141,side:'T',label:'485+',pol:'COMM'},
-    {id:'485-',x:157,y:141,side:'T',label:'485-',pol:'COMM'},
-    {id:'P00',x:226.4,y:141,side:'T',label:'P00',pol:'DI'},
-    {id:'P02',x:261.3,y:141,side:'T',label:'P02',pol:'DI'},
-    {id:'P04',x:296.2,y:141,side:'T',label:'P04',pol:'DI'},
-    {id:'P06',x:331,y:141,side:'T',label:'P06',pol:'DI'},
-    {id:'P08',x:365.4,y:141,side:'T',label:'P08',pol:'DI'},
-    {id:'P0A',x:400,y:141,side:'T',label:'P0A',pol:'DI'},
-    {id:'P0C',x:434.5,y:140,side:'T',label:'P0C',pol:'DI'},
-    {id:'P0E',x:468.7,y:140,side:'T',label:'P0E',pol:'DI'},
-    {id:'COMI',x:545.8,y:140,side:'T',label:'COM',pol:'COM'},
-    {id:'24G',x:584.5,y:140,side:'T',label:'24G',pol:'DC-'},
-    {id:'L',x:103.2,y:466,side:'B',label:'L',pol:'AC-L'},
-    {id:'N',x:143.1,y:466,side:'B',label:'N',pol:'AC-N'},
-    {id:'PE',x:182.5,y:466,side:'B',label:'PE',pol:'PE',hit:{x:182.5,y:466,r:14}},
-    {id:'P20',x:224.2,y:466,side:'B',label:'P20',pol:'DO'},
-    {id:'P22',x:264.1,y:466,side:'B',label:'P22',pol:'DO'},
-    {id:'COM0',x:303.3,y:466,side:'B',label:'COM0',pol:'COM'},
-    {id:'P25',x:344.5,y:466,side:'B',label:'P25',pol:'DO'},
-    {id:'P27',x:384.1,y:466,side:'B',label:'P27',pol:'DO'},
-    {id:'P28',x:424.4,y:466,side:'B',label:'P28',pol:'DO'},
-    {id:'P2A',x:466,y:466,side:'B',label:'P2A',pol:'DO'},
-    {id:'COM2',x:507.4,y:466,side:'B',label:'COM2',pol:'COM'},
-    {id:'P2D',x:548,y:466,side:'B',label:'P2D',pol:'DO'},
-    {id:'P2F',x:588.8,y:466,side:'B',label:'P2F',pol:'DO'},
-    {id:'NC',x:155.8,y:518,side:'B',label:'NC',pol:'NC'},
-    {id:'P21',x:226.1,y:518,side:'B',label:'P21',pol:'DO'},
-    {id:'P23',x:261.8,y:518,side:'B',label:'P23',pol:'DO'},
-    {id:'P24',x:298.2,y:518,side:'B',label:'P24',pol:'DO'},
-    {id:'P26',x:333.5,y:518,side:'B',label:'P26',pol:'DO'},
-    {id:'COM1',x:367.3,y:518,side:'B',label:'COM1',pol:'COM'},
-    {id:'P29',x:400.1,y:518,side:'B',label:'P29',pol:'DO'},
-    {id:'P2B',x:434.6,y:518,side:'B',label:'P2B',pol:'DO'},
-    {id:'P2C',x:469.1,y:518,side:'B',label:'P2C',pol:'DO'},
-    {id:'P2E',x:505.2,y:518,side:'B',label:'P2E',pol:'DO'},
-    {id:'COM3',x:541.2,y:518,side:'B',label:'COM3',pol:'COM'},
+    {id:'RX',x:189.3,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'RX',pol:'COMM'},
+    {id:'TX',x:232.0,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'TX',pol:'COMM'},
+    {id:'SG',x:274.6,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'SG',pol:'COMM'},
+    {id:'P01',x:317.2,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P01',pol:'DI'},
+    {id:'P03',x:359.2,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P03',pol:'DI'},
+    {id:'P05',x:401.8,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P05',pol:'DI'},
+    {id:'P07',x:443.8,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P07',pol:'DI'},
+    {id:'P09',x:486.4,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P09',pol:'DI'},
+    {id:'P0B',x:528.4,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P0B',pol:'DI'},
+    {id:'P0D',x:570.2,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P0D',pol:'DI'},
+    {id:'P0F',x:612.2,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'P0F',pol:'DI'},
+    {id:'24G',x:654.7,y:XBC_DR32H_TOP_TERMINAL_Y,side:'T',label:'24G',pol:'DC-'},
+    {id:'485+',x:203.3,y:109.9,side:'T',label:'485+',pol:'COMM'},
+    {id:'485-',x:245.3,y:109.9,side:'T',label:'485-',pol:'COMM'},
+    {id:'P00',x:287.2,y:109.9,side:'T',label:'P00',pol:'DI'},
+    {id:'P02',x:329.8,y:109.9,side:'T',label:'P02',pol:'DI'},
+    {id:'P04',x:371.8,y:109.9,side:'T',label:'P04',pol:'DI'},
+    {id:'P06',x:413.7,y:109.9,side:'T',label:'P06',pol:'DI'},
+    {id:'P08',x:455.7,y:109.9,side:'T',label:'P08',pol:'DI'},
+    {id:'P0A',x:498.3,y:109.9,side:'T',label:'P0A',pol:'DI'},
+    {id:'P0C',x:540.2,y:109.9,side:'T',label:'P0C',pol:'DI'},
+    {id:'P0E',x:582.1,y:109.9,side:'T',label:'P0E',pol:'DI'},
+    {id:'COMI',x:624.8,y:109.9,side:'T',label:'COM',pol:'COM'},
+    {id:'24V',x:666.7,y:109.9,side:'T',label:'24V',pol:'DC+'},
+    {id:'L',x:175.4,y:460.4,side:'B',label:'L',pol:'AC-L'},
+    {id:'N',x:218.0,y:460.4,side:'B',label:'N',pol:'AC-N'},
+    {id:'P20',x:260.0,y:460.4,side:'B',label:'P20',pol:'DO'},
+    {id:'P22',x:301.8,y:460.4,side:'B',label:'P22',pol:'DO'},
+    {id:'COM0',x:343.8,y:460.4,side:'B',label:'COM0',pol:'COM'},
+    {id:'P25',x:385.8,y:460.4,side:'B',label:'P25',pol:'DO'},
+    {id:'P27',x:428.4,y:460.4,side:'B',label:'P27',pol:'DO'},
+    {id:'P28',x:470.3,y:460.4,side:'B',label:'P28',pol:'DO'},
+    {id:'P2A',x:512.3,y:460.4,side:'B',label:'P2A',pol:'DO'},
+    {id:'COM2',x:554.1,y:460.4,side:'B',label:'COM2',pol:'COM'},
+    {id:'P2D',x:596.7,y:460.4,side:'B',label:'P2D',pol:'DO'},
+    {id:'P2F',x:638.7,y:460.4,side:'B',label:'P2F',pol:'DO'},
+    {id:'PE',x:196.4,y:490.7,side:'B',label:'PE',pol:'PE'},
+    {id:'NC',x:238.3,y:490.7,side:'B',label:'NC',pol:'NC'},
+    {id:'P21',x:281.0,y:490.7,side:'B',label:'P21',pol:'DO'},
+    {id:'P23',x:322.8,y:490.7,side:'B',label:'P23',pol:'DO'},
+    {id:'P24',x:364.7,y:490.7,side:'B',label:'P24',pol:'DO'},
+    {id:'P26',x:406.7,y:490.7,side:'B',label:'P26',pol:'DO'},
+    {id:'COM1',x:448.6,y:490.7,side:'B',label:'COM1',pol:'COM'},
+    {id:'P29',x:491.2,y:490.7,side:'B',label:'P29',pol:'DO'},
+    {id:'P2B',x:533.2,y:490.7,side:'B',label:'P2B',pol:'DO'},
+    {id:'P2C',x:575.1,y:490.7,side:'B',label:'P2C',pol:'DO'},
+    {id:'P2E',x:617.1,y:490.7,side:'B',label:'P2E',pol:'DO'},
+    {id:'COM3',x:659.7,y:490.7,side:'B',label:'COM3',pol:'COM'},
   ]
 });
 
@@ -2391,9 +2390,43 @@ Object.assign(LIB['TB10'],{
   netHints:Array.from({length:10},(_,i)=>[''+(i+1),(i+1)+"'"])
 });
 
-Object.assign(LIB['XBC-DR32H'],{
-  image:IMG+'trimmed/xbc-dr32h-24g-v2.png',imageBox:{x:41.4,y:52.4,w:635.1,h:492.6},imageHasLabels:true
-});
+LIB['XBC-DN32H']={
+  cat:'plc',label:'XBC-DN32H',sub:'LS XGB H · DI16 · NPN 싱킹 TR DO16 · AC100~240V',
+  w:840,h:520,color:'#1e3a8a',icon:'plc',image:IMG+'manual/xbc-dn32h-ppt-open-front-clean.png',imageBox:{x:0,y:0,w:840,h:520},imageHasLabels:true,
+  exactProfile:true,defaultConfiguration:{orderCode:'XBC-DN32H'},workshopProfileId:'ls-electric:xbc-dn32h',
+  assetId:'manual:xbc-dn32h-ppt-open-front-clean-v3',geometryHash:'5E14FFB3F74D5DA95731A14D6A5A94ACC127521E8FDEBEB7BEEC22C6708B25AC',assetApproval:'pending',manualOverlay:true,
+  terminalMarkerStyle:'screw-center-ring',terminalMarkerRadius:5.2,
+  outputMode:'sinking-transistor',
+  // 십자 나사 중심은 원본 1202×743 PPT 래스터에서 직접 측정해 840×520 좌표로 환산했다.
+  // 모델명과 DN32H 전용 범례는 clean 래스터에 합쳐져 런타임 흰색 보정 사각형을 사용하지 않는다.
+  terminals:[
+    {id:'RX',x:189.3,y:72.8,side:'T',label:'RX',pol:'COMM'},{id:'TX',x:232.0,y:72.8,side:'T',label:'TX',pol:'COMM'},
+    {id:'SG',x:274.6,y:72.8,side:'T',label:'SG',pol:'COMM'},{id:'P01',x:317.2,y:72.8,side:'T',label:'P01',pol:'DI'},
+    {id:'P03',x:359.2,y:72.8,side:'T',label:'P03',pol:'DI'},{id:'P05',x:401.8,y:72.8,side:'T',label:'P05',pol:'DI'},
+    {id:'P07',x:443.8,y:72.8,side:'T',label:'P07',pol:'DI'},{id:'P09',x:486.4,y:72.8,side:'T',label:'P09',pol:'DI'},
+    {id:'P0B',x:528.4,y:72.8,side:'T',label:'P0B',pol:'DI'},{id:'P0D',x:570.2,y:72.8,side:'T',label:'P0D',pol:'DI'},
+    {id:'P0F',x:612.2,y:72.8,side:'T',label:'P0F',pol:'DI'},{id:'24G',x:654.7,y:72.8,side:'T',label:'24G',pol:'DC-'},
+    {id:'485+',x:203.3,y:109.9,side:'T',label:'485+',pol:'COMM'},{id:'485-',x:245.3,y:109.9,side:'T',label:'485-',pol:'COMM'},
+    {id:'P00',x:287.2,y:109.9,side:'T',label:'P00',pol:'DI'},{id:'P02',x:329.8,y:109.9,side:'T',label:'P02',pol:'DI'},
+    {id:'P04',x:371.8,y:109.9,side:'T',label:'P04',pol:'DI'},{id:'P06',x:413.7,y:109.9,side:'T',label:'P06',pol:'DI'},
+    {id:'P08',x:455.7,y:109.9,side:'T',label:'P08',pol:'DI'},{id:'P0A',x:498.3,y:109.9,side:'T',label:'P0A',pol:'DI'},
+    {id:'P0C',x:540.2,y:109.9,side:'T',label:'P0C',pol:'DI'},{id:'P0E',x:582.1,y:109.9,side:'T',label:'P0E',pol:'DI'},
+    {id:'COMI',x:624.8,y:109.9,side:'T',label:'COM',pol:'COM'},{id:'24V',x:666.7,y:109.9,side:'T',label:'24V',pol:'DC+'},
+    {id:'L',x:175.4,y:460.4,side:'B',label:'L',pol:'AC-L'},{id:'N',x:218.0,y:460.4,side:'B',label:'N',pol:'AC-N'},
+    {id:'P20',x:260.0,y:460.4,side:'B',label:'P20',pol:'DO'},{id:'P22',x:301.8,y:460.4,side:'B',label:'P22',pol:'DO'},
+    {id:'COM0',x:343.8,y:460.4,side:'B',label:'COM0',pol:'DC-'},{id:'P25',x:385.8,y:460.4,side:'B',label:'P25',pol:'DO'},
+    {id:'P27',x:428.4,y:460.4,side:'B',label:'P27',pol:'DO'},{id:'P28',x:470.3,y:460.4,side:'B',label:'P28',pol:'DO'},
+    {id:'P2A',x:512.3,y:460.4,side:'B',label:'P2A',pol:'DO'},{id:'COM2',x:554.1,y:460.4,side:'B',label:'COM2',pol:'DC-'},
+    {id:'P2D',x:596.7,y:460.4,side:'B',label:'P2D',pol:'DO'},{id:'P2F',x:638.7,y:460.4,side:'B',label:'P2F',pol:'DO'},
+    {id:'PE',x:196.4,y:490.7,side:'B',label:'PE',pol:'PE'},{id:'P',x:238.3,y:490.7,side:'B',label:'P (DC12/24V)',pol:'DC+'},
+    {id:'P21',x:281.0,y:490.7,side:'B',label:'P21',pol:'DO'},{id:'P23',x:322.8,y:490.7,side:'B',label:'P23',pol:'DO'},
+    {id:'P24',x:364.7,y:490.7,side:'B',label:'P24',pol:'DO'},{id:'P26',x:406.7,y:490.7,side:'B',label:'P26',pol:'DO'},
+    {id:'COM1',x:448.6,y:490.7,side:'B',label:'COM1',pol:'DC-'},{id:'P29',x:491.2,y:490.7,side:'B',label:'P29',pol:'DO'},
+    {id:'P2B',x:533.2,y:490.7,side:'B',label:'P2B',pol:'DO'},{id:'P2C',x:575.1,y:490.7,side:'B',label:'P2C',pol:'DO'},
+    {id:'P2E',x:617.1,y:490.7,side:'B',label:'P2E',pol:'DO'},{id:'COM3',x:659.7,y:490.7,side:'B',label:'COM3',pol:'DC-'}
+  ],
+  notes:'사용자 PPT의 개방형 H타입 정면 선화를 외형 기준으로 사용하고 DN32H 공식 단자/출력 표기로 교정. 입력 P00~P0F는 COMI를 +24V 또는 0V로 선택하는 소스/싱크 겸용. 출력은 릴레이가 아니라 NPN 싱킹: P 단자에 외부 DC12/24V+, COM0~COM3에 0V, 부하 +는 +24V, 부하 -는 P20~P2F로 결선. COM0=P20~P23, COM1=P24~P27, COM2=P28~P2B, COM3=P2C~P2F.'
+};
 
 Object.assign(LIB['XBF-AH04A'],{
   w:140,h:552,image:CODEX+'xbf-ah04a-codex.png',imageBox:{x:0,y:0,w:140,h:552},imageHasLabels:false,
@@ -3030,11 +3063,13 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
     {id:'BU',x:250,y:84,side:'R',label:'BU 0V',pol:'DC-'},
   ];
   Object.assign(LIB['PROX-NPN'],{
-    w:260,h:120,image:CODEX+'prox-sensor-codex.png',imageBox:{x:0,y:0,w:260,h:120},imageHasLabels:false,
+    w:260,h:120,image:FLAT+'prox-npn-v2.svg',imageBox:{x:0,y:0,w:260,h:120},imageHasLabels:true,
+    terminalMarkerStyle:'screw-center-ring',terminalMarkerRadius:4.2,
     terminals:proxTerms.map(t=>({...t}))
   });
   Object.assign(LIB['PROX-PNP'],{
-    w:260,h:120,image:CODEX+'prox-sensor-codex.png',imageBox:{x:0,y:0,w:260,h:120},imageHasLabels:false,
+    w:260,h:120,image:FLAT+'prox-pnp-v2.svg',imageBox:{x:0,y:0,w:260,h:120},imageHasLabels:true,
+    terminalMarkerStyle:'screw-center-ring',terminalMarkerRadius:4.2,
     terminals:proxTerms.map(t=>({...t}))
   });
 
@@ -3404,8 +3439,8 @@ function terminalHitRadius(def,t){
   return t.r || (def.terminals.length>32 ? 7.2 : 8.5);
 }
 /** 교육용 기본 등록 타입(초기 스냅샷). 보정 시 다른 장비 타입도 자동 추가됨 */
-const TERMINAL_DATA_DEVICE_TYPES=['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DR32H','EXP2-700','XBL-C41A','MDR-100','XBF-AH04A','XBF-PD02A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
-const REVIEW_PROFILE_TERMINAL_TYPES=new Set(['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DR32H','EXP2-700','XBL-C41A','XBF-AH04A','XBF-PD02A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI']);
+const TERMINAL_DATA_DEVICE_TYPES=['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DN32H','XBC-DR32H','EXP2-700','XBL-C41A','MDR-100','XBF-AH04A','XBF-PD02A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
+const REVIEW_PROFILE_TERMINAL_TYPES=new Set(['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DN32H','XBC-DR32H','EXP2-700','XBL-C41A','XBF-AH04A','XBF-PD02A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI']);
 const LSK_CALIB='wiring-workshop-terminal-calib-v1';
 function cloneTerminalData(value){
   return value==null ? value : JSON.parse(JSON.stringify(value));
@@ -4772,6 +4807,7 @@ markDinCenterMount('XBC-DR32H',{tags:['din','plc'],minClearance:{left:24,right:2
 markDinCenterMount('XBC-DN32UP',{tags:['din','plc'],minClearance:{left:24,right:24,top:24,bottom:32}});
 markDinCenterMount('XBC-DN60SU',{tags:['din','plc'],minClearance:{left:24,right:24,top:24,bottom:32}});
 markDinCenterMount('XBC-DP32UP',{tags:['din','plc'],minClearance:{left:24,right:24,top:24,bottom:32}});
+markDinCenterMount('XBC-DN32H',{tags:['din','plc'],minClearance:{left:24,right:24,top:24,bottom:32}});
 markDinCenterMount('MDR-100',{tags:['din','power']});
 markDinCenterMount('MC-22B-DC24',{tags:['din','power','contactor']});
 markDinCenterMount('MY2N',{tags:['din','relay','socket']});
@@ -4849,6 +4885,9 @@ function restoreUndoState(x){
   markTerminalSnapDirty();
   window.PLCTrainerPalletizer3D?.importState?.(S.palletizer3d);
   window.PLCTrainerAutomationLabs?.importState?.(S.automationLab);
+  // Import automation state before showing its view: setVisible() restores the
+  // imported activeLab, while the MultiView DOM must follow this snapshot too.
+  window.PLCTrainerMultiView?.setView?.(S.workspaceView);
 }
 function notifyWorkshopRevision(revision){
   // 편집 함수는 snapshot() 뒤에 실제 상태 변경과 render()를 수행한다.
@@ -7684,12 +7723,14 @@ function drawDisabledTerminalSpots(group,def,scale=1){
       mask.setAttribute('y',Number(correction.mask.y)*scale);
       mask.setAttribute('width',Number(correction.mask.w)*scale);
       mask.setAttribute('height',Number(correction.mask.h)*scale);
+      if(correction.mask.fill)mask.style.fill=correction.mask.fill;
       group.appendChild(mask);
     }
     const label=document.createElementNS(SVGNS,'text');
     label.setAttribute('class','image-label-correction');
     label.setAttribute('x',Number(correction.x)*scale);
     label.setAttribute('y',Number(correction.y)*scale);
+    if(correction.style)label.setAttribute('style',correction.style);
     label.textContent=correction.label;
     group.appendChild(label);
   }
@@ -7944,7 +7985,8 @@ function renderDevices(){
       const pose=rotatedTerminalPose(def,t,rot,s);
       const visual=pose.visual;
       const hitPoint=pose.hit;
-      const termR=(t.r || (termList.length>32 ? 7.2 : 8.5))*s;
+      const usesScrewCenterMarker=def.terminalMarkerStyle==='screw-center-ring'&&!isPlug;
+      const termR=(t.r || def.terminalMarkerRadius || (termList.length>32 ? 7.2 : 8.5))*s;
       const hitR=terminalHitRadius(def,t)*s;
       const semanticName={
         'power-pass-through':'관통 단자',
@@ -7976,7 +8018,7 @@ function renderDevices(){
       const candidateTip=targetAssessment?`${completionTip}\n결선 판정: ${targetAssessment.reason}`:completionTip;
       // 히트 영역
       const hit=document.createElementNS(SVGNS, isPlug?'rect':'circle');
-      hit.setAttribute('class', (isPlug?'plug-pin-hit terminal terminal-hit':'terminal terminal-hit')+candidateClass+completionClass+flowClass);
+      hit.setAttribute('class', (isPlug?'plug-pin-hit terminal terminal-hit':'terminal terminal-hit')+(usesScrewCenterMarker?' manual-terminal-hit':'')+candidateClass+completionClass+flowClass);
       if(isPlug){
         hit.setAttribute('x',hitPoint.x-hitR); hit.setAttribute('y',hitPoint.y-hitR);
         hit.setAttribute('width',hitR*2); hit.setAttribute('height',hitR*2);
@@ -7993,6 +8035,7 @@ function renderDevices(){
       tg.appendChild(hit);
       // 보이는 단자: 플러그=핀, 일반=원형 나사
       let termCls=(isPlug?'plug-pin terminal':'terminal')+
+        (usesScrewCenterMarker?' manual-terminal-marker':'')+
         (isPendingStart?' pending':'')+candidateClass+completionClass+
         flowClass+
         (highlightedTerms.has(id+'.'+t.id)?' highlight':'')+
@@ -8021,6 +8064,13 @@ function renderDevices(){
         tip.textContent=candidateTip;
         c.appendChild(tip);
         tg.appendChild(c);
+        if(usesScrewCenterMarker){
+          const center=document.createElementNS(SVGNS,'circle');
+          center.setAttribute('class','terminal-marker-center');
+          center.setAttribute('cx',visual.x); center.setAttribute('cy',visual.y);
+          center.setAttribute('r',Math.max(.8,1.25*s));
+          tg.appendChild(center);
+        }
       }
       // 플러그형은 기본 라벨 숨김(호버 툴팁만). forceLabel만 표시
       if(S.showLabels && (!def.imageHasLabels || t.forceLabel) && !(isPlug && !t.forceLabel)){
@@ -9888,17 +9938,30 @@ function renderNetlist(){
   lastNets.forEach((n,i)=>{
     const pols=[...new Set(n.members.map(m=>m.pol).filter(Boolean))];
     const repPol=pols[0]||'NEUTRAL';
-    const c=POL[repPol]?.color||'#666';
+    const colorForPol=pol=>Object.prototype.hasOwnProperty.call(POL,pol)&&POL[pol].color||'#666';
+    const c=colorForPol(repPol);
     const d=document.createElement('div');
     d.style.marginBottom='4px';
     d.style.borderLeft=`3px solid ${c}`;
     d.style.paddingLeft='5px';
     d.style.cursor='pointer';
-    const memList=n.members.map(m=>{
+    const title=document.createElement('b');
+    title.textContent=`NET ${i+1}`;
+    d.appendChild(title);
+    d.appendChild(document.createTextNode(' '));
+    const summary=document.createElement('span');
+    summary.className='muted';
+    summary.textContent=`(${n.wires.length}선, ${pols.join('/')})`;
+    d.appendChild(summary);
+    d.appendChild(document.createElement('br'));
+    n.members.forEach(m=>{
       const lbl=LIB[S.devices[m.dev]?.type]?.label||m.dev;
-      return `<span class="netchip" style="background:${POL[m.pol]?.color||'#666'}">${lbl.split(' ')[0]}.${m.label||m.term}</span>`;
-    }).join('');
-    d.innerHTML=`<b>NET ${i+1}</b> <span class="muted">(${n.wires.length}선, ${pols.join('/')})</span><br>${memList}`;
+      const chip=document.createElement('span');
+      chip.className='netchip';
+      chip.style.background=colorForPol(m.pol);
+      chip.textContent=`${String(lbl).split(' ')[0]}.${m.label||m.term}`;
+      d.appendChild(chip);
+    });
     d.addEventListener('mouseenter',()=>{
       highlightedWires=new Set(n.wires);
       highlightedTerms=new Set(n.members.map(m=>m.dev+'.'+m.term));
@@ -10830,7 +10893,7 @@ const CATS=[
   ['wiring','🔌 배선/접지'],
 ];
 const EXACT_MANUAL_DEVICE_TYPES=new Set([
-  'XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24',
+  'XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DN32H','XBC-DR32H','EXP2-700','XBF-AH04A','MDR-100','MC-22B-DC24',
   'MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','XBL-C41A','XBF-PD02A'
 ]);
 const PROFILE_ONLY_DEVICE_TYPES=new Set(['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBL-C41A','XBF-PD02A']);
@@ -10856,12 +10919,21 @@ function buildPalette(){
   for(const [cat,name] of CATS){
     const h=document.createElement('h3');
     h.textContent=name; h.dataset.cat=cat;
-    h.addEventListener('click',()=>{
+    h.setAttribute('role','button');
+    h.tabIndex=0;
+    h.setAttribute('aria-expanded','true');
+    const toggleCategory=()=>{
       h.classList.toggle('collapsed');
       const collapsed=h.classList.contains('collapsed');
-      $('#palette').querySelectorAll(`.pal[data-cat="${cat}"]`).forEach(p=>{
-        p.style.display=collapsed?'none':'';
-      });
+      h.setAttribute('aria-expanded',String(!collapsed));
+      filterPalette(search.value.toLowerCase(),h);
+    };
+    h.addEventListener('click',toggleCategory);
+    h.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){
+        e.preventDefault();
+        toggleCategory();
+      }
     });
     el.appendChild(h);
     for(const [type,def] of Object.entries(LIB)){
@@ -10870,6 +10942,8 @@ function buildPalette(){
       const d=document.createElement('div');
       d.className='pal'; d.dataset.cat=cat; d.dataset.search=(def.label+' '+(def.sub||'')+' '+type).toLowerCase();
       d.dataset.type=type;
+      d.setAttribute('role','button');
+      d.tabIndex=0;
       d.draggable=true;
       const manualStatus=paletteManualStatus(type);
       d.dataset.manualStatus=manualStatus.kind;
@@ -10937,25 +11011,41 @@ function buildPalette(){
         addDevice(type);
         render(); status(`추가: ${def.label}`);
       });
+      d.addEventListener('keydown',e=>{
+        if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){
+          e.preventDefault();
+          d.click();
+        }
+      });
       el.appendChild(d);
     }
   }
 }
-function filterPalette(q){
-  const items=$('#palette').querySelectorAll('.pal');
-  const heads=$('#palette').querySelectorAll('h3');
-  if(!q){
-    items.forEach(i=>i.style.display='');
-    heads.forEach(h=>h.style.display='');
-    return;
-  }
+function filterPalette(q,focusFallback){
+  const palette=$('#palette');
+  const active=document.activeElement;
+  const activePal=active?.classList?.contains('pal')?active:null;
+  const items=palette.querySelectorAll('.pal');
+  const heads=palette.querySelectorAll('h3');
   const visibleCats=new Set();
   items.forEach(i=>{
-    const m=i.dataset.search.includes(q);
-    i.style.display=m?'':'none';
+    const m=!q||i.dataset.search.includes(q);
     if(m)visibleCats.add(i.dataset.cat);
   });
-  heads.forEach(h=>h.style.display=visibleCats.has(h.dataset.cat)?'':'none');
+  heads.forEach(h=>{
+    const matches=!q||visibleCats.has(h.dataset.cat);
+    const collapsed=h.classList.contains('collapsed');
+    h.style.display=matches?'':'none';
+    items.forEach(i=>{
+      if(i.dataset.cat===h.dataset.cat){
+        i.style.display=matches&&!collapsed?'':'none';
+      }
+    });
+  });
+  if(activePal?.style.display==='none'){
+    const search=palette.querySelector('input[type="text"]');
+    (focusFallback&&focusFallback.style.display!=='none'?focusFallback:search)?.focus();
+  }
 }
 
 /* ===================================================================
@@ -11984,6 +12074,9 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(e.key==='Delete'||e.key==='Backspace'){
+    // Diagram/I-O/automation views own Delete locally. Do not let a stale
+    // panel selection remove shared devices before their handler runs.
+    if(S.workspaceView!=='panel')return;
     if(S.calibration.enabled && S.calibration.active){
       e.preventDefault(); uiDeleteActiveTerminal(); return;
     }
@@ -12237,6 +12330,10 @@ $('#tpl-basic-panel').onclick=()=>{
   if(Object.keys(S.devices).length && !confirm('기본 3단×1열 제어반 템플릿을 적용합니다. 레일/덕트/도어가 재설정됩니다. 계속?'))return;
   applyRailConfig({rows:3,cols:1,door:true,keepDevices:true});
 };
+$('#tpl-xbc-dn32h-mdr').onclick=()=>{
+  if(Object.keys(S.devices).length && !confirm('현재 작업을 화면에서 교체하고 XBC-DN32H 결선 예제를 엽니다. 저장하지 않은 작업은 먼저 저장하세요. 계속?'))return;
+  loadXbcDn32hMdrDemo({recordHistory:true});
+};
 $('#b-rail-config').onclick=()=>openRailConfigModal();
 $('#b-apply-rail-config').onclick=()=>{
   const rows=Number($('#cfg-rail-rows')?.value||3);
@@ -12343,6 +12440,66 @@ $('#b-clear').onclick=()=>{
   render(); zoomFit(); refreshTrainerUI(); status('빈 작업장으로 초기화 (단자 보정은 유지됨)');
 };
 
+/**
+ * MDR-100-24와 XBC-DN32H 두 장비의 최소 DC 결선만 구성한다.
+ * - MDR +24V는 PLC 트랜지스터 출력부 P에 공급한다.
+ * - MDR 0V는 P20~P23 출력 그룹의 COM0에 공급한다.
+ * - AC 전원·분배 단자대·버튼·램프 등 제3 장비는 만들지 않는다.
+ * - COMI/COM1~3과 PLC 내장 서비스 전원 24V/24G는 연결하지 않는다.
+ * URL: ?demo=xbc-dn32h-mdr
+ */
+function loadXbcDn32hMdrDemo(opts={}){
+  if(opts.recordHistory)snapshot();
+  cancelPendingWire('',{render:false});
+  clearSelection();
+  S.devices={}; S.wires=[]; S.jumpers=[]; S.goal=null;
+  S.workspaceView='panel'; S.boardMode='panel-layout';
+  applyRailConfig({rows:2,cols:1,door:false,keepDevices:false},{silent:true,keepMode:true});
+
+  const placeOnRail=(type,railId,x)=>{
+    const rail=S.rails[railId];
+    const def=LIB[type];
+    const id=addDevice(type,x,rail&&def?dinSnapY(def,rail,1):180);
+    if(id&&rail){
+      S.devices[id].railId=railId;
+      S.devices[id].slotX=x-rail.x;
+    }
+    return id;
+  };
+  const wire=(fromDev,fromTerm,toDev,toTerm,color,tag)=>{
+    const fromDef=LIB[S.devices[fromDev]?.type];
+    const toDef=LIB[S.devices[toDev]?.type];
+    const a=fromDef?.terminals?.find(t=>t.id===fromTerm);
+    const b=toDef?.terminals?.find(t=>t.id===toTerm);
+    const item={
+      id:uid('w'),
+      from:{dev:fromDev,term:fromTerm},
+      to:{dev:toDev,term:toTerm},
+      color,
+      tag,
+      colorGroup:(a?.pol==='PE'||b?.pol==='PE')?'power':
+        (['DI','DO','SW'].includes(a?.pol)||['DI','DO','SW'].includes(b?.pol))?'signal':'power'
+    };
+    if(a&&b)enrichWireMeta(item,a,b);
+    S.wires.push(item);
+  };
+
+  const mdr=placeOnRail('MDR-100','rail_r1c1',420);
+  const plc=placeOnRail('XBC-DN32H','rail_r2c1',420);
+
+  // P20~P23 출력 그룹만 사용할 수 있게 하는 두 가닥 최소 외부전원 결선.
+  wire(mdr,'V+1',plc,'P','#dc2626','MDR +24V → XBC 출력부 P');
+  wire(mdr,'V-1',plc,'COM0','#2563eb','MDR 0V → XBC COM0 (P20~P23)');
+
+  S.nextId=Math.max(S.nextId,Object.keys(S.devices).length+S.wires.length+10);
+  window.PLCTrainerMultiView?.setView?.('panel');
+  render();
+  refreshTrainerUI();
+  requestAnimationFrame(()=>zoomFit());
+  status('⚡ MDR-100-24 ↔ XBC-DN32H 두 가닥 최소 결선 · +24V→P · 0V→COM0 · P20~P23 그룹용 · 24V/24G 미사용');
+  return {mdr,plc};
+}
+
 function seedDemoDevices(){
   // 현재 레이아웃 기준: row 0=전원, 1=PLC, 2=단자대 … / col 0부터
   const railAt=(row,col=0)=>{
@@ -12433,6 +12590,14 @@ render();
 if(typeof renderGoals === 'function') renderGoals();
 if(typeof refreshTrainerUI === 'function') refreshTrainerUI();
 
+// 모듈형 workflow 초기화가 빈 작업장/저장본 정책을 확정한 뒤 예제를 적용한다.
+// 공유 가능한 예제 URL이며 일반 시작 화면과 저장본에는 영향을 주지 않는다.
+window.addEventListener('load',()=>{
+  if(new URLSearchParams(location.search).get('demo')==='xbc-dn32h-mdr'){
+    setTimeout(()=>loadXbcDn32hMdrDemo({recordHistory:false}),250);
+  }
+},{once:true});
+
 // 화면 맞춤 (제어반 프레임 포함). 저장 문서가 이 두 프레임 안에
 // 복원되면 빈 작업장용 맞춤이 복원 결과를 덮어쓰지 않게 취소한다.
 let initialSmartFitCanceled=false;
@@ -12496,7 +12661,7 @@ window.LegacyTrainerBridge={
   readEquipmentCatalog(){
     const profileByType={
       'MCCB':'educational:mccb-3p','MCCB1P':'educational:mccb-2p',
-      'XBC-DN32UP':'ls-electric:xbc-dn32up','XBC-DN60SU':'ls-electric:xbc-dn60su','XBC-DP32UP':'ls-electric:xbc-dp32up',
+      'XBC-DN32UP':'ls-electric:xbc-dn32up','XBC-DN60SU':'ls-electric:xbc-dn60su','XBC-DP32UP':'ls-electric:xbc-dp32up','XBC-DN32H':'ls-electric:xbc-dn32h',
       'XBC-DR32H':'ls-electric:xbc-dr32h','EXP2-700':'ls-electric:exp2-0700d',
       'XBL-C41A':'ls-electric:xbl-c41a','XBF-AH04A':'ls-electric:xbf-ah04a','XBF-PD02A':'ls-electric:xbf-pd02a',
       'MDR-100':'mean-well:mdr-100-24','MC-22B-DC24':'ls-electric:mc-22b-dc24-1a1b',
@@ -12539,6 +12704,7 @@ window.LegacyTrainerBridge={
   readTerminalGeometryV3(){
     const profileByType={
       'XBC-DN32UP':'ls-electric:xbc-dn32up',
+      'XBC-DN32H':'ls-electric:xbc-dn32h',
       'XBC-DN60SU':'ls-electric:xbc-dn60su',
       'XBC-DP32UP':'ls-electric:xbc-dp32up',
       'XBC-DR32H':'ls-electric:xbc-dr32h',
@@ -12598,7 +12764,7 @@ window.LegacyTrainerBridge={
     S.history=[];S.future=[];
     const profileToLegacy={
       'educational:mccb-3p':'MCCB','educational:mccb-2p':'MCCB1P',
-      'ls-electric:xbc-dn32up':'XBC-DN32UP','ls-electric:xbc-dn60su':'XBC-DN60SU','ls-electric:xbc-dp32up':'XBC-DP32UP',
+      'ls-electric:xbc-dn32up':'XBC-DN32UP','ls-electric:xbc-dn60su':'XBC-DN60SU','ls-electric:xbc-dp32up':'XBC-DP32UP','ls-electric:xbc-dn32h':'XBC-DN32H',
       'ls-electric:xbc-dr32h':'XBC-DR32H','ls-electric:exp2-0700d':'EXP2-700','ls-electric:xbl-c41a':'XBL-C41A','ls-electric:xbf-ah04a':'XBF-AH04A','ls-electric:xbf-pd02a':'XBF-PD02A','mean-well:mdr-100-24':'MDR-100',
       'ls-electric:mc-22b-dc24-1a1b':'MC-22B-DC24','schneider:eocr3de-05duh':'EOCR3DE-05DUH',
       'omron:my2n-d2-dc24':'MY2N',
@@ -12749,6 +12915,8 @@ status('빈 작업장 준비됨 — 좌측 부품을 배치하세요 · F=화면
 <script src="src/runtime/pneumatic-runtime.js"></script>
 <script src="src/runtime/discrete-io-runtime.js"></script>
 <script src="src/ui/multiview-core.js"></script>
+<script src="src/ui/sequence-editor-core.js"></script>
+<script src="src/ui/sequence-editor-ui.js"></script>
 <script src="src/ui/multiview-ui.js"></script>
 <script src="src/ui/runtime-visual-state.js"></script>
 <script src="src/ui/camera-navigation.js"></script>

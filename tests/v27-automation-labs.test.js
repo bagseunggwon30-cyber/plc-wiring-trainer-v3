@@ -71,9 +71,19 @@ test('3D wiring targets terminal holes directly without persistent floating sock
   assert.match(ui, /filter\(target => target\.userData\.sovPickEnabled\)/);
   assert.doesNotMatch(ui, /marker\.visible = selectedServoEquipment/);
   assert.match(ui, /hitObject: terminalSurface/);
-  assert.match(ui, /routing: \{ style: 'terminal-panel' \}/);
+  assert.match(ui, /style: importedDrive \? 'cn1-pin' : 'terminal-panel'/);
   assert.match(ui, /editor\.anchorWorldPosition\(ref\)/);
   assert.match(ui, /editor\.anchorWorldPosition\(editor\.pendingConnection\.anchor\)/);
+});
+
+test('LS pulse trainer replaces its fallback housing with the optimized Blender L7SA004A asset', () => {
+  for (const token of ['xbf-pd02a', 'l7sa004a', 'three-dimensional-equipment', 'smart-link-connector', 'heatsink-fin-', 'encoder-connector', 'motor-connector', 'equipmentModels']) assert.match(ui, new RegExp(token));
+  for (const token of ['l7sa004a-production-v3.glb', 'mountL7SA004AModel', 'TERM_CN1_09_PF_POS', 'TERM_CN1_10_PF_NEG', 'TERM_CN1_11_PR_POS', 'TERM_CN1_12_PR_NEG']) assert.match(ui, new RegExp(token));
+  assert.match(ui, /model\.rotation\.y \+= Math\.PI/);
+  assert.match(ui, /dimensions: importedModelInfo\?\.dimensions \|\| \{ width, height, depth \}/);
+  assert.match(ui, /LS-XBF-PD02A-OFFICIAL-PRODUCT-PAGE/);
+  assert.match(ui, /USER-BLENDER-5\.2-L7SA004A-PRODUCTION-V3/);
+  assert.match(ui, /LS-XDL-L7S-CATALOG/);
 });
 
 test('manual lab controls are routed through the currently selected vendor address map', () => {
@@ -131,7 +141,8 @@ test('automation lab camera keeps the audited orthographic presets behind shared
   assert.match(ui, /addScaledVector\(forward, 20\)/);
   assert.match(ui, /setFromNormalAndCoplanarPoint\(forward\.clone\(\)\.negate\(\), planePoint\)/);
   assert.match(ui, /\.0339661 \+ \(scene\.orbit\.scale - \.450001\) \* \.104327/);
-  assert.match(ui, /scene\.orbit\.scale - scaleCurve \* step, \.1, 7/);
+  assert.match(ui, /const maxScale = scene\.lab === 'discrete' \? DISCRETE_CAMERA_BOUNDS\.maxScale : 7/);
+  assert.match(ui, /scene\.orbit\.scale - scaleCurve \* step, \.1, maxScale/);
   for (const preset of ['space', 'f1', 'f2']) assert.match(ui, new RegExp(`data-camera-preset="${preset}"`));
   assert.match(ui, /event\.code === 'Space'/);
   assert.match(ui, /isEditableTarget\(event\.target\)/);
@@ -140,6 +151,45 @@ test('automation lab camera keeps the audited orthographic presets behind shared
   assert.match(ui, /new Three\.Color\(0x3a4757\)/);
   assert.doesNotMatch(ui, /new Three\.Fog\(/);
   assert.doesNotMatch(ui, /new Three\.GridHelper\(/);
+});
+
+test('lazy lab asset failures clear only their rejected memo so a later ensure retries while in-flight loads stay shared', () => {
+  assert.match(ui, /if \(A\.labAssetLoads\[lab\]\) return A\.labAssetLoads\[lab\];/, 'an in-flight request must remain memoized');
+  assert.match(
+    ui,
+    /const memoized = load\.catch\(error => \{\s*if \(A\.labAssetLoads\[lab\] === memoized\) delete A\.labAssetLoads\[lab\];\s*throw error;\s*\}\);\s*A\.labAssetLoads\[lab\] = memoized;/,
+    'a rejected current memo must be removed, allowing a later ensureLabAssets call to retry without clearing a replacement load'
+  );
+});
+
+test('pneumatic asset failures reject the shared load, clear its memo for retry, and keep the functional proxy visible', () => {
+  const section = ui.match(/async function loadPneumaticAssets\(\) \{([\s\S]*?)\r?\n  \}\r?\n\r?\n  async function loadEquipmentAssets/);
+  assert.ok(section, 'pneumatic asset loader exists');
+  const body = section[1];
+  const importOptions = [...body.matchAll(/\{ authoredCoordinates: true(?:, rethrow: true)? \}/g)].map(match => match[0]);
+  const assetsSettled = body.indexOf('await Promise.all(assets);');
+  const proxyHidden = body.indexOf('A.scenes.pneumatic.proxyRoot.visible = false;');
+  assert.equal(importOptions.length, 6, 'the six pneumatic prefab imports each have an explicit options object');
+  assert.deepEqual(
+    importOptions,
+    Array(6).fill('{ authoredCoordinates: true, rethrow: true }'),
+    'each pneumatic import must rethrow loader failures so Promise.all rejects and ensureLabAssets clears its rejected memo for retry'
+  );
+  assert.ok(assetsSettled >= 0, 'all required pneumatic assets are awaited');
+  assert.ok(proxyHidden > assetsSettled, 'the proxy is hidden only after all required pneumatic assets load successfully; a rejected Promise.all leaves it visible');
+});
+
+test('the discrete wiring bench starts and resets with a viewport-aware full-equipment camera fit', () => {
+  assert.match(ui, /const DISCRETE_CAMERA_BOUNDS = Object\.freeze\(\{ width: 12\.6, depth: 6\.3, padding: 1\.08, maxScale: 14 \}\)/);
+  assert.match(ui, /function discreteFitScale\(aspect\)/);
+  assert.match(ui, /Math\.max\(DISCRETE_CAMERA_BOUNDS\.width \/ safeAspect, DISCRETE_CAMERA_BOUNDS\.depth\)/);
+  assert.match(ui, /data\.cameraFit = 'default'/);
+  assert.match(ui, /scene\?\.lab === 'discrete' \? DISCRETE_CAMERA_PRESETS\[name\] : CAMERA_PRESETS\[name\]/);
+  assert.match(ui, /scene\.cameraFit = preset\.fit \? name : null/);
+  assert.match(ui, /if \(scene\.cameraFit\) scene\.orbit\.scale = discreteFitScale\(scene\.aspect\)/);
+  assert.match(ui, /const maxScale = scene\.lab === 'discrete' \? DISCRETE_CAMERA_BOUNDS\.maxScale : 7/);
+  assert.match(ui, /SPACE 전체 상단/);
+  assert.doesNotMatch(ui, /data\.orbit = \{ yaw: 18, pitch: 32, scale: \.88 \}/);
 });
 
 test('LS and Mitsubishi automation equipment pack validates and keeps vendor faults distinct', () => {
@@ -267,4 +317,125 @@ test('asset extractor records the selective boundary and has no credential const
   assert.doesNotMatch(extractor, /pneumatic-workshop\.glb/);
   assert.match(extractor, /entry\.get\("file"\) in known_models/);
   assert.match(extractor, /SCENE_PATH_TARGETS/);
+});
+
+test('automation labs defer imported models behind a per-lab Promise memo boundary', () => {
+  // Each tab should pay only for its own 3D assets.  The memo prevents rapid
+  // tab clicks from issuing duplicate GLTF requests for the same lab.
+  assert.match(ui, /async function ensureLabAssets\(lab\)/);
+  assert.match(ui, /A\.labAssetLoads\s*\?\?=/);
+  assert.match(ui, /A\.labAssetLoads\[lab\]/);
+  assert.match(ui, /return A\.labAssetLoads\[lab\]/);
+  assert.match(ui, /const load\s*=\s*Promise\.resolve\(/);
+  assert.match(ui, /A\.labAssetLoads\[lab\]\s*=\s*memoized/);
+
+  // The old all-at-once gate must not survive the lazy-loading migration.
+  assert.doesNotMatch(ui, /importedLoaded/);
+  assert.doesNotMatch(ui, /function loadImportedAssets\(/);
+  assert.doesNotMatch(ui, /loadImportedAssets\(\)/);
+});
+
+test('tab activation requests only the active lab asset bundle', () => {
+  for (const loader of ['loadServoAssets', 'loadMpsAssets', 'loadPneumaticAssets', 'loadDiscreteAssets', 'loadEquipmentAssets']) {
+    assert.match(ui, new RegExp(`function ${loader}\\(`), loader);
+  }
+  assert.match(ui, /const LAB_ASSET_LOADERS\s*=\s*Object\.freeze\(/);
+  for (const lab of ['servo2', 'mps', 'pneumatic', 'discrete', 'equipment3d']) {
+    assert.match(ui, new RegExp(`${lab}:\\s*load[A-Z][A-Za-z]+Assets`), lab);
+  }
+
+  const setLab = ui.match(/function setLab\(lab\) \{([\s\S]*?)\n  \}/)?.[1] || '';
+  const setVisible = ui.match(/function setVisible\(visible\) \{([\s\S]*?)\n  \}/)?.[1] || '';
+  assert.match(setLab, /void ensureLabAssets\(lab\)/);
+  assert.match(setVisible, /void ensureLabAssets\(A\.activeLab\)/);
+  assert.doesNotMatch(setLab, /load(?:Servo|Mps|Pneumatic|Discrete|Equipment)Assets\(/);
+  assert.doesNotMatch(setVisible, /load(?:Servo|Mps|Pneumatic|Discrete|Equipment)Assets\(/);
+});
+
+test('a pneumatic retry cannot add stale in-flight models after its replacement bundle succeeds', async () => {
+  // Run the production functions in a deliberately tiny Three-like harness.
+  // The first bundle rejects one file while its other five GLTF promises stay
+  // in flight.  A retry then succeeds before the old promises settle.  The
+  // scene must still contain exactly one wrapper per prefab.
+  const normalizedUi = ui.replace(/\r\n/g, '\n');
+  const extract = (start, end) => {
+    const from = normalizedUi.indexOf(start);
+    const to = normalizedUi.indexOf(end, from);
+    assert.ok(from >= 0 && to > from, `could not extract ${start}`);
+    return normalizedUi.slice(from, to);
+  };
+  const addImportedSource = extract('  async function addImported(', '\n\n  async function loadWorkpieceTemplates');
+  const pneumaticSource = extract('  async function loadPneumaticAssets()', '\n\n  async function loadEquipmentAssets');
+  const ensureSource = extract('  async function ensureLabAssets(lab)', '\n\n  function installCameraControls');
+  const pending = [];
+  const calls = new Map();
+  const deferred = () => {
+    let resolve;
+    const promise = new Promise(done => { resolve = done; });
+    return { promise, resolve };
+  };
+  const rootNode = { children: [], add(node) { this.children.push(node); } };
+  class Group {
+    constructor() {
+      this.children = [];
+      this.position = { set() {} };
+    }
+    add(node) { this.children.push(node); node.parent = this; }
+  }
+  const makeModel = filename => ({
+    filename,
+    rotation: { set() {} },
+    position: { sub() {} },
+    updateMatrixWorld() {},
+    traverse() {}
+  });
+  const context = {
+    console: { warn() {} },
+    Promise,
+    Three: {
+      Group,
+      Box3: class { setFromObject() { return this; } },
+      Vector3: class {}
+    },
+    A: {
+      scenes: {
+        pneumatic: { root: rootNode, parts: { importedValves: {} }, proxyRoot: { visible: true } }
+      },
+      labAssetLoads: Object.create(null)
+    },
+    window: {
+      PLCTrainerImportedModels: {
+        loadModel(filename) {
+          const nth = (calls.get(filename) || 0) + 1;
+          calls.set(filename, nth);
+          if (filename === 'service-unit.glb' && nth === 1) return Promise.reject(new Error('first bundle failure'));
+          const gate = deferred();
+          pending.push({ filename, nth, ...gate });
+          return gate.promise.then(() => makeModel(filename));
+        }
+      },
+      addEventListener() {}
+    },
+    schedule() {},
+    registerEditorModule() {},
+    restoreEditorState() {},
+    syncPneumaticValveVisual() {},
+    findImportedNode() { return null; }
+  };
+  context.globalThis = context;
+  vm.runInNewContext(`${addImportedSource}\n${pneumaticSource}\nconst LAB_ASSET_LOADERS = { pneumatic: loadPneumaticAssets };\n${ensureSource}\nglobalThis.api = { ensureLabAssets };`, context);
+
+  await assert.rejects(context.api.ensureLabAssets('pneumatic'), /first bundle failure/);
+  const retry = context.api.ensureLabAssets('pneumatic');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pending.filter(item => item.nth === 2).length, 6, 'retry issues a full replacement bundle');
+  for (const item of pending.filter(item => item.nth === 2)) item.resolve();
+  await retry;
+  for (const item of pending.filter(item => item.nth === 1)) item.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(rootNode.children.length, 6, 'late completions from the failed bundle must not duplicate scene objects');
+  for (const filename of ['service-unit.glb', 'air-distributor.glb', 'valve-5-2-single.glb', 'valve-5-2-double.glb', 'speed-controller.glb', 'double-acting-cylinder.glb']) {
+    assert.equal(rootNode.children.filter(wrapper => wrapper.children[0]?.filename === filename).length, 1, filename);
+  }
 });

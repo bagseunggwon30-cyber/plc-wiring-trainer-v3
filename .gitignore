@@ -13,6 +13,10 @@ tmp/
 *.tmp
 __pycache__/
 *.pyc
+# Blender's automatic previous-save backup is local-only. The canonical .blend
+# source remains versioned beside the generated manual-backed GLBs.
+assets/manual-backed/*.blend1
+assets/models/automation/*.blend1
 native/**/bin/
 native/**/obj/
 tools/**/bin/
