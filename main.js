@@ -61,6 +61,9 @@ function installOfflineSessionPolicy() {
     callback({ cancel: true });
   });
   session.defaultSession.webRequest.onErrorOccurred((details) => {
+    // A renderer reload or view teardown can cancel an in-flight local GLB.
+    // That is expected navigation cleanup, not an offline/runtime load failure.
+    if (details.error === 'net::ERR_ABORTED' && details.url.startsWith('file:')) return;
     networkAudit.failedRequests.push(`session:${details.url} · ${details.error}`);
   });
 }

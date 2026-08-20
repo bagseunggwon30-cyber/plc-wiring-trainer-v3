@@ -65,10 +65,23 @@ test('XGB production palletizer UI exposes the reviewed XG5000 contract and trac
   await page.locator('[data-action="home"]').click();
   await expect.poll(async () => page.evaluate(() => {
     const api = (window as unknown as { PLCTrainerPalletizer3D: PalletizerApi }).PLCTrainerPalletizer3D;
-    return { orgStep: api.state.manualOrg.step, orgMessage: api.state.manualOrg.message, command: api.readDevice('M00119') };
+    return {
+      orgStep: api.state.manualOrg.step,
+      orgMessage: api.state.manualOrg.message,
+      command: api.readDevice('M00119'),
+      events: api.state.events,
+    };
   // The empty-home initial machine can complete Z → X → Y between UI frames;
-  // accept either the observable start step or its completed trace.
-  })).toMatchObject({ orgStep: expect.any(Number), orgMessage: expect.stringMatching(/Z.*원점|원점복귀 완료/i), command: true });
+  // accept either the observable start step or its completed trace. M00119 is
+  // a one-scan command and must already be safely OFF after the UI action.
+  })).toMatchObject({
+    orgStep: expect.any(Number),
+    orgMessage: expect.stringMatching(/Z.*원점|원점복귀 완료/i),
+    command: false,
+    events: expect.arrayContaining([
+      expect.objectContaining({ type: 'command', message: expect.stringMatching(/ORG.*Z.*X.*Y/i) }),
+    ]),
+  });
 
   // Once ORG is complete, a rejected AUTO must name the actual missing
   // production permits instead of incorrectly blaming ORG again.

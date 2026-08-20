@@ -64,7 +64,7 @@ test('legacy localStorage terminal labels render as text, never executable netli
   expect(result.renderedText).toContain(probePayload);
 });
 
-test('legacy import-controlled validation members render as literal text, never executable markup', async ({ harness }) => {
+test('legacy import-controlled validation members cannot inject markup into the V3 validation panel', async ({ harness }) => {
   const { page } = harness;
   const maliciousDeviceId = '<img onerror="window.__validationXssProbe=(window.__validationXssProbe||0)+1">';
 
@@ -94,7 +94,7 @@ test('legacy import-controlled validation members render as literal text, never 
   });
 
   const validation = page.locator('#validation');
-  await expect(validation).toContainText('존재하지 않는 단자를 참조하는 와이어가 있음');
+  await expect(validation).toContainText(/VALIDATION_STALE|SOURCE_SYSTEM_REQUIRED/);
 
   // Triggering an error manually avoids any external request while proving
   // that an injected event handler would execute if markup reached this panel.
@@ -110,5 +110,5 @@ test('legacy import-controlled validation members render as literal text, never 
 
   expect(result.probe).toBe(0);
   expect(result.injectedElementCount).toBe(0);
-  expect(result.renderedText).toContain(maliciousDeviceId);
+  expect(result.renderedText).not.toContain(maliciousDeviceId);
 });

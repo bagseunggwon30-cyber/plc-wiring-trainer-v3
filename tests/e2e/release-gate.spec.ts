@@ -542,22 +542,26 @@ test('startup automatically restores the saved workshop and fits every device on
   // The empty-workspace bootstrap also schedules a two-frame fit. Wait beyond
   // that point so it cannot overwrite the restored document's device fit.
   await page.waitForTimeout(250);
-  expect(Number((await page.locator('#zoomlbl').textContent())?.replace('%', ''))).toBeGreaterThanOrEqual(60);
+  const restoredZoom = Number((await page.locator('#zoomlbl').textContent())?.replace('%', ''));
+  expect(Number.isFinite(restoredZoom)).toBe(true);
+  expect(restoredZoom).toBeGreaterThan(0);
+  const stageBox = await page.locator('#stage').boundingBox();
+  expect(stageBox).not.toBeNull();
   for (const device of saved.devices) {
     const rendered = page.locator(`#g-devices > .device[data-id="${device.id}"]`);
     await expect(rendered).toBeVisible();
     const box = await rendered.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.x + box!.width).toBeGreaterThan(0);
-    expect(box!.x).toBeLessThan(await page.evaluate(() => innerWidth));
-    expect(box!.y + box!.height).toBeGreaterThan(0);
-    expect(box!.y).toBeLessThan(await page.evaluate(() => innerHeight));
+    expect(box!.x).toBeGreaterThanOrEqual(stageBox!.x - 1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(stageBox!.x + stageBox!.width + 1);
+    expect(box!.y).toBeGreaterThanOrEqual(stageBox!.y - 1);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(stageBox!.y + stageBox!.height + 1);
   }
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
 
-test('XBC terminal overlay keeps 24V above 24G, disables the spare screw, and preserves MD02 aspect ratio', async ({ harness }) => {
+test('XBC clean open-cover image aligns every wire target to its screw and preserves MD02 aspect ratio', async ({ harness }) => {
   const { page, consoleErrors, pageErrors } = harness;
   await chooseMode(page, 'practice');
   await applyDocument(page, xbcMd02VisualDocument());
@@ -566,11 +570,8 @@ test('XBC terminal overlay keeps 24V above 24G, disables the spare screw, and pr
   await expect(xbcTerminals).toHaveCount(48);
   await expect(page.locator('#g-terminals [data-id="plc-visual"][data-term="24G-TOP"]')).toHaveCount(0);
   await expect(page.locator('#g-terminals [data-id="plc-visual"][data-term="PE2"]')).toHaveCount(0);
-  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .disabled-terminal-mark')).toHaveCount(4);
-  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .disabled-terminal-label')).toHaveText([
-    '미사용', '미사용', '미사용', '미사용',
-  ]);
-  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .image-label-correction')).toHaveText(['485+', '485-']);
+  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .disabled-terminal-mark')).toHaveCount(0);
+  await expect(page.locator('#g-devices .device[data-id="plc-visual"] .image-label-correction')).toHaveCount(0);
 
   const positions = await page.locator('#g-terminals .terminal-hit[data-id="plc-visual"]').evaluateAll((items) =>
     Object.fromEntries(items.map((item) => [
@@ -578,10 +579,11 @@ test('XBC terminal overlay keeps 24V above 24G, disables the spare screw, and pr
       { x: Number(item.getAttribute('cx')), y: Number(item.getAttribute('cy')), r: Number(item.getAttribute('r')) },
     ])),
   );
-  expect(positions['24V']).toMatchObject({ x: 584.5, y: 86 });
-  expect(positions['24G']).toMatchObject({ x: 584.5, y: 140 });
-  expect(positions['P0F'].r).toBeGreaterThanOrEqual(14);
-  expect(positions.PE.r).toBeGreaterThanOrEqual(14);
+  expect(positions['24G']).toMatchObject({ x: 654.7, y: 72.8 });
+  expect(positions['24V']).toMatchObject({ x: 666.7, y: 109.9 });
+  expect(positions['24G'].y).toBeLessThan(positions['24V'].y);
+  expect(positions['P0F'].r).toBeGreaterThanOrEqual(7.2);
+  expect(positions.PE.r).toBeGreaterThanOrEqual(7.2);
 
   await pointerClickSvgTerminal(page, 'plc-visual', 'P0F');
   await expect(page.locator('#stat')).toContainText('끝 단자');
