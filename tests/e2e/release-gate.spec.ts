@@ -296,6 +296,25 @@ async function pointerClickSvgDeviceBody(page: Page, deviceId: string, addToSele
   if (addToSelection) await page.keyboard.up('Control');
 }
 
+async function findBlankCanvasPoint(page: Page): Promise<{ x: number; y: number }> {
+  const point = await page.locator('#canvas').evaluate((canvas: SVGSVGElement) => {
+    const rect = canvas.getBoundingClientRect();
+    const forbidden = '.wire, .terminal, .terminal-hit, .device, .wire-handle, .calib-anchor';
+    const margin = 24;
+    for (let y = rect.top + margin; y <= rect.bottom - margin; y += 20) {
+      for (let x = rect.left + margin; x <= rect.right - margin; x += 20) {
+        const stack = document.elementsFromPoint(x, y);
+        if (!stack.some((element) => element === canvas || canvas.contains(element))) continue;
+        if (stack.some((element) => element.matches(forbidden) || element.closest(forbidden))) continue;
+        return { x, y };
+      }
+    }
+    return null;
+  });
+  expect(point, 'the visible SVG canvas must contain a blank point for a real waypoint click').not.toBeNull();
+  return point!;
+}
+
 async function boxSelectSvgDevices(page: Page, deviceIds: readonly string[]): Promise<void> {
   await page.locator('#m-select').click();
   const boxes = await Promise.all(deviceIds.map(async (deviceId) => {
@@ -889,14 +908,8 @@ test('real-pointer terminal click starts wiring, previews a routed pending wire,
   const source = page.locator(
     `#g-terminals .terminal-hit[data-id="${negativeSource.deviceId}"][data-term="${negativeSource.terminalId}"]`,
   );
-  const sourceBox = await source.boundingBox();
-  expect(sourceBox).not.toBeNull();
-  const canvasBox = await page.locator('#canvas').boundingBox();
-  expect(canvasBox).not.toBeNull();
-  await page.mouse.click(
-    (sourceBox!.x + destinationBox!.x) / 2,
-    Math.max(canvasBox!.y + 24, sourceBox!.y - 64),
-  );
+  const waypointPoint = await findBlankCanvasPoint(page);
+  await page.mouse.click(waypointPoint.x, waypointPoint.y);
   await expect(page.locator('#stat')).toContainText(/경유|waypoint/i);
   await expect(page.locator('#ghost')).toBeVisible();
   await expect(page.locator('#ghost')).not.toHaveAttribute('d', initialGhostPath ?? '');
@@ -909,10 +922,7 @@ test('real-pointer terminal click starts wiring, previews a routed pending wire,
   expect(await bridgeState(page)).toMatchObject({ revision: initial.revision, wires: initial.wires });
 
   await pointerClickSvgTerminal(page, negativeSource.deviceId, negativeSource.terminalId);
-  await page.mouse.click(
-    (sourceBox!.x + destinationBox!.x) / 2,
-    Math.max(canvasBox!.y + 24, sourceBox!.y - 64),
-  );
+  await page.mouse.click(waypointPoint.x, waypointPoint.y);
   await pointerClickSvgTerminal(page, negativeDestination.deviceId, negativeDestination.terminalId);
   const afterCommit = await bridgeState(page);
   expect(afterCommit.revision).toBe(initial.revision + 1);
