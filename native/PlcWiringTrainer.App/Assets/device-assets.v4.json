@@ -6,8 +6,8 @@
     { "profileId": "lamp-green-v1", "path": "Assets/Devices/lamp-green-flat-screw-v1.png", "sha256": "9391F32747BEADB390979CDAAAF2E065E0E9894860B54A6536454E71C46339D3", "evidenceGrade": "educational" },
     { "profileId": "lamp-yellow-v1", "path": "Assets/Devices/lamp-yellow-flat-screw-v1.png", "sha256": "81F6EFA634CC413E6D487CF0F34311FFF52D5547F1F9B31BB83A566BCC12AC7E", "evidenceGrade": "educational" },
     { "profileId": "lamp-white-v1", "path": "Assets/Devices/lamp-white-flat-screw-v1.png", "sha256": "B37BB6A624CC79F07EE94DE3570F26FACEE0DC1206ECF462FC18967350266F8A", "evidenceGrade": "educational" },
-    { "profileId": "prox-npn-v2", "path": "Assets/Devices/prox-npn-v2.svg", "sha256": "AFAE4F20D32B133EE31F9FBB937AB7AB1D7905F71B68CD887B05C286B23100BF", "evidenceGrade": "educational" },
-    { "profileId": "prox-pnp-v2", "path": "Assets/Devices/prox-pnp-v2.svg", "sha256": "C1DB1BDD990CC19480C2A0E5FC809044126E4D2D34FE8D38BF9AD09D6D3B60FC", "evidenceGrade": "educational" },
+    { "profileId": "prox-npn-v2", "path": "Assets/Devices/prox-npn-v2.svg", "sha256": "A2E9D821033A5F38D389044CC578B4B83F85EA4684CE819EEF6B8C1EB2C5EC1A", "evidenceGrade": "educational" },
+    { "profileId": "prox-pnp-v2", "path": "Assets/Devices/prox-pnp-v2.svg", "sha256": "FF6F4888BFB8AAED0C9FC58A4D476623A3D52FA5217D1D6D394EB6738734B295", "evidenceGrade": "educational" },
     { "profileId": "plc-input-24v", "path": "Assets/Devices/plc-input-24v.svg", "sha256": "A8468BC88F4880E2A19A1CA9E75D49A17CAF5C3446F51C012E985160A4B62849", "evidenceGrade": "educational" }
   ]
 }

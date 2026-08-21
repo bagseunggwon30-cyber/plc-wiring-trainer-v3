@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using PlcWiringTrainer.Core.Assets;
 using PlcWiringTrainer.Core.Validation;
 
@@ -18,7 +19,7 @@ public sealed class AssetManifestTests
             ActiveAssetV4 asset = Assert.Single(ActiveAssetManifest.Entries, item => item.ProfileId == profile.Id);
             string fullPath = Path.Combine(root, "native", "PlcWiringTrainer.App", asset.RelativePath.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(fullPath), fullPath);
-            Assert.Equal(asset.Sha256, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(fullPath))));
+            Assert.Equal(asset.Sha256, ComputeStableHash(fullPath));
         }
     }
 
@@ -42,5 +43,14 @@ public sealed class AssetManifestTests
         }
 
         return directory?.FullName ?? throw new DirectoryNotFoundException("솔루션 루트를 찾지 못했습니다.");
+    }
+
+    private static string ComputeStableHash(string path)
+    {
+        byte[] content = string.Equals(Path.GetExtension(path), ".svg", StringComparison.OrdinalIgnoreCase)
+            ? new UTF8Encoding(false).GetBytes(
+                File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'))
+            : File.ReadAllBytes(path);
+        return Convert.ToHexString(SHA256.HashData(content));
     }
 }

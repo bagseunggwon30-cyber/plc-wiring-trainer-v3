@@ -41,13 +41,13 @@ public static class ActiveAssetManifest
         new(
             "prox-npn-v2",
             "Assets/Devices/prox-npn-v2.svg",
-            "AFAE4F20D32B133EE31F9FBB937AB7AB1D7905F71B68CD887B05C286B23100BF",
+            "A2E9D821033A5F38D389044CC578B4B83F85EA4684CE819EEF6B8C1EB2C5EC1A",
             EvidenceGrade.Educational,
             "사용자가 교체한 NPN 센서 이미지; sinking 규칙은 별도 전기 프로필에서 검증"),
         new(
             "prox-pnp-v2",
             "Assets/Devices/prox-pnp-v2.svg",
-            "C1DB1BDD990CC19480C2A0E5FC809044126E4D2D34FE8D38BF9AD09D6D3B60FC",
+            "FF6F4888BFB8AAED0C9FC58A4D476623A3D52FA5217D1D6D394EB6738734B295",
             EvidenceGrade.Educational,
             "사용자가 교체한 PNP 센서 이미지; sourcing 규칙은 별도 전기 프로필에서 검증"),
         new(
