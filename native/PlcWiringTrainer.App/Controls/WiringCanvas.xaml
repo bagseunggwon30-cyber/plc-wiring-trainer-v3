@@ -9,11 +9,13 @@
     AutomationProperties.AutomationId="WiringCanvas"
     AutomationProperties.Name="결선 캔버스"
     IsTabStop="True"
+    Unloaded="WiringCanvas_Unloaded"
     mc:Ignorable="d">
     <Grid Background="#111827">
         <canvas:CanvasControl
             x:Name="NativeCanvas"
             ClearColor="#111827"
+            CreateResources="Canvas_CreateResources"
             Draw="Canvas_Draw"
             PointerMoved="Canvas_PointerMoved"
             PointerPressed="Canvas_PointerPressed"

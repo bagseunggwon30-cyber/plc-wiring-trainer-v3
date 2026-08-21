@@ -1,4 +1,4 @@
-name: CI
+name: native-ci
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: native-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,15 +17,29 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run test:legacy
-      - run: npm run test:unit
-      - run: npm run typecheck
-      - run: npm run build:renderer
-      - run: npm run test:performance
-      - run: npm run test:e2e
+          dotnet-version: 10.0.x
+      - run: dotnet restore PlcWiringTrainer.slnx
+      - run: dotnet test native\PlcWiringTrainer.Core.Tests\PlcWiringTrainer.Core.Tests.csproj -c Release --no-restore
+      - run: dotnet build native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 --no-restore
+      - run: dotnet publish native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts\publish\win-x64 --no-restore
+      - run: dotnet format PlcWiringTrainer.slnx --verify-no-changes --no-restore
+      - name: Reject browser runtime files
+        shell: pwsh
+        run: |
+          $forbidden = git ls-files | Where-Object { $_ -match '\.(html?|mjs|cjs|js|jsx|ts|tsx)$' }
+          if ($forbidden) { throw "Forbidden browser/runtime files:`n$($forbidden -join "`n")" }
+          $publishFiles = Get-ChildItem artifacts\publish\win-x64 -Recurse -File
+          $runtimeFiles = $publishFiles | Where-Object { $_.Extension -in '.html', '.htm' -or $_.Name -match 'Electron|WebView|Chromium|Three' }
+          if ($runtimeFiles) { throw "Forbidden publish artifact:`n$($runtimeFiles.FullName -join "`n")" }
+          $deps = Get-Content artifacts\publish\win-x64\PlcWiringTrainer.deps.json -Raw
+          if ($deps -match 'Electron|WebView|Chromium|Three\.js') { throw 'Forbidden runtime dependency in deps.json' }
+          $deviceAssets = @(Get-ChildItem artifacts\publish\win-x64\Assets\Devices -File)
+          $xamlBinaries = @(Get-ChildItem artifacts\publish\win-x64 -Recurse -Filter *.xbf -File)
+          if ($deviceAssets.Count -ne 7) { throw "Expected 7 active device assets, found $($deviceAssets.Count)" }
+          if ($xamlBinaries.Count -ne 4) { throw "Expected 4 native XAML binaries, found $($xamlBinaries.Count)" }
+          if (-not (Test-Path artifacts\publish\win-x64\PlcWiringTrainer.pri -PathType Leaf)) {
+            throw 'Native PlcWiringTrainer.pri is missing from publish output'
+          }

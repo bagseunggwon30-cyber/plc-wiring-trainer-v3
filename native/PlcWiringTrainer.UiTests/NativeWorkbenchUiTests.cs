@@ -18,6 +18,7 @@ public sealed class NativeWorkbenchUiTests
         Assert.NotNull(session.FindByAutomationId("WiringCanvas"));
         Assert.NotNull(session.FindByAutomationId("InspectorTabs"));
         Assert.NotNull(session.FindByAutomationId("SaveDocumentButton"));
+        session.SaveEvidenceScreenshot();
         session.SelectTab("결선 검증");
         Assert.NotNull(session.WaitForAutomationId("ValidationIssueList"));
     }
@@ -29,7 +30,7 @@ public sealed class NativeWorkbenchUiTests
         session.SelectTab("결선 검증");
 
         AutomationElement issue = session.WaitForName("NPN_INPUT_COMMON_POLARITY", TimeSpan.FromSeconds(12));
-        issue.Click();
+        session.ActivateListItem(issue);
 
         AutomationElement canvas = session.FindByAutomationId("WiringCanvas");
         bool focusedWire = WaitUntil(
@@ -162,6 +163,36 @@ internal sealed class NativeAppSession : IDisposable
         element.AsTabItem().Select();
     }
 
+    public void ActivateListItem(AutomationElement descendant)
+    {
+        AutomationElement? item = descendant;
+        while (item is not null && item.ControlType != ControlType.ListItem)
+        {
+            item = item.Parent;
+        }
+
+        if (item is null)
+        {
+            throw new InvalidOperationException($"목록 항목을 찾지 못했습니다: {descendant.Name}");
+        }
+
+        item.AsListBoxItem().Select();
+        item.Click();
+    }
+
+    public void SaveEvidenceScreenshot()
+    {
+        string? path = Environment.GetEnvironmentVariable("PLCW_UI_EVIDENCE_PATH");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        string fullPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        Window.CaptureToFile(fullPath);
+    }
+
     private static string SafeName(AutomationElement element)
     {
         try
@@ -202,6 +233,15 @@ internal sealed class NativeAppSession : IDisposable
 
     private static string FindExecutable()
     {
+        string? overridePath = Environment.GetEnvironmentVariable("PLCW_NATIVE_EXE");
+        if (!string.IsNullOrWhiteSpace(overridePath))
+        {
+            string fullOverridePath = Path.GetFullPath(overridePath);
+            return File.Exists(fullOverridePath)
+                ? fullOverridePath
+                : throw new FileNotFoundException("PLCW_NATIVE_EXE가 가리키는 EXE를 찾지 못했습니다.", fullOverridePath);
+        }
+
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PlcWiringTrainer.slnx")))
         {

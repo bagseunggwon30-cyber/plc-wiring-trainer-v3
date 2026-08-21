@@ -303,11 +303,22 @@ public sealed partial class MainPage : Page
 
     private void ValidationList_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is not ValidationIssueItem item)
+        if (e.ClickedItem is ValidationIssueItem item)
         {
-            return;
+            NavigateToValidationIssue(item);
         }
+    }
 
+    private void ValidationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.AddedItems.FirstOrDefault() is ValidationIssueItem item)
+        {
+            NavigateToValidationIssue(item);
+        }
+    }
+
+    private void NavigateToValidationIssue(ValidationIssueItem item)
+    {
         NavigationTarget? target = IssueNavigator.Resolve(Store.Document, item.Issue);
         if (target is null)
         {

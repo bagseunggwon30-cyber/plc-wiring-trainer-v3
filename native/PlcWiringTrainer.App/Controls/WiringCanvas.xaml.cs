@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Numerics;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Svg;
 using Microsoft.Graphics.Canvas.Text;
+using Microsoft.Graphics.Canvas.UI;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -37,6 +39,8 @@ public sealed record CanvasSelection(
 public sealed partial class WiringCanvas : UserControl
 {
     private readonly DeviceProfileCatalog _catalog = DeviceProfileCatalog.CreateDefault();
+    private readonly Dictionary<string, CanvasBitmap> _deviceBitmaps = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CanvasSvgDocument> _deviceSvgDocuments = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _highlightTimer;
     private WorkbenchStore? _store;
     private CanvasSelection _selection = CanvasSelection.Empty;
@@ -131,6 +135,31 @@ public sealed partial class WiringCanvas : UserControl
 
     private Matrix3x2 ViewMatrix => new((float)_zoom, 0, 0, (float)_zoom, (float)_offsetX, (float)_offsetY);
 
+    private void Canvas_CreateResources(CanvasControl sender, CanvasCreateResourcesEventArgs args)
+        => args.TrackAsyncAction(LoadDeviceAssetsAsync(sender).AsAsyncAction());
+
+    private async Task LoadDeviceAssetsAsync(CanvasControl sender)
+    {
+        DisposeDeviceAssets();
+        foreach (DeviceProfileV4 profile in _catalog.Profiles.Where(profile => !string.IsNullOrWhiteSpace(profile.AssetPath)))
+        {
+            string assetPath = Path.Combine(
+                AppContext.BaseDirectory,
+                profile.AssetPath.Replace('/', Path.DirectorySeparatorChar));
+            if (string.Equals(Path.GetExtension(assetPath), ".svg", StringComparison.OrdinalIgnoreCase))
+            {
+                string svg = await File.ReadAllTextAsync(assetPath).ConfigureAwait(true);
+                _deviceSvgDocuments[profile.Id] = CanvasSvgDocument.LoadFromXml(sender, svg);
+            }
+            else
+            {
+                _deviceBitmaps[profile.Id] = await CanvasBitmap.LoadAsync(sender, assetPath);
+            }
+        }
+
+        sender.Invalidate();
+    }
+
     private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         WorkbenchStore? store = _store;
@@ -219,11 +248,12 @@ public sealed partial class WiringCanvas : UserControl
         Color fill = Color.FromArgb(255, 30, 41, 59);
         Color outline = selected ? Color.FromArgb(255, 56, 189, 248) : Color.FromArgb(255, 148, 163, 184);
         drawing.FillRoundedRectangle(new Rect(x, y, device.Width, device.Height), 7, 7, fill);
+        DrawDeviceAsset(drawing, device, x, y);
         drawing.DrawRoundedRectangle(new Rect(x, y, device.Width, device.Height), 7, 7, outline, selected ? 3 : 1.5f);
 
         var titleFormat = new CanvasTextFormat { FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
-        drawing.DrawText(device.Label, new Rect(x + 10, y + 8, Math.Max(20, device.Width - 20), 25), Color.FromArgb(255, 248, 250, 252), titleFormat);
-        drawing.DrawText(device.ProfileId, (float)x + 10, (float)y + 36, Color.FromArgb(255, 148, 163, 184));
+        drawing.FillRectangle(new Rect(x + 1, y + 1, Math.Max(1, device.Width - 2), 27), Color.FromArgb(205, 15, 23, 42));
+        drawing.DrawText(device.Label, new Rect(x + 10, y + 5, Math.Max(20, device.Width - 20), 22), Color.FromArgb(255, 248, 250, 252), titleFormat);
 
         if (_catalog.TryGet(device.ProfileId, out DeviceProfileV4 profile))
         {
@@ -243,6 +273,51 @@ public sealed partial class WiringCanvas : UserControl
         {
             drawing.DrawText("LOCK", (float)(x + device.Width - 42), (float)(y + device.Height - 18), Color.FromArgb(255, 251, 191, 36));
         }
+    }
+
+    private void DrawDeviceAsset(CanvasDrawingSession drawing, DeviceInstanceV4 device, double x, double y)
+    {
+        double imageX = x + 8;
+        double imageY = y + 30;
+        double imageWidth = Math.Max(1, device.Width - 16);
+        double imageHeight = Math.Max(1, device.Height - 38);
+        if (_deviceBitmaps.TryGetValue(device.ProfileId, out CanvasBitmap? bitmap))
+        {
+            drawing.DrawImage(
+                bitmap,
+                new Rect(imageX, imageY, imageWidth, imageHeight),
+                bitmap.Bounds);
+        }
+        else if (_deviceSvgDocuments.TryGetValue(device.ProfileId, out CanvasSvgDocument? svgDocument))
+        {
+            drawing.DrawSvg(
+                svgDocument,
+                new Size(imageWidth, imageHeight),
+                new Vector2((float)imageX, (float)imageY));
+        }
+    }
+
+    private void WiringCanvas_Unloaded(object sender, RoutedEventArgs e)
+    {
+        _highlightTimer.Stop();
+        DisposeDeviceAssets();
+        NativeCanvas.RemoveFromVisualTree();
+    }
+
+    private void DisposeDeviceAssets()
+    {
+        foreach (CanvasBitmap bitmap in _deviceBitmaps.Values)
+        {
+            bitmap.Dispose();
+        }
+
+        foreach (CanvasSvgDocument document in _deviceSvgDocuments.Values)
+        {
+            document.Dispose();
+        }
+
+        _deviceBitmaps.Clear();
+        _deviceSvgDocuments.Clear();
     }
 
     private void Canvas_PointerPressed(object sender, PointerRoutedEventArgs e)

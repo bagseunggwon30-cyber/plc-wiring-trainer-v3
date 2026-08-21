@@ -1,166 +1,48 @@
-# PLC 결선 작업장 v3
+# PLC Wiring Trainer 4.0
 
-PLC 제어반 결선을 연습하고 실제 작업 전에 핀투핀, 전원·귀로, 대표 I/O 상태를 오프라인에서 검토하는 Windows Electron 앱입니다.
+Windows 전용 네이티브 PLC 결선 교육 도구입니다. UI와 실행 환경은 `WinUI 3 + C# + XAML + Win2D`로 구성하며 HTML, Electron, Chromium, WebView, Three.js를 사용하지 않습니다.
 
-> 이 앱의 결과는 **입력된 범위 내 사전 결선 검토**이며 통전 승인서가 아닙니다. 실제 통전 전에는 정확한 전체 품번의 최신 제조사 매뉴얼, 현장 측정, 자격자의 검토가 필요합니다.
+## 4.0 범위
 
-## v3 전기 판정
+- 장비 팔레트와 2D 결선 캔버스
+- 단자 우선 선택, 직교 배선, 팬·줌, 경로 잠금
+- 장비/전선 속성 편집과 undo/redo
+- DC, AC, NPN sinking, PNP sourcing, 2선식 4–20 mA, 물리 결선 검증
+- 검증 문제 클릭 시 문제 전선 선택·중앙 이동·확대·강조
+- `.plcw` schema v4 저장, 원자적 교체, 자동 복구본
+- v1/v2/v3 JSON 가져오기, 원본/알 수 없는 필드 보존, 손상 문서 격리
 
-- `NetGraph`는 전선, 점퍼, 관통 단자, 닫힌 무전압 접점처럼 같은 전위가 되는 연결만 표현합니다.
-- `ElectricalBranch`는 부하, PLC 입력, 코일, 출력, 전원변환기와 아날로그 포트처럼 서로 다른 두 전위·신호선 사이에서 전류 또는 신호 경로가 형성되는 요소를 표현합니다.
-- DC 부하는 같은 전원쌍의 `+24V → 접점/부하 → 0V` 경로가 모두 완성되어야 동작합니다. `+`만 연결하면 `OPEN_RETURN_PATH`, 전원측이 끊기면 `OPEN_SOURCE_PATH`, 부하를 우회하면 `DC_SHORT`입니다.
-- AC 단상은 L/N, 3상은 모든 상과 상순서를 검사합니다. PE는 정상 운전 귀로로 인정하지 않습니다.
-- 연습 모드와 사전 결선 검토 모드는 동일한 v3 회로 모델·해석기를 사용합니다.
-- 문서가 수정되면 기존 결과는 `STALE`이 되고, 내보내기 직전에 새 revision으로 다시 검증합니다.
-- XBC의 `24V/24G`는 AC 전원형 CPU가 제공하는 내장 보조전원 출력쌍입니다. MDR 같은 외부 DC 전원 출력과 직접 병렬 연결하지 않습니다. 단상 MDR의 L/N 시험에는 L/N 극이 분리된 2P 보호기기 흐름을 사용하며, 3P MCCB의 `T2`를 `N`으로 간주하지 않습니다.
+3D 실습, 미션, 멀티뷰, 시퀀스 편집기, XG-SIM, 보고서 출력은 4.0.0에 포함하지 않습니다. 재도입 조건은 [roadmap](docs/roadmap/README.md)에만 기록합니다.
 
-판정은 `PASS`, `FAIL`, `BLOCKED`, `STALE`로 구분합니다. 판정 가능한 오결선은 `FAIL`, 정확한 품번·근거·설정·계산 입력이나 엔진 지원이 부족하면 안전하게 `BLOCKED`입니다.
+## 빌드와 테스트
 
-## 작업 모드
-
-- **연습 모드**: 교육용 장비와 공개 미션을 사용합니다. 힌트는 개념 → 장비 → 단자 → 한 단계 정답 순으로 열리고, 작업 순서는 장비 준비 → 첫 결선 → 설정 → 조작 → 예상 측정값 → 확인으로 안내합니다.
-- **사전 결선 검토 모드**: 공급계통, 접지정책, `ReviewScope`, 장비 역할과 정확한 주문코드를 먼저 지정합니다. 기존 SVG 좌표를 실제 mm로 환산하는 프로젝트별 `캔버스 단위/mm`도 명시해야 하며, 값이 없으면 이격거리·레일 수용 판정은 `BLOCKED`입니다. 자동 결선을 제공하지 않으며 전기·근거·물리배치·필수 시나리오를 모두 확인합니다.
-
-정밀 프로필 작업 대상은 LS ELECTRIC `XBC-DR32H`, `XBF-AH04A`, `MC-22b / DC24 / 1a1b`, OMRON `MY2N-D2 DC24V`, MEAN WELL `MDR-100-24`, Schneider Electric `EOCR3DE-05DUH`, Phoenix Contact `UT 2,5 (3044076)`, `UT 2,5-PE (3044092)`, `UT 4-HESI (3046032)`입니다. MC의 `13-14`는 a접(NO), `21-22`는 b접(NC)으로 코일 A1-A2의 실제 폐회로 상태에 연동됩니다. MY2N-D2는 공식 bottom-view 기준 `14(+24V)-13(0V)` 코일만 허용하고, 무여자시 `9-1/12-4` b접(NC), 여자시 `9-5/12-8` a접(NO)으로 전환됩니다. EOCR의 `95-96/97-98` 정상 상태는 fail-safe 선택에 따라 달라지므로 반드시 설정해야 하며, 3046032 퓨즈 단자대는 별도 장착하는 5×20 퓨즈 링크 품번이 없으면 검토가 차단됩니다. `SV-iG5A`, `XY-MD02`와 전체 주문코드가 확정되지 않은 장비는 연습 전용입니다. AC/DC 공급원과 시험 부하는 검토 경계 노드이며 BOM의 설치 장비로 계산하지 않습니다.
-
-현재 승인 자산 매니페스트와 공식 치수·단자 수용량 데이터가 완성되지 않았으므로 검토 결과는 `DIAGNOSTIC`으로만 발급됩니다. 해당 근거가 채워지고 필수 회로·시나리오가 모두 통과하기 전에는 `VERIFIED_PREWIRE`가 발급되지 않습니다.
-
-기존 장비 이미지는 그대로 유지하며 새 정확 품번 장비는 별도 타입·별도 자산으로만 추가합니다. 사용자가 교체를 지정한 `XY-MD02`만 Codex Imagen 자산을 사용합니다. 모든 이미지는 외형 표시용이고, 단자 ID·극성·클릭 영역은 매뉴얼 근거의 SVG 오버레이와 geometry hash로 별도 관리합니다.
-정확한 검토 프로필이 없는 기존 장비도 연습 모드에서는 숨기지 않으며, 사전 결선 검토 모드에서만 자동으로 제외합니다.
-
-## 자동화 실습실과 공통 도면
-
-- 상단 `보기`에서 실물 제어반, 결선도, 시퀀스 회로, PLC I/O 표, 자동화 실습실을 전환합니다. 결선도와 시퀀스에서 만든 선은 별도 복사본이 아니라 같은 작업장 와이어를 사용합니다.
-- 자동화 실습실에는 3축 팔레타이징, 2축 서보, MPS, 공압 회로와 33종 3D 장비 검사실이 포함됩니다. 검사실은 선택한 GLB 한 개만 지연 로드하며, 3D 외형은 교육용 관찰 자산으로만 사용하고 단자·전기 검토 근거로 승격하지 않습니다. 이동·결선·튜브·삭제 도구와 카메라 프리셋을 제공하며 저장 후 복원할 때 모든 동작은 정지 상태에서 시작합니다. 각 설비에서는 LS 또는 Mitsubishi PLC 주소 프로필을 하나만 선택할 수 있고, 제조사 전환 시 기존 출력은 안전 해제됩니다. 기본 카메라는 3ds Max 방식(`Alt+가운데 버튼` 회전, 가운데 버튼 이동, 휠 확대/축소)이고 상단 선택에서 기존 조작으로 되돌릴 수 있습니다. 단, 스킨 기반 7-세그먼트 표시는 아직 GLB에 포함되지 않으며 런타임 숫자 오버레이를 구현할 때까지 제한 사항으로 기록합니다.
-- LS XGB 증설 장비팩에는 `XBE-DC32A`, `XBE-RY16A`, `XBE-TN16A`, `XBE-TP16A`, `XBE-DR16A`, `XBF-AD04A`, `XBF-DV04A`, `XBF-DC04A`, `XBF-RD04A`, `XBF-TC04S`, `XBF-AD08A`, PT100 3선식과 K형 열전대가 포함됩니다. 단자 수·COM 그룹·NPN/PNP 방향·아날로그 채널·외부 24V는 저장된 LS 매뉴얼 근거를 따르며, 검토 프로필이 완성되기 전에는 연습용으로 표시합니다.
-- 추가 장비 팩은 현재 매뉴얼 기반 장비 정의와 기존 이미지를 덮어쓰지 않습니다. 새 장비는 연습용으로만 추가되고, 정확 프로필이 없는 장비는 사전 결선 검토 통과 근거로 사용되지 않습니다.
-- 3D 설비 런타임은 오프라인 교육용 플랜트 모델입니다. `buildCircuitModel()`과 `solveCircuit()`의 전기 합격 판정을 우회하거나 실제 PLC·구동기에 명령을 보내지 않습니다.
-
-## 편집·시험·리포트
-
-- 선택 모드에서도 단자를 누르면 즉시 결선 작업본이 시작됩니다. 시작/끝 단자를 차례로 클릭하거나 단자에서 단자로 드래그할 수 있고, 빈 캔버스를 클릭하면 경유점을 추가합니다. `Backspace`는 마지막 경유점, `Esc`는 revision을 바꾸지 않고 작업본 전체를 취소합니다.
-- 결선 후보는 연결 가능/주의/차단으로 표시됩니다. 연습 모드에서는 대표 오결선을 만들 수 있도록 알려진 불일치를 경고와 함께 기록하지만, 사전 결선 검토 모드에서는 L↔N, +24V↔0V, PE 오용, 출력 병렬, 입력↔입력, 아날로그 +↔G, 통신 SG↔데이터 같은 연결을 먼저 차단합니다. 의도적인 고장 주입만 `Alt+클릭/드래그`로 기록되며 v3 엔진은 기존 강제결선도 `FAIL`로 판정합니다.
-- `COM`, `G`, `V`라는 글자만으로 전위를 추정하지 않습니다. XBC 입력 COM은 `+24V/0V` 선택형, 릴레이 출력 COM은 무전압 접점, `24G`는 내장 DC 전원의 0V, iG5A `CM`은 입력·아날로그 제어 공통, `MG`는 싱킹 오픈컬렉터 출력 공통, 아날로그 CH−/G는 채널 귀로, 통신 SG는 프로토콜 기준, PE/FG는 보호접지로 분리합니다. `V+`는 DC 공급, `V1`은 아날로그 입력, `VR`은 12V 볼륨 기준 공급, `V/T2`는 인버터 모터 출력상으로 서로 다른 역할입니다.
-- iG5A P1–P8은 전면 S8과 실제 제어전원 상태를 먼저 기록합니다. `NPN`은 인버터 내부 24V에서 입력회로를 거쳐 `P→닫힌 접점→CM`으로 돌아와야 하고, `PNP`는 같은 외부 전원쌍의 `+24V→닫힌 접점→P`와 `CM→0V`가 모두 있어야 ON입니다. PNP에서 인버터의 단자 `24`를 입력 전원으로 재사용하면 `INPUT_SOURCE_MISMATCH`, `P` 한 가닥만 연결하면 `OPEN_RETURN_PATH`이며, 무전원 상태에서는 입력 ON으로 판정하지 않습니다. 정확 주문코드가 없으므로 이 제어회로 시험도 연습 결과로만 남습니다.
-- 두 독립 전원 출력 또는 두 신호 출력을 직접 잇는 연결은 `TERMINAL_SOURCE_CONFLICT`로 판정합니다. iG5A의 12V `VR`을 최대 10V `V1`에 직접 연결하거나, 입력 R/S/T와 모터 출력 U/V/W를 섞거나, RS232 SG와 RS485 SG를 프로토콜 확인 없이 연결하는 경우도 각각 구체적인 원인과 수정 행동을 표시합니다.
-- XBF-AH04A의 AI0/AI1/AO0/AO1은 단자 번호로 전압·전류 모드를 고정하지 않습니다. 각 채널의 사용 여부, 실제 V/I 스위치와 `1–5V`, `0–5V`, `0–10V`, `4–20mA`, `0–20mA` 파라미터 조합으로 유효 프로토콜을 계산합니다.
-- XBF 아날로그 시험은 일반 DC 부하를 재사용하지 않습니다. 전압·전류 신호원과 수신기 경계 노드를 분리하며, 신호 `+`와 같은 채널의 `G/귀로` 두 가닥이 모두 이어져야 `CONNECTED`입니다. 한 가닥만 연결하면 `ANALOG_SOURCE_PATH_OPEN`/`ANALOG_RETURN_PATH_OPEN`, V/I 혼합·역극성·출력끼리 연결·신호 단락은 각각 별도 오류로 판정합니다.
-- 2선식 4–20mA는 단순 신호 두 가닥이 아니라 `+24V → TX+ → TX− → XBF I+ → XBF I− → 같은 0V` 직렬 루프로 풉니다. XBF 전류 입력의 공식 250Ω 부담을 사용해 12mA 시험 시 수신기 3V·송신기 21V를 계산하고, 전원/신호/귀로 단선, 극성 반전, 25mA 초과와 송신기 동작전압 부족을 서로 다른 오류로 표시합니다.
-- 교육용 3선식 센서는 BN(갈색)=+24V, BU(청색)=0V, BK(흑색)=출력으로 분리합니다. NPN BK는 검출 시 0V로 싱킹하므로 XBC `COMI=+24V`, PNP BK는 +24V를 소싱하므로 `COMI=0V`여야 합니다. BN/BU 전원이 완성되지 않으면 BK를 명령해도 PLC 입력을 켜지 않으며, 정확 품번이 없는 현재 센서 프로필은 연습 전용입니다.
-- 화면의 일반 표시등·버저·솔레노이드도 단순히 `+` 네트에 닿았다고 켜지지 않습니다. 표시등/버저는 `+→부하→−`, 솔레노이드는 `A1→코일→A2`가 같은 24V 전원쌍으로 완성되어야 하며, 4P/10P 단자대는 번호별 상·하 관통 연결만 전도합니다. 정확 품번이 없는 이 부품들은 계속 연습 전용입니다.
-- 고급 검토 조건의 장비별 설정에서 센서 `검출 ON`과 2선식 송신기 시험 전류(mA)를 바꾼 뒤 사용자가 `시뮬`을 눌러 시험합니다. 편집 도중 자동 검증은 실행하지 않습니다.
-- 자동 선색은 단자 글자만 보지 않고 프로필의 실제 도체 역할을 따릅니다. AC L은 갈색, N은 파랑, DC +는 빨강, 0V는 파랑, PE는 녹황 계열로 표시하며 RS232 TX/RX, RS485 A/B, 아날로그 +/G도 서로 구분합니다.
-- 전원측 연결 뒤에는 아직 비어 있는 `0V/N`, COM, 접점 반대편을 주황 점선으로 표시합니다. 병렬 공통 단자는 표시된 동일전위 단자 중 하나를 선택할 수 있으며, 같은 전원쌍의 실제 귀로가 완성됐는지는 v3 폐회로 해석기가 최종 판정합니다. 공식 단자 도체 수가 없으면 용량을 추정하지 않고 “미등록”으로 표시해 검토를 fail-closed로 유지합니다.
-- Phoenix 단자대의 “2 connections”는 양쪽 접속점 수로 해석하며, 한 접속점에 2가닥을 넣는 조건부 규칙은 도체 종류·동일 단면적·페룰 형식이 모두 기록되기 전까지 자동 허용하지 않습니다.
-- 공급계통과 접지정책, mm 환산값, 장비 표기, 케이블·심선 번호, 선색, 단면적, 길이, 실드·드레인, 페룰·러그를 문서에 저장합니다.
-- 회로 추적은 전원측을 빨강, 0V/N 귀로를 파랑, PE를 녹황색으로 표시하고 열린 위치를 단자·심선으로 안내합니다.
-- 가상 멀티미터는 두 지점 전압, 연속성, 분기 전류를 같은 회로 해석 결과에서 읽습니다.
-- 기본 회로 시험은 릴레이 출력 강제 OFF/ON과 코일·접점 상태를 최대 32회의 결정적 고정점 계산으로 재현합니다. 선택적인 로컬 XG-SIM 진단은 공식 `XimUtil` 인터페이스로 실제 래더 입력/출력을 읽지만, 출력값만으로 부하를 켜지 않고 v3 전원·COM·코일 귀로를 다시 계산합니다.
-- JSON, HTML/PDF, 핀투핀 CSV, 케이블·심선표, 단자계획표, BOM을 내보냅니다. PDF는 격리된 Electron 브리지에서만 생성합니다.
-- 리포트에는 공급·접지 가정, 지원/미지원 검사, 폐회로 경로, 장비 설정, 시험 결과, 문서·프로필·자산·geometry hash가 포함됩니다.
-- 편집 중에는 전기 검증을 자동 반복하지 않습니다. 사용자가 검증·시뮬레이션·멀티미터·리포트를 실행할 때만 계산하며, 최종 리포트 직전에는 최신 revision을 다시 확인합니다.
-
-## 저장 형식
-
-새 저장 형식은 `WorkshopDocument v3`입니다. v1/v2 JSON과 `localStorage`는 결정적·멱등적으로 변환하며 원본 스냅샷을 보존합니다. 알 수 없는 값은 `extensions.legacy`에 남기고, 예전 타입명이나 통과 결과를 검토 승인으로 승계하지 않습니다. 손상 JSON은 원문과 함께 격리합니다.
-
-`IoBindingV1`은 PLC 장비 인스턴스·단자, CPU, 프로젝트 ID/SHA-256, 심볼, 실제 `B<base>S<slot>.IN/OUT` 주소와 읽기/쓰기 권한을 함께 저장합니다. 라이브 세션·nonce·현재 출력은 문서에 저장하지 않습니다. 이전 문서의 명시적 바인딩만 스키마 검증 후 v3로 이관하며, 기존 타입명으로 주소를 추측하지 않습니다.
-
-## 로컬 XG-SIM 기능시험
-
-- Electron x64는 32비트 XG-SIM COM 객체를 직접 로드하지 않습니다. `native/xgsim-host`의 .NET Framework 4.7.2 x86 프로세스가 버전·nonce가 있는 JSON-lines/stdio IPC만 사용합니다.
-- 호스트는 허용목록의 BOOL 입력 채널만 기록하고 출력 채널은 읽기 전용입니다. TCP 포트를 열지 않으며, 종료·EOF·요청 실패·5초 watchdog 때 허용된 모든 가상 입력을 `false`로 복귀합니다.
-- 고급 도구의 **XG-SIM 공식 인터페이스 진단**은 프로젝트 해시와 주소를 사용자가 명시해야 활성화됩니다. 현재 고정 프로젝트는 `4층_GEMINI.xgwx`이며 `P03 물리 입력 → M00001 시작요구`, `P02 NC 물리 입력 → M00002 정지요구`, `M00100 운전상태 → P21 가상 릴레이 접점`으로 왕복합니다. 출력 채널은 읽기 전용이며 앱이 임의로 쓰지 않습니다.
-- 공식 API가 현재 로드된 프로젝트 파일의 SHA-256이나 래더 스캔 완료 이벤트를 제공하지 않으므로, 이 진단만으로 `SIL_PASS`를 발급하지 않습니다. `PROJECT_IDENTITY_UNVERIFIED`를 `BLOCKED`로 남기며 프로젝트를 닫고 별도 계산한 해시를 기록해야 합니다.
-- 도메인 첫 수직 fixture는 시작 NO, 정지 NC, XBC P21/COM0 무전압 출력, MY2N-D2 14(+)/13(0V) 코일과 표시등을 연결합니다. XG-SIM 프레임과 실제 회로 해석을 분리해 M00100이 ON이어도 PLC 전원·COM0·공급·귀로가 틀리면 코일과 표시등은 OFF입니다. 이미 계산된 P21·MY2N·램프 상태만 기존 SVG 외형 위에 표시하며 별도 레거시 시뮬레이터로 재계산하지 않습니다.
-
-프로젝트를 XG5000에서 닫은 뒤 선언용 해시를 계산하려면 다음 읽기 전용 스크립트를 사용합니다.
+요구 환경은 Windows 10 2004 이상, .NET 10 SDK, Visual Studio의 WinUI/C# 데스크톱 구성요소입니다.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/Get-XgSimProjectIdentity.ps1 `
-  -ProjectPath 'C:\XG5000\Projects\4층_GEMINI\4층_GEMINI.xgwx'
+dotnet restore PlcWiringTrainer.slnx
+dotnet test native\PlcWiringTrainer.Core.Tests\PlcWiringTrainer.Core.Tests.csproj
+dotnet build native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64
+dotnet test native\PlcWiringTrainer.UiTests\PlcWiringTrainer.UiTests.csproj -c Debug -p:Platform=x64
+dotnet format PlcWiringTrainer.slnx --verify-no-changes --no-restore
 ```
 
-## 설치·검증·빌드
+UI 테스트는 실제 `PlcWiringTrainer.exe`를 실행해 접근성 ID, 검증 항목 클릭, 문제 전선 이동, 속성 반영을 확인합니다. 대화형 Windows 세션이 필요하므로 CI가 아니라 개발용 게이트입니다.
 
-정식 대상은 Windows x64 오프라인 Electron입니다. `index.html` 더블클릭 실행은 지원하지 않습니다.
-
-### 집 또는 다른 PC에서 현재 작업 브랜치 받기
-
-처음 내려받는 PC에서는 PowerShell을 열고 다음 명령을 실행합니다. 현재 변경은 아직 `main`에 병합되지 않았으므로 `codex/home-sync-palletizer-20260813` 브랜치를 선택해야 합니다.
+## 포터블 배포
 
 ```powershell
-git clone https://github.com/bagseunggwon30-cyber/plc-wiring-trainer-v3.git
-Set-Location .\plc-wiring-trainer-v3
-git fetch origin
-git switch --track origin/codex/home-sync-palletizer-20260813
-npm ci
-npm start
+dotnet publish native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj `
+  -c Release -p:Platform=x64 -r win-x64 --self-contained true `
+  -o artifacts\publish\win-x64
 ```
 
-이미 저장소를 내려받은 PC에서는 다음 명령으로 최신 작업을 이어받습니다.
+`PublishSingleFile`은 사용하지 않습니다. 결과 폴더의 `PlcWiringTrainer.exe`, 네이티브 DLL, 장비 자산을 함께 배포해야 합니다.
 
-```powershell
-Set-Location .\plc-wiring-trainer-v3
-git fetch origin
-git switch codex/home-sync-palletizer-20260813
-git pull --ff-only
-npm ci
-npm start
-```
+## 문서와 근거
 
-브랜치가 `main`에 병합된 뒤에는 다음 명령만 사용하면 됩니다.
+- [아키텍처](docs/architecture.md)
+- [v4 문서/마이그레이션](docs/migration-v4.md)
+- [활성 자산 매니페스트](native/PlcWiringTrainer.App/Assets/device-assets.v4.json)
+- [매뉴얼·단자 보정 원본](assets/source-evidence/README.md)
 
-```powershell
-git switch main
-git pull --ff-only
-npm ci
-npm start
-```
-
-Node.js가 설치되어 있지 않으면 `npm` 명령을 실행할 수 없습니다. 이 프로젝트는 `.nvmrc`에 기록된 Node.js 버전을 기준으로 하며, Node.js 설치 후 새 PowerShell 창에서 `node --version`과 `npm --version`이 출력되는지 먼저 확인합니다.
-
-### 실행·검증·빌드 명령
-
-```powershell
-npm ci
-
-# 결선 작업장과 3D 실습실 실행 (Visual Studio Build Tools 불필요)
-npm start
-
-# 선택 기능인 XG-SIM 공식 인터페이스까지 함께 실행
-# 사전 조건: Visual Studio 2022 Build Tools의 MSBuild와 .NET Framework 4.7.2 targeting pack
-npm run start:xgsim
-
-# 기존 회귀, v3 단위 테스트, 타입 검사, 렌더러/Worker 빌드
-npm run verify
-
-# 성능 게이트
-npm run test:performance
-
-# 실제 Electron 포인터 흐름, 접근성, 외부 요청 0건
-npm run test:e2e
-
-# 모든 출시 게이트 뒤 새 포터블 산출물 생성
-npm run build
-
-# XG-SIM 호스트를 제외한 오프라인 포터블 생성
-# Visual Studio Build Tools가 없는 PC에서도 사용 가능
-npm run build:offline
-
-# 출시 게이트부터 다시 실행한 뒤 공유용 최소 ZIP 생성
-npm run package:share
-```
-
-`npm start`와 `npm run build:offline`은 XG-SIM 호스트 실행 파일이 없어도 정상적으로 동작합니다. 이 경우 결선·검증·3D 실습 기능은 사용할 수 있고, 고급 도구의 XG-SIM 공식 인터페이스 진단만 연결 시 안전하게 차단됩니다. XG-SIM 호스트 빌드는 `vswhere`, `XGSIM_MSBUILD_PATH`, Visual Studio 2022 표준 설치 위치 순으로 MSBuild를 찾습니다.
-
-새 포터블 파일은 `release/결선작업장-<package.json version>-portable.exe`에 생성됩니다. 명령이 성공해도 기존 실행 파일은 자동으로 대체하지 마십시오. 외부 배포에는 별도 코드서명과 훈련 패널 대조 시험이 필요합니다.
-
-공유용 ZIP은 `output/share`에 생성되며 포터블 실행 파일, README, SHA-256 매니페스트만 포함합니다. `node_modules`, 개발용 PDF, 테스트·임시 파일, 원본·초안 이미지는 포함하지 않으므로 전체 작업 폴더를 ZIP으로 압축하지 마십시오. 이 ZIP은 출시 게이트와 Codex 내부 브라우저 확인을 모두 마친 뒤에만 Drive에 업로드합니다.
-
-## 범위 밖
-
-- 실제 PLC 다운로드·RUN/STOP·강제 출력·온라인 쓰기와 실제 인버터·I/O 제어
-- 공식 입력값이 없는 전체 단락전류, 보호협조, 과도현상, EMC·열해석
-- 클라우드 협업과 강사 관리
-- 제조사 매뉴얼, 회사 규칙, 현장 안전 검토의 대체
+4.0 이전 Electron 기준선은 Git 태그 `legacy-electron-final-2026-08-22`로만 보존합니다.

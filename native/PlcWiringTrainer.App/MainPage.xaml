@@ -275,7 +275,8 @@
                                 IsItemClickEnabled="True"
                                 ItemClick="ValidationList_ItemClick"
                                 ItemsSource="{x:Bind ValidationItems}"
-                                SelectionMode="None">
+                                SelectionChanged="ValidationList_SelectionChanged"
+                                SelectionMode="Single">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="local:ValidationIssueItem">
                                         <Grid MinHeight="82" Padding="8" ColumnSpacing="10">

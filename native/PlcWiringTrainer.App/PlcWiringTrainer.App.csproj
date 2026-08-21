@@ -28,29 +28,65 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="Assets\SplashScreen.scale-200.png" />
-    <Content Include="Assets\LockScreenLogo.scale-200.png" />
-    <Content Include="Assets\Square150x150Logo.scale-200.png" />
-    <Content Include="Assets\Square44x44Logo.scale-200.png" />
-    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-    <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png" />
-    <Content Include="Assets\StoreLogo.png" />
-    <Content Include="Assets\AppIcon.ico" />
-    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+    <Content Include="Assets\AppIcon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Assets\device-assets.v4.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\Devices\**\*" />
+    <Content Include="Assets\Devices\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageReference
+      Include="Microsoft.Web.WebView2"
+      Version="1.0.3719.77"
+      ExcludeAssets="all"
+      PrivateAssets="all" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.4.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PlcWiringTrainer.Core\PlcWiringTrainer.Core.csproj" />
   </ItemGroup>
+
+  <!-- WinUI ships an unused packaging staging tree and a control-map HTML file.
+       The app has no package identity or WebView surface, so neither belongs in the product output. -->
+  <Target Name="RemoveNonRuntimeWinUiBuildArtifacts" AfterTargets="Build"
+          Condition="'$(TargetDir)' != '' and Exists('$(TargetDir)$(AssemblyName).exe')">
+    <ItemGroup>
+      <_UnusedAppxStaging Include="$(TargetDir)AppX\**\*" />
+    </ItemGroup>
+    <Delete Files="@(_UnusedAppxStaging)" />
+    <RemoveDir Directories="$(TargetDir)AppX" />
+    <Delete Files="$(TargetDir)Microsoft.UI.Xaml\Assets\map.html" />
+  </Target>
+
+  <Target Name="FinalizeNativeWinUiPublishOutput" AfterTargets="Publish"
+          Condition="'$(PublishDir)' != '' and Exists('$(PublishDir)$(AssemblyName).exe')">
+    <ItemGroup>
+      <_NativeXamlPublishArtifacts Include="$(TargetDir)**\*.xbf" />
+      <_NativeXamlPublishArtifacts Include="$(TargetDir)$(AssemblyName).pri" />
+      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)Microsoft.Web.WebView2.Core.dll" />
+      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)Microsoft.Web.WebView2.Core.Projection.dll" />
+      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)WebView2Loader.dll" />
+      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)Microsoft.UI.Xaml\Assets\map.html" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_NativeXamlPublishArtifacts)"
+          DestinationFiles="@(_NativeXamlPublishArtifacts->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Delete Files="@(_UnusedPublishedBrowserArtifacts)" />
+  </Target>
 </Project>
