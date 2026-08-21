@@ -48,6 +48,7 @@ const layout = {
 
 const controlPanelLegacyByProfile: Readonly<Record<string, string>> = {
   'boundary:ac-supply': 'BOUNDARY-AC',
+  'boundary:dc-supply': 'BOUNDARY-DC',
   'educational:mccb-2p': 'MCCB1P',
   'educational:mccb-3p': 'MCCB',
   'mean-well:mdr-100-24': 'MDR-100',
@@ -180,6 +181,90 @@ describe('control-panel BOM order', () => {
     expect(validateControlPanelBomQuantities(quantities)).toMatchObject({
       ok: false,
       code: 'BOM_MCCB_2P_COUNT',
+    });
+  });
+
+  it('allows the selected equipment to use direct practice wiring without a separate power section', () => {
+    const quantities = defaultControlPanelBomQuantities();
+    Object.assign(quantities, { mccb2p: 0, mccb3p: 0, contactor: 1, motor: 0 });
+
+    expect(validateControlPanelBomQuantities(quantities, {
+      automaticWiring: true,
+      allowDirectPowerFallback: true,
+    })).toMatchObject({ ok: true, inputPointCount: 5, generalOutputCount: 6 });
+  });
+
+  it('places only the explicitly selected devices when automatic wiring is off', () => {
+    const quantities = Object.fromEntries(CONTROL_PANEL_BOM_ITEMS.map((item) => [item.key, 0]));
+    Object.assign(quantities, { contactor: 1, greenLamp: 1 });
+    const built = buildControlPanelBomDocument({
+      quantities,
+      catalog: controlPanelCatalog,
+      profiles: DEVICE_PROFILES,
+      layout: controlPanelLayout,
+      automaticWiring: false,
+      allowDirectPowerFallback: false,
+    });
+
+    expect(built.document.devices.map((device) => device.legacyType)).toEqual(['MC-22B-DC24', 'LAMP-G']);
+    expect(built.document.wires).toEqual([]);
+    expect(built.totalDevices).toBe(2);
+    expect(built.document.extensions.legacy).toMatchObject({
+      controlPanelBom: { automaticWiring: false, logicalDcSourceId: null },
+    });
+  });
+
+  it('uses the selected MDR directly when branch breakers and the motor power section are omitted', () => {
+    const quantities = Object.fromEntries(CONTROL_PANEL_BOM_ITEMS.map((item) => [item.key, 0]));
+    Object.assign(quantities, {
+      powerSupply: 1,
+      plc: 1,
+      relay: 1,
+      contactor: 1,
+      startButton: 1,
+      greenLamp: 1,
+    });
+    const built = buildControlPanelBomDocument({
+      quantities,
+      catalog: controlPanelCatalog,
+      profiles: DEVICE_PROFILES,
+      layout: controlPanelLayout,
+      automaticWiring: true,
+      allowDirectPowerFallback: true,
+    });
+
+    expect(built.document.devices.some((device) => device.legacyType === 'BOUNDARY-AC')).toBe(false);
+    expect(built.document.devices.some((device) => device.legacyType === 'BOUNDARY-DC')).toBe(false);
+    expect(built.document.devices.some((device) => device.legacyType === 'MOTOR-3P')).toBe(false);
+    expect(built.document.wires.some((wire) => wire.from.terminalId === 'V+1')).toBe(true);
+    expect(built.ioAssignments).toMatchObject({
+      inputs: [expect.objectContaining({ plcTerminal: 'P00' })],
+      outputs: expect.arrayContaining([
+        expect.objectContaining({ kind: 'relay' }),
+        expect.objectContaining({ kind: 'contactor' }),
+        expect.objectContaining({ kind: 'load' }),
+      ]),
+    });
+  });
+
+  it('adds a logical DC24V source when automatic wiring has no selected power supply', () => {
+    const quantities = Object.fromEntries(CONTROL_PANEL_BOM_ITEMS.map((item) => [item.key, 0]));
+    Object.assign(quantities, { plc: 1, startButton: 1, greenLamp: 1 });
+    const built = buildControlPanelBomDocument({
+      quantities,
+      catalog: controlPanelCatalog,
+      profiles: DEVICE_PROFILES,
+      layout: controlPanelLayout,
+      automaticWiring: true,
+      allowDirectPowerFallback: true,
+    });
+    const logicalDc = built.document.devices.find((device) => device.legacyType === 'BOUNDARY-DC');
+
+    expect(logicalDc).toBeDefined();
+    expect(built.document.devices.some((device) => device.legacyType === 'BOUNDARY-AC')).toBe(false);
+    expect(built.document.wires.some((wire) => wire.from.deviceId === logicalDc!.id && wire.from.terminalId === '+')).toBe(true);
+    expect(built.document.extensions.legacy).toMatchObject({
+      controlPanelBom: { automaticWiring: true, directPowerFallback: true, logicalDcSourceId: logicalDc!.id },
     });
   });
 

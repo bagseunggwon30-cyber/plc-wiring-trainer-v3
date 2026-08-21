@@ -441,12 +441,24 @@ export interface ControlPanelBomValidationFailure {
 
 export type ControlPanelBomValidation = ControlPanelBomValidationSuccess | ControlPanelBomValidationFailure;
 
+export interface ControlPanelBomWiringOptions {
+  /** When false, validate and place only the explicitly selected BOM devices. */
+  readonly automaticWiring?: boolean;
+  /**
+   * Practice-only fallback used by the BOM UI. It permits an omitted incoming
+   * power/protection section and supplies the control circuit from the selected
+   * MDR or an automatically added logical DC24V boundary.
+   */
+  readonly allowDirectPowerFallback?: boolean;
+}
+
 export function defaultControlPanelBomQuantities(): Record<string, number> {
   return Object.fromEntries(CONTROL_PANEL_BOM_ITEMS.map((item) => [item.key, item.defaultQuantity]));
 }
 
 export function validateControlPanelBomQuantities(
   quantities: Readonly<Record<string, number>>,
+  options: ControlPanelBomWiringOptions = {},
 ): ControlPanelBomValidation {
   for (const item of CONTROL_PANEL_BOM_ITEMS) {
     const quantity = quantities[item.key];
@@ -461,28 +473,39 @@ export function validateControlPanelBomQuantities(
   const plcCount = quantity('plc') + quantity('plcDn60su');
   const plcInputCapacity = quantity('plc') * 16 + quantity('plcDn60su') * 36;
   const plcOutputCapacity = quantity('plc') * 16 + quantity('plcDn60su') * 24;
-  const requiredMccb2p = quantity('powerSupply') + plcCount;
-  if (quantity('mccb2p') !== requiredMccb2p) {
-    return { ok: false, code: 'BOM_MCCB_2P_COUNT', message: `단상 분기마다 MCCB 2P가 1대 필요합니다. 현재 필요한 수량은 ${requiredMccb2p}대입니다.` };
-  }
-  const requiredThreePhaseBranches = quantity('contactor') + quantity('inverter');
-  if (quantity('mccb3p') !== requiredThreePhaseBranches) {
-    return { ok: false, code: 'BOM_MCCB_3P_COUNT', message: `MC·인버터 3상 분기마다 MCCB 3P가 1대 필요합니다. 현재 필요한 수량은 ${requiredThreePhaseBranches}대입니다.` };
-  }
-  if (quantity('motor') !== requiredThreePhaseBranches) {
-    return { ok: false, code: 'BOM_MOTOR_COUNT', message: `MC·인버터마다 연결할 모터가 1대 필요합니다. 현재 필요한 수량은 ${requiredThreePhaseBranches}대입니다.` };
-  }
-
   const inputPointCount = quantity('startButton') + quantity('stopButton') + quantity('emergencyStop') + quantity('npnSensor');
   const generalOutputCount = quantity('relay') + quantity('contactor') + quantity('greenLamp')
     + quantity('yellowLamp') + quantity('whiteLamp') + quantity('buzzer');
   const inverterOutputGroupCount = quantity('inverter');
   const outputPointCount = inverterOutputGroupCount * 2 + generalOutputCount;
   const requiredOutputGroups = Math.ceil(outputPointCount / 4);
+  const success = (): ControlPanelBomValidationSuccess => ({
+    ok: true,
+    totalOrderedDevices,
+    inputPointCount,
+    generalOutputCount,
+    inverterOutputGroupCount,
+    outputPointCount,
+    requiredOutputGroups,
+  });
+  if (options.automaticWiring === false) return success();
+
+  const allowDirectPowerFallback = options.allowDirectPowerFallback === true;
+  const requiredMccb2p = quantity('powerSupply') + plcCount;
+  const requiredThreePhaseBranches = quantity('contactor') + quantity('inverter');
+  if (!allowDirectPowerFallback && quantity('mccb2p') !== requiredMccb2p) {
+    return { ok: false, code: 'BOM_MCCB_2P_COUNT', message: `단상 분기마다 MCCB 2P가 1대 필요합니다. 현재 필요한 수량은 ${requiredMccb2p}대입니다.` };
+  }
+  if (!allowDirectPowerFallback && quantity('mccb3p') !== requiredThreePhaseBranches) {
+    return { ok: false, code: 'BOM_MCCB_3P_COUNT', message: `MC·인버터 3상 분기마다 MCCB 3P가 1대 필요합니다. 현재 필요한 수량은 ${requiredThreePhaseBranches}대입니다.` };
+  }
+  if (!allowDirectPowerFallback && quantity('motor') !== requiredThreePhaseBranches) {
+    return { ok: false, code: 'BOM_MOTOR_COUNT', message: `MC·인버터마다 연결할 모터가 1대 필요합니다. 현재 필요한 수량은 ${requiredThreePhaseBranches}대입니다.` };
+  }
   if ((inputPointCount > 0 || outputPointCount > 0) && plcCount === 0) {
     return { ok: false, code: 'BOM_PLC_REQUIRED', message: '입력·출력 장비를 자동 결선하려면 PLC가 1대 이상 필요합니다.' };
   }
-  if ((inputPointCount > 0 || outputPointCount > 0) && quantity('powerSupply') === 0) {
+  if (!allowDirectPowerFallback && (inputPointCount > 0 || outputPointCount > 0) && quantity('powerSupply') === 0) {
     return { ok: false, code: 'BOM_POWER_REQUIRED', message: '버튼·센서·DC 부하를 자동 결선하려면 DC24V 파워가 1대 이상 필요합니다.' };
   }
   if (inputPointCount > plcInputCapacity) {
@@ -491,7 +514,7 @@ export function validateControlPanelBomQuantities(
   if (outputPointCount > plcOutputCapacity) {
     return { ok: false, code: 'BOM_PLC_OUTPUT_CAPACITY', message: `출력 ${outputPointCount}점에 선택한 NPN PLC 출력(${plcOutputCapacity}점)이 부족합니다.` };
   }
-  return { ok: true, totalOrderedDevices, inputPointCount, generalOutputCount, inverterOutputGroupCount, outputPointCount, requiredOutputGroups };
+  return success();
 }
 
 export interface ControlPanelIoInputAssignment {
@@ -510,7 +533,7 @@ export interface ControlPanelIoOutputAssignment {
   readonly plcTerminals: readonly string[];
 }
 
-export interface ControlPanelBomBuildInput {
+export interface ControlPanelBomBuildInput extends ControlPanelBomWiringOptions {
   readonly quantities: Readonly<Record<string, number>>;
   readonly catalog: readonly EquipmentOrderCatalogItem[];
   readonly profiles: Readonly<Record<string, DeviceProfile>>;
@@ -561,7 +584,12 @@ function controlPanelPlcSpec(device: DeviceInstanceV2): ControlPanelPlcSpec {
 
 /** Builds a deterministic practice panel from independently entered BOM quantities. */
 export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): ControlPanelBomBuildResult {
-  const validation = validateControlPanelBomQuantities(input.quantities);
+  const automaticWiring = input.automaticWiring !== false;
+  const allowDirectPowerFallback = automaticWiring && input.allowDirectPowerFallback === true;
+  const validation = validateControlPanelBomQuantities(input.quantities, {
+    automaticWiring,
+    allowDirectPowerFallback,
+  });
   if (!validation.ok) throw new Error(`${validation.code}:${validation.message}`);
   const rails = railsFromLayout(input.layout);
   if (rails.length < 4) throw new Error('BOM_LAYOUT_REQUIRES_FOUR_RAILS');
@@ -714,24 +742,38 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     wireIndex += 1;
   };
 
-  const acSource = addDevice('acSource', 'boundary:ac-supply', 'BOUNDARY-AC', 'power', 'SRC', 'AC-SOURCE');
+  const selectedMccb2pCount = input.quantities.mccb2p ?? 0;
+  const selectedMccb3pCount = input.quantities.mccb3p ?? 0;
+  const selectedPowerSupplyCount = input.quantities.powerSupply ?? 0;
+  const needsDcControlPower = validation.inputPointCount > 0 || validation.outputPointCount > 0;
+  const needsAcSource = automaticWiring && (!allowDirectPowerFallback || selectedMccb2pCount + selectedMccb3pCount > 0);
+  const acSource = needsAcSource
+    ? addDevice('acSource', 'boundary:ac-supply', 'BOUNDARY-AC', 'power', 'SRC', 'AC-SOURCE')
+    : null;
+  const directDcSource = automaticWiring && allowDirectPowerFallback && selectedPowerSupplyCount === 0 && needsDcControlPower
+    ? addDevice('directDcSource', 'boundary:dc-supply', 'BOUNDARY-DC', 'power', 'SRC', 'DC24-DIRECT')
+    : null;
   for (const item of CONTROL_PANEL_BOM_ITEMS) {
     for (let index = 0; index < (input.quantities[item.key] ?? 0); index += 1) {
       addDevice(item.key, item.profileId, item.legacyType, item.placementZone, item.designationPrefix);
     }
   }
 
-  const powerSupplies = deviceByKey.get('powerSupply') ?? [];
-  const plcs = [...(deviceByKey.get('plc') ?? []), ...(deviceByKey.get('plcDn60su') ?? [])];
-  const mccb2p = deviceByKey.get('mccb2p') ?? [];
-  const mccb3p = deviceByKey.get('mccb3p') ?? [];
-  const contactors = deviceByKey.get('contactor') ?? [];
-  const inverters = deviceByKey.get('inverter') ?? [];
-  const motors = deviceByKey.get('motor') ?? [];
+  // An unchecked toggle means "place only". Empty wiring collections keep all
+  // selected devices visible while preventing boundaries, buses and conductors.
+  const wiringDeviceByKey = automaticWiring ? deviceByKey : new Map<string, DeviceInstanceV2[]>();
+  const powerSupplies = wiringDeviceByKey.get('powerSupply') ?? [];
+  const plcs = [...(wiringDeviceByKey.get('plc') ?? []), ...(wiringDeviceByKey.get('plcDn60su') ?? [])];
+  const mccb2p = wiringDeviceByKey.get('mccb2p') ?? [];
+  const mccb3p = wiringDeviceByKey.get('mccb3p') ?? [];
+  const contactors = wiringDeviceByKey.get('contactor') ?? [];
+  const inverters = wiringDeviceByKey.get('inverter') ?? [];
+  const motors = wiringDeviceByKey.get('motor') ?? [];
 
   const peBusDevices: DeviceInstanceV2[] = [];
   let peBusUse = 8;
   const allocatePeTerminal = (): { device: DeviceInstanceV2; terminal: string } => {
+    if (!acSource) throw new Error('BOM_AC_SOURCE_ASSIGNMENT_MISSING');
     if (peBusUse >= 8) {
       const previous = peBusDevices.at(-1);
       const current = addDevice('busPe', 'educational:distribution-pe-10', 'TB-PE-10', 'distribution', 'XPE');
@@ -752,6 +794,7 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
 
   [...powerSupplies, ...plcs].forEach((device, index) => {
     const breaker = mccb2p[index];
+    if (!breaker || !acSource) return;
     addWire(acSource, 'L1', breaker, 'L', '#8b4513', 'AC line to branch breaker');
     addWire(acSource, 'N', breaker, 'N', '#2563eb', 'AC neutral to branch breaker');
     addWire(breaker, "L'", device, 'L', '#8b4513', 'protected AC line');
@@ -759,8 +802,10 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     connectPe(device, 'PE');
   });
 
-  const busGroups = powerSupplies.map((supply, supplyIndex) => ({
-    supply,
+  const dcSources = powerSupplies.map((source) => ({ source, positiveTerminal: 'V+1', returnTerminal: 'V-1' }));
+  if (directDcSource) dcSources.push({ source: directDcSource, positiveTerminal: '+', returnTerminal: '-' });
+  const busGroups = dcSources.map((sourceDefinition, supplyIndex) => ({
+    ...sourceDefinition,
     supplyIndex,
     positive: [] as DeviceInstanceV2[],
     positiveUse: 8,
@@ -779,7 +824,7 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
       const current = addDevice(`bus${kind === 'positive' ? '24' : '0'}-${supplyIndex + 1}`, profileId, legacyType, 'distribution', kind === 'positive' ? 'X24' : 'X0');
       buses.push(current);
       if (previous) addWire(previous, '10', current, '1', kind === 'positive' ? '#ef4444' : '#2563eb', `${kind} bus continuation`);
-      else addWire(group.supply, kind === 'positive' ? 'V+1' : 'V-1', current, '1', kind === 'positive' ? '#ef4444' : '#2563eb', `${kind} distribution source`);
+      else addWire(group.source, kind === 'positive' ? group.positiveTerminal : group.returnTerminal, current, '1', kind === 'positive' ? '#ef4444' : '#2563eb', `${kind} distribution source`);
       group[useKey] = 0;
     }
     const device = buses.at(-1)!;
@@ -795,10 +840,10 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
   };
 
   const inputDevices = [
-    ...(deviceByKey.get('startButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '13', signalTerminal: '14' })),
-    ...(deviceByKey.get('stopButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '21', signalTerminal: '22' })),
-    ...(deviceByKey.get('emergencyStop') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '11', signalTerminal: '12' })),
-    ...(deviceByKey.get('npnSensor') ?? []).map((device) => ({ device, kind: 'npn-sensor' as const, sourceTerminal: 'BU', signalTerminal: 'BK' })),
+    ...(wiringDeviceByKey.get('startButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '13', signalTerminal: '14' })),
+    ...(wiringDeviceByKey.get('stopButton') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '21', signalTerminal: '22' })),
+    ...(wiringDeviceByKey.get('emergencyStop') ?? []).map((device) => ({ device, kind: 'dry-contact' as const, sourceTerminal: '11', signalTerminal: '12' })),
+    ...(wiringDeviceByKey.get('npnSensor') ?? []).map((device) => ({ device, kind: 'npn-sensor' as const, sourceTerminal: 'BU', signalTerminal: 'BK' })),
   ];
   const inputSlots = plcs.flatMap((plc, plcIndex) => controlPanelPlcSpec(plc).inputTerminals.map((terminal) => ({
     plc, plcIndex, terminal, spec: controlPanelPlcSpec(plc),
@@ -808,7 +853,7 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     const slot = inputSlots[inputIndex];
     if (!slot) throw new Error('BOM_PLC_INPUT_CAPACITY');
     const { plc, plcIndex, terminal: plcTerminal, spec } = slot;
-    const supplyIndex = plcIndex % powerSupplies.length;
+    const supplyIndex = plcIndex % dcSources.length;
     if (!preparedInputPlcs.has(plc.id)) {
       connectDcBus(supplyIndex, 'positive', plc, spec.inputCommon);
       preparedInputPlcs.add(plc.id);
@@ -835,7 +880,7 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
   const preparedOutputPlcs = new Set<string>();
   const preparedOutputCommons = new Set<string>();
   const prepareOutput = (slot: ReturnType<typeof outputAt>): void => {
-    const supplyIndex = slot.plcIndex % powerSupplies.length;
+    const supplyIndex = slot.plcIndex % dcSources.length;
     if (!preparedOutputPlcs.has(slot.plc.id)) {
       connectDcBus(supplyIndex, 'positive', slot.plc, slot.spec.outputSupplyPositive);
       connectDcBus(supplyIndex, 'return', slot.plc, slot.spec.outputSupplyReturn);
@@ -853,7 +898,7 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     const reverse = outputAt(absoluteOutputPoint + 1);
     if (forward.plc.id !== reverse.plc.id) throw new Error('BOM_INVERTER_OUTPUT_PAIR_SPLIT');
     prepareOutput(forward); prepareOutput(reverse);
-    const supplyIndex = forward.plcIndex % powerSupplies.length;
+    const supplyIndex = forward.plcIndex % dcSources.length;
     connectDcBus(supplyIndex, 'return', inverter, 'CM');
     addWire(forward.plc, forward.terminal, inverter, 'P1', '#f59e0b', 'NPN transistor forward command');
     addWire(reverse.plc, reverse.terminal, inverter, 'P2', '#f59e0b', 'NPN transistor reverse command');
@@ -862,17 +907,17 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     absoluteOutputPoint += 2;
   });
   const generalOutputs = [
-    ...(deviceByKey.get('relay') ?? []).map((device) => ({ device, kind: 'relay' as const, positive: '14', return: '13' })),
+    ...(wiringDeviceByKey.get('relay') ?? []).map((device) => ({ device, kind: 'relay' as const, positive: '14', return: '13' })),
     ...contactors.map((device) => ({ device, kind: 'contactor' as const, positive: 'A1', return: 'A2' })),
-    ...(deviceByKey.get('greenLamp') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
-    ...(deviceByKey.get('yellowLamp') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
-    ...(deviceByKey.get('whiteLamp') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
-    ...(deviceByKey.get('buzzer') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
+    ...(wiringDeviceByKey.get('greenLamp') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
+    ...(wiringDeviceByKey.get('yellowLamp') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
+    ...(wiringDeviceByKey.get('whiteLamp') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
+    ...(wiringDeviceByKey.get('buzzer') ?? []).map((device) => ({ device, kind: 'load' as const, positive: '+', return: '-' })),
   ];
   for (const entry of generalOutputs) {
     const output = outputAt(absoluteOutputPoint);
     prepareOutput(output);
-    const supplyIndex = output.plcIndex % powerSupplies.length;
+    const supplyIndex = output.plcIndex % dcSources.length;
     connectDcBus(supplyIndex, 'positive', entry.device, entry.positive);
     addWire(entry.device, entry.return, output.plc, output.terminal, '#f59e0b', `NPN sink output ${output.terminal}`);
     outputs.push({ deviceId: entry.device.id, plcId: output.plc.id, kind: entry.kind, plcCommon: output.common, plcCommons: [output.common], plcTerminals: [output.terminal] });
@@ -888,11 +933,13 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
       const contactorInput = ['1L1', '3L2', '5L3'][phaseIndex];
       const contactorOutput = ['2T1', '4T2', '6T3'][phaseIndex];
       const motorInput = ['U', 'V', 'W'][phaseIndex];
-      addWire(acSource, sourceTerminal, breaker, sourceTerminal, '#8b4513', `3-phase ${sourceTerminal}`);
-      addWire(breaker, breakerOutput, contactor, contactorInput, '#8b4513', `protected ${sourceTerminal}`);
-      addWire(contactor, contactorOutput, motor, motorInput, '#8b4513', `contactor motor ${motorInput}`);
+      if (breaker && acSource) {
+        addWire(acSource, sourceTerminal, breaker, sourceTerminal, '#8b4513', `3-phase ${sourceTerminal}`);
+        addWire(breaker, breakerOutput, contactor, contactorInput, '#8b4513', `protected ${sourceTerminal}`);
+      }
+      if (motor) addWire(contactor, contactorOutput, motor, motorInput, '#8b4513', `contactor motor ${motorInput}`);
     });
-    connectPe(motor, 'PE');
+    if (motor && acSource) connectPe(motor, 'PE');
   });
   inverters.forEach((inverter, inverterIndex) => {
     const branchIndex = contactors.length + inverterIndex;
@@ -904,22 +951,28 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
       const inverterInput = ['R', 'S', 'T'][phaseIndex];
       const inverterOutput = ['U', 'V', 'W'][phaseIndex];
       const motorInput = ['U', 'V', 'W'][phaseIndex];
-      addWire(acSource, sourceTerminal, breaker, sourceTerminal, '#8b4513', `3-phase ${sourceTerminal}`);
-      addWire(breaker, breakerOutput, inverter, inverterInput, '#8b4513', `protected inverter ${inverterInput}`);
-      addWire(inverter, inverterOutput, motor, motorInput, '#8b4513', `inverter motor ${motorInput}`);
+      if (breaker && acSource) {
+        addWire(acSource, sourceTerminal, breaker, sourceTerminal, '#8b4513', `3-phase ${sourceTerminal}`);
+        addWire(breaker, breakerOutput, inverter, inverterInput, '#8b4513', `protected inverter ${inverterInput}`);
+      }
+      if (motor) addWire(inverter, inverterOutput, motor, motorInput, '#8b4513', `inverter motor ${motorInput}`);
     });
-    connectPe(inverter, 'GMAIN');
-    connectPe(inverter, 'GMOT');
-    connectPe(motor, 'PE');
+    if (acSource) {
+      connectPe(inverter, 'GMAIN');
+      connectPe(inverter, 'GMOT');
+      if (motor) connectPe(motor, 'PE');
+    }
   });
 
   const scopeDevices = devices.filter((device) => !input.profiles[device.profileId]?.boundary).map((device) => device.id);
-  const hasThreePhase = mccb3p.length > 0;
+  const hasThreePhase = automaticWiring && mccb3p.length > 0;
   const document: WorkshopDocumentV2 = {
     schemaVersion: 2,
     mode: 'practice',
     revision: 1,
-    name: `BOM 자동 제어반 · 장비 ${validation.totalOrderedDevices}대`,
+    name: automaticWiring
+      ? `BOM 자동 제어반 · 장비 ${validation.totalOrderedDevices}대`
+      : `BOM 장비 배치 · 장비 ${validation.totalOrderedDevices}대`,
     source: { kind: 'native-v2', hash: '0'.repeat(64) },
     devices,
     wires,
@@ -927,9 +980,13 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
     layout: { ...input.layout },
     settings: {
       v3Workflow: {
-        sourceSystem: hasThreePhase
-          ? { id: 'ac-3ph-380-220v', label: 'AC 3Φ 380/220 V / L1-L2-L3-N-PE' }
-          : { id: 'ac-1ph-220v', label: 'AC 1Φ 220 V / L-N-PE' },
+        sourceSystem: !automaticWiring
+          ? { id: 'unassigned', label: '전원 미지정 · 선택 장비 배치만' }
+          : hasThreePhase
+            ? { id: 'ac-3ph-380-220v', label: 'AC 3Φ 380/220 V / L1-L2-L3-N-PE' }
+            : acSource
+              ? { id: 'ac-1ph-220v', label: 'AC 1Φ 220 V / L-N-PE' }
+              : { id: 'dc-24v-direct-practice', label: 'DC 24 V 직접 결선 · 연습용' },
         earthingPolicy: 'PE_SEPARATE_0V_FLOATING',
         canvasUnitsPerMm: 2,
         sourceProtection: { phaseSequence: hasThreePhase ? 'L1-L2-L3' : null, prospectiveShortCircuitCurrentA: null, protectiveDeviceCurve: null },
@@ -944,6 +1001,9 @@ export function buildControlPanelBomDocument(input: ControlPanelBomBuildInput): 
       legacy: {
         controlPanelBom: {
           quantities: Object.fromEntries(CONTROL_PANEL_BOM_ITEMS.map((item) => [item.key, input.quantities[item.key] ?? 0])),
+          automaticWiring,
+          directPowerFallback: allowDirectPowerFallback && !acSource,
+          logicalDcSourceId: directDcSource?.id ?? null,
           inputAssignments: inputs,
           outputAssignments: outputs,
           automaticDistributionDevices: devices.filter((device) => device.id.includes('bus')).map((device) => device.id),
