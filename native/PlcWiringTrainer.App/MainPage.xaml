@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="PlcWiringTrainer.App.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:PlcWiringTrainer.App.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:PlcWiringTrainer.App"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Loaded="Page_Loaded"
+    Unloaded="Page_Unloaded"
+    mc:Ignorable="d">
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <CommandBar
+            Grid.Row="0"
+            DefaultLabelPosition="Right"
+            IsDynamicOverflowEnabled="True">
+            <AppBarButton
+                AutomationProperties.AutomationId="NewDocumentButton"
+                Click="New_Click"
+                Icon="Add"
+                Label="새 문서" />
+            <AppBarButton
+                AutomationProperties.AutomationId="OpenDocumentButton"
+                Click="Open_Click"
+                Icon="OpenFile"
+                Label="열기" />
+            <AppBarButton
+                AutomationProperties.AutomationId="SaveDocumentButton"
+                Click="Save_Click"
+                Icon="Save"
+                Label="저장" />
+            <AppBarSeparator />
+            <AppBarButton
+                x:Name="UndoButton"
+                AutomationProperties.AutomationId="UndoButton"
+                Click="Undo_Click"
+                Icon="Undo"
+                Label="실행 취소" />
+            <AppBarButton
+                x:Name="RedoButton"
+                AutomationProperties.AutomationId="RedoButton"
+                Click="Redo_Click"
+                Icon="Redo"
+                Label="다시 실행" />
+            <AppBarSeparator />
+            <AppBarButton
+                AutomationProperties.AutomationId="ValidateButton"
+                Click="Validate_Click"
+                Icon="Refresh"
+                Label="결선 검증" />
+            <AppBarButton
+                AutomationProperties.AutomationId="ResetViewButton"
+                Click="ResetView_Click"
+                Icon="ZoomIn"
+                Label="화면 맞춤" />
+            <CommandBar.Content>
+                <StackPanel Margin="12,0" VerticalAlignment="Center">
+                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="PLC Wiring Trainer" />
+                    <TextBlock x:Name="DocumentTitleText" FontSize="11" Opacity="0.65" Text="새 문서" />
+                </StackPanel>
+            </CommandBar.Content>
+        </CommandBar>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="370" />
+            </Grid.ColumnDefinitions>
+
+            <Border
+                Grid.Column="0"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Margin="16,14,16,10" Spacing="4">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="장비 팔레트" />
+                        <TextBlock
+                            Opacity="0.65"
+                            Text="장비를 눌러 캔버스에 배치합니다."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ListView
+                        x:Name="PaletteList"
+                        Grid.Row="1"
+                        AutomationProperties.AutomationId="DevicePalette"
+                        IsItemClickEnabled="True"
+                        ItemClick="PaletteList_ItemClick"
+                        ItemsSource="{x:Bind PaletteItems}"
+                        SelectionMode="None">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:PaletteItem">
+                                <Grid MinHeight="82" Padding="8" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="74" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Background="#FFF8FAFC" CornerRadius="6">
+                                        <Image
+                                            Margin="6"
+                                            Source="{x:Bind AssetUri}"
+                                            Stretch="Uniform" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                                        <TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayName}" TextWrapping="Wrap" />
+                                        <TextBlock FontSize="11" Opacity="0.62" Text="{x:Bind ProfileId}" />
+                                        <TextBlock FontSize="11" Foreground="#F59E0B" Text="교육용 자산" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
+
+            <Border
+                Grid.Column="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,1,0">
+                <controls:WiringCanvas
+                    x:Name="WiringCanvas"
+                    DeviceMoveRequested="WiringCanvas_DeviceMoveRequested"
+                    SelectionChanged="WiringCanvas_SelectionChanged"
+                    WireCreationRequested="WiringCanvas_WireCreationRequested" />
+            </Border>
+
+            <Border
+                Grid.Column="2"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0">
+                <TabView
+                    x:Name="InspectorTabs"
+                    AutomationProperties.AutomationId="InspectorTabs"
+                    CanDragTabs="False"
+                    CanReorderTabs="False"
+                    IsAddTabButtonVisible="False">
+                    <TabViewItem Header="속성" IsClosable="False">
+                        <ScrollViewer>
+                            <StackPanel Margin="18,14,18,24" Spacing="12">
+                                <StackPanel x:Name="NoSelectionPanel" Spacing="6">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="선택된 항목 없음" />
+                                    <TextBlock
+                                        Opacity="0.65"
+                                        Text="장비, 단자 또는 전선을 선택하면 편집 가능한 속성이 여기에 표시됩니다."
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <StackPanel x:Name="DevicePropertiesPanel" Spacing="10" Visibility="Collapsed">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="장비 속성" />
+                                    <TextBox
+                                        x:Name="DeviceLabelBox"
+                                        AutomationProperties.AutomationId="DeviceLabelBox"
+                                        Header="명칭"
+                                        TextChanged="DeviceLabelBox_TextChanged" />
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <NumberBox
+                                            x:Name="DeviceXBox"
+                                            Header="X"
+                                            SpinButtonPlacementMode="Compact"
+                                            ValueChanged="DeviceNumberBox_ValueChanged" />
+                                        <NumberBox
+                                            x:Name="DeviceYBox"
+                                            Grid.Column="1"
+                                            Header="Y"
+                                            SpinButtonPlacementMode="Compact"
+                                            ValueChanged="DeviceNumberBox_ValueChanged" />
+                                    </Grid>
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <NumberBox
+                                            x:Name="DeviceWidthBox"
+                                            Header="너비"
+                                            Minimum="40"
+                                            SpinButtonPlacementMode="Compact"
+                                            ValueChanged="DeviceNumberBox_ValueChanged" />
+                                        <NumberBox
+                                            x:Name="DeviceHeightBox"
+                                            Grid.Column="1"
+                                            Header="높이"
+                                            Minimum="40"
+                                            SpinButtonPlacementMode="Compact"
+                                            ValueChanged="DeviceNumberBox_ValueChanged" />
+                                    </Grid>
+                                    <NumberBox
+                                        x:Name="DeviceRotationBox"
+                                        Header="회전 (도)"
+                                        Maximum="359"
+                                        Minimum="0"
+                                        SpinButtonPlacementMode="Compact"
+                                        ValueChanged="DeviceNumberBox_ValueChanged" />
+                                    <CheckBox
+                                        x:Name="DeviceLockedBox"
+                                        Click="DeviceLockedBox_Click"
+                                        Content="장비 위치 잠금" />
+                                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <TextBlock FontWeight="SemiBold" Text="전기 프로필 (읽기 전용)" />
+                                    <TextBlock x:Name="DeviceProfileText" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="DeviceEvidenceText" Foreground="#F59E0B" TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <StackPanel x:Name="ConductorPropertiesPanel" Spacing="10" Visibility="Collapsed">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="전선 속성" />
+                                    <TextBox
+                                        x:Name="ConductorLabelBox"
+                                        AutomationProperties.AutomationId="ConductorLabelBox"
+                                        Header="선번"
+                                        TextChanged="ConductorLabelBox_TextChanged" />
+                                    <TextBox
+                                        x:Name="ConductorColorBox"
+                                        Header="색상 (#RRGGBB)"
+                                        TextChanged="ConductorColorBox_TextChanged" />
+                                    <NumberBox
+                                        x:Name="ConductorGaugeBox"
+                                        Header="굵기 (mm²)"
+                                        Minimum="0.1"
+                                        SpinButtonPlacementMode="Compact"
+                                        ValueChanged="ConductorGaugeBox_ValueChanged" />
+                                    <CheckBox
+                                        x:Name="ConductorLockedBox"
+                                        Click="ConductorLockedBox_Click"
+                                        Content="경로 잠금" />
+                                    <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <TextBlock FontWeight="SemiBold" Text="단자 연결" />
+                                    <TextBlock x:Name="ConductorEndpointsText" TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <StackPanel x:Name="TerminalPropertiesPanel" Spacing="8" Visibility="Collapsed">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="단자 정보" />
+                                    <TextBlock x:Name="TerminalReferenceText" TextWrapping="Wrap" />
+                                    <TextBlock Opacity="0.65" Text="단자 의미와 극성은 프로필 근거이므로 읽기 전용입니다." TextWrapping="Wrap" />
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabViewItem>
+
+                    <TabViewItem Header="결선 검증" IsClosable="False">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border Margin="14" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8">
+                                <StackPanel Spacing="4">
+                                    <TextBlock x:Name="ValidationSummaryText" FontSize="16" FontWeight="SemiBold" Text="검증 대기" />
+                                    <TextBlock
+                                        x:Name="ValidationFreshnessText"
+                                        Opacity="0.65"
+                                        Text="편집 후 300ms 뒤 자동 검증합니다."
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                            <ListView
+                                x:Name="ValidationList"
+                                Grid.Row="1"
+                                AutomationProperties.AutomationId="ValidationIssueList"
+                                IsItemClickEnabled="True"
+                                ItemClick="ValidationList_ItemClick"
+                                ItemsSource="{x:Bind ValidationItems}"
+                                SelectionMode="None">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:ValidationIssueItem">
+                                        <Grid MinHeight="82" Padding="8" ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="56" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border
+                                                Padding="6,3"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Top"
+                                                Background="{x:Bind BadgeBrush}"
+                                                CornerRadius="4">
+                                                <TextBlock FontSize="11" Foreground="White" Text="{x:Bind SeverityLabel}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Spacing="3">
+                                                <TextBlock FontWeight="SemiBold" Text="{x:Bind Code}" />
+                                                <TextBlock Text="{x:Bind Message}" TextWrapping="Wrap" />
+                                                <TextBlock FontSize="11" Foreground="#F59E0B" Text="{x:Bind BlockingLabel}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </TabViewItem>
+                </TabView>
+            </Border>
+        </Grid>
+
+        <Border
+            Grid.Row="2"
+            Padding="12,6"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <Grid>
+                <TextBlock x:Name="StatusText" Text="준비" />
+                <TextBlock
+                    x:Name="RevisionText"
+                    HorizontalAlignment="Right"
+                    Opacity="0.65"
+                    Text="rev 1" />
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

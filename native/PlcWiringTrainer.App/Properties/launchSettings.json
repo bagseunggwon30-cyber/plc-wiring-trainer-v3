@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "PlcWiringTrainer.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "PlcWiringTrainer.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

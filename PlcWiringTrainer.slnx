@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/native/">
+    <Project Path="native/PlcWiringTrainer.App/PlcWiringTrainer.App.csproj" />
+    <Project Path="native/PlcWiringTrainer.Core.Tests/PlcWiringTrainer.Core.Tests.csproj" />
+    <Project Path="native/PlcWiringTrainer.Core/PlcWiringTrainer.Core.csproj" />
+    <Project Path="native/PlcWiringTrainer.UiTests/PlcWiringTrainer.UiTests.csproj" />
+  </Folder>
+</Solution>

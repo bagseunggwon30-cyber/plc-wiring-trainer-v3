@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <rect x="3" y="3" width="234" height="154" rx="12" fill="#1f2937" stroke="#64748b" stroke-width="6"/>
+  <text x="20" y="46" fill="#f8fafc" font-family="Segoe UI" font-size="24" font-weight="700">DC POWER</text>
+  <text x="20" y="82" fill="#fbbf24" font-family="Segoe UI" font-size="30" font-weight="700">24 V</text>
+  <circle cx="210" cy="46" r="10" fill="#ef4444"/>
+  <circle cx="210" cy="116" r="10" fill="#2563eb"/>
+  <text x="146" y="54" fill="#f8fafc" font-family="Segoe UI" font-size="18">+24V</text>
+  <text x="165" y="124" fill="#f8fafc" font-family="Segoe UI" font-size="18">0V</text>
+</svg>
