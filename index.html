@@ -8742,10 +8742,10 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
     if(Math.abs(cur.x-bx)>0.5)pts.push({x:bx,y:cur.y});
     pts.push({x:bx,y:by},{x:exitB.x,y:exitB.y},{x:p2.x,y:p2.y});
     const clean=forceOrthoChain(pts, obs, endpointIds);
-    if(!pathHitsObstacles(clean, obs, endpointIds)){
-      return ptsToSvg(clean);
-    }
-    // waypoint가 막히면 자동 우회로 계속
+    // 사용자가 찍거나 이동한 경로점은 자동 이미지 회피보다 우선한다.
+    // 경로가 장비 이미지와 겹치더라도 자동 라우터가 다른 위치로 되돌리지
+    // 않으므로, 좁은 영역에서도 원하는 선 위치를 직접 지정한 뒤 고정할 수 있다.
+    return ptsToSvg(clean);
   }
 
   if(devA && devA===devB){
