@@ -24,3 +24,18 @@ tools/**/obj/
 # Rejected Imagen draft: existing XBC device art remains the runtime asset.
 assets/devices/codex/xbc-dr32h-imagen-v3.png
 
+# Local release bundles, QA captures, and design drafts are evidence, not runtime source.
+/SystemSetting/
+/artifacts/
+/release-v*/
+/*-browser-qa.png
+/*-final.png
+/*-final.jpg
+/plc-academy-routing-flow.png
+/plc-network-requests.txt
+/plc-terminal-ab-manual-audit.png
+/assets/devices/manual/xbc-dr32h-open-front-clean-v3.png
+/assets/devices/manual/xbc-dr32h-open-front-recessed-v4.png
+/assets/devices/manual/xbc-dr32h-open-front-section4-v5.png
+/assets/devices/manual/xbc-dr32h-section4-cad-source.png
+

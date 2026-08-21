@@ -162,7 +162,7 @@ test('a placed conductor exposes the terminals still needed to complete its circ
   assert.match(html, /동일전위 대체 단자 중 하나/);
   assert.match(html, /circuit-open-mate/);
   assert.match(html, /주황 점선 단자 .*공급·귀로·COM\/접점 경로를 완성하세요/);
-  assert.match(html, /미완성 동반단자/);
+  assert.match(html, /미완성 회로:/);
 });
 
 test('prewire connection preview fails closed for known polarity and ambiguous COM G V roles', () => {

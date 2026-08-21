@@ -28,7 +28,7 @@ test('legacy renderer exposes a revisioned bridge for the typed renderer', () =>
   assert.match(source, /clearV2Shadow\(\)/);
   assert.match(source, /rememberDocumentV2\(document\)/);
   assert.match(source, /workshopV2RenderedDeviceIds/);
-  assert.match(source, /setMultiDeviceSelection\(\[\.\.\.deviceRefs\]\)/);
+  assert.match(source, /focusRefs\(refs\)\{\s*return focusWorkbenchRefs\(refs\);/);
   assert.match(source, /applyDocumentV2\(document\)/);
 });
 

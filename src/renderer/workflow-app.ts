@@ -795,7 +795,11 @@ export function installWorkflowApp(): void {
   const loadButton = requiredElement<HTMLButtonElement>('b-load');
   const legacyLoad = loadButton.onclick;
   const reportButton = requiredElement<HTMLButtonElement>('b-export-report');
-  const simMonitor = requiredElement<HTMLElement>('sim-monitor');
+  const simMonitor = document.createElement('div');
+  simMonitor.id = 'sim-monitor';
+  simMonitor.className = 'box muted';
+  simMonitor.setAttribute('aria-live', 'polite');
+  simMonitor.textContent = '시뮬레이션 OFF';
   const testTools = document.createElement('section');
   testTools.className = 'v3-test-tools';
   testTools.setAttribute('aria-labelledby', 'v3-test-tools-heading');
@@ -816,8 +820,8 @@ export function installWorkflowApp(): void {
   const traceLegend = document.createElement('div'); traceLegend.className = 'v3-trace-legend';
   traceLegend.innerHTML = '<b>빨강</b> 공급 경로 · <b>파랑</b> 0V/N 귀로 · <b>녹황</b> PE';
   testGrid.append(meterMode, positiveProbe, negativeProbe, branchProbe, measureButton, traceLoad, traceButton, artifactButton, pdfButton);
-  testTools.append(testHeading, testGrid, testResult, traceLegend);
-  simMonitor.parentElement?.appendChild(testTools);
+  testTools.append(testHeading, simMonitor, testGrid, testResult, traceLegend);
+  advancedBody.appendChild(testTools);
 
   const wiringAssistant = createWiringAssistantPanel({
     calculate: async (deviceIds, intent) => {
@@ -837,8 +841,7 @@ export function installWorkflowApp(): void {
     clearSelection: () => bridge.clearDeviceSelection(),
     setStatus: (message) => bridge.setStatus(message),
   });
-  const rightPanel = requiredElement<HTMLElement>('right');
-  rightPanel.insertBefore(wiringAssistant.element, rightPanel.firstChild);
+  advancedBody.appendChild(wiringAssistant.element);
   wiringAssistant.setSelection(bridge.readSelection().deviceIds);
 
   const replaceOptions = (select: HTMLSelectElement, values: readonly string[], emptyLabel: string): void => {
@@ -913,12 +916,6 @@ export function installWorkflowApp(): void {
     void renderMissions();
   });
 
-  for (const id of ['work-order', 'field-quality']) {
-    const content = document.getElementById(id)?.parentElement;
-    content?.classList.add('practice-only-section');
-    content?.previousElementSibling?.classList.add('practice-only-section');
-  }
-
   const missionForSelection = (): MissionDefinitionV2 | undefined =>
     PUBLIC_MISSIONS.find((mission) => mission.id === selectedMissionId);
 
@@ -991,6 +988,9 @@ export function installWorkflowApp(): void {
       const action = document.createElement('small'); action.textContent = `수정: ${issueAction(issue.code)}`;
       item.append(title, action);
       const refs = document.createElement('small'); refs.textContent = `관련: ${issue.refs.join(', ') || '전체 문서'}`; item.appendChild(refs);
+      if (issue.refs.length) {
+        const move = document.createElement('small'); move.textContent = '선택하면 관련 선 또는 장비로 이동'; item.appendChild(move);
+      }
       for (const evidence of evidenceForIssue(issue, workshop)) {
         const manual = document.createElement('small'); manual.textContent = `근거: ${evidence}`; item.appendChild(manual);
       }
@@ -1323,9 +1323,7 @@ export function installWorkflowApp(): void {
         })();
       },
     }));
-    const progress = requiredElement<HTMLElement>('mission-progress');
     const eligible = PUBLIC_MISSIONS.filter((mission) => mission.eligibleModes.includes(currentMode));
-    progress.textContent = `${eligible.length}개 · ${currentMode === 'prewire' ? '검증 프로필 전용' : '힌트 제공'}`;
 
     for (const mission of eligible) {
       const card = document.createElement('article');

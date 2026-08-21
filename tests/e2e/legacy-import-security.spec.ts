@@ -3,12 +3,12 @@ import { expect, test } from './electron.fixture';
 const LEGACY_STORAGE_KEY = 'wiring-workshop-v2';
 const probePayload = '<img onerror="window.__xssProbe=(window.__xssProbe||0)+1">';
 
-test('legacy localStorage terminal labels render as text, never executable netlist markup', async ({ harness }) => {
+test('legacy localStorage terminal labels render as text, never executable property markup', async ({ harness }) => {
   const { page } = harness;
 
   // This is a legacy-state-shaped payload only: no file picker, IPC, or network
-  // request is involved. The custom terminal label reaches renderNetlist() after
-  // the old localStorage load path applies terminal calibration.
+  // request is involved. The custom terminal label reaches the wire property
+  // inspector after the old localStorage load path applies terminal calibration.
   await page.evaluate(({ key, payload }) => {
     window.__xssProbe = 0;
     localStorage.setItem(key, JSON.stringify({
@@ -42,14 +42,16 @@ test('legacy localStorage terminal labels render as text, never executable netli
   // localStorage load listener without a file-picker path.
   await page.evaluate(() => {
     document.querySelector<HTMLButtonElement>('#b-load')?.click();
+    (window as unknown as { LegacyTrainerBridge: { focusRefs(refs: string[]): void } })
+      .LegacyTrainerBridge.focusRefs(['legacy-xss-wire']);
   });
-  const netlist = page.locator('#netlist');
-  await expect(netlist).toContainText('NET 1');
+  const properties = page.locator('#selection-properties');
+  await expect(properties).toContainText('선 속성');
 
   // Contract: all dynamic member labels must use escaped markup/textContent.
   // Dispatching error ourselves avoids a real resource request while proving that
   // an inserted onerror attribute would be executable in the renderer.
-  const result = await netlist.evaluate((element) => {
+  const result = await properties.evaluate((element) => {
     const injected = element.querySelector('img[onerror]');
     injected?.dispatchEvent(new Event('error'));
     return {

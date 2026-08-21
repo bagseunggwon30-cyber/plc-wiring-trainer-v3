@@ -75,6 +75,14 @@ async function openAdvancedTools(page: Page): Promise<void> {
   await expect(advancedTools).toHaveAttribute('open', '');
 }
 
+async function openDocumentProperties(page: Page): Promise<void> {
+  const properties = page.locator('#document-properties');
+  if (!(await properties.evaluate((element: HTMLDetailsElement) => element.open))) {
+    await properties.locator('> summary').click();
+  }
+  await expect(properties).toHaveAttribute('open', '');
+}
+
 function mdrReferenceDocument() {
   const device = (
     id: string,
@@ -198,6 +206,7 @@ async function applyDocument(page: Page, documentV2: unknown): Promise<void> {
     target.LegacyTrainerBridge.applyDocumentV2(document);
     target.WorkshopV2Controller.renderMissions();
   }, documentV2);
+  await openDocumentProperties(page);
   await expect(page.locator('#v3-workflow-panel')).toBeVisible();
 }
 
@@ -484,6 +493,7 @@ test('startup keyboard flow separates practice and prewire review modes', async 
 
   await expect(page.locator('#stat')).toHaveAttribute('role', 'status');
   await expect(page.locator('#stat')).toHaveAttribute('aria-live', 'polite');
+  await openDocumentProperties(page);
   await expect(page.locator('.mission-v2-header')).toHaveCount(PRACTICE_MISSIONS.length);
   await expect(page.locator('#palette .pal[data-type="IG5A"]')).toBeVisible();
   await expect(page.locator('#palette .pal[data-type="MY-MD02"]')).toBeVisible();
@@ -641,6 +651,7 @@ test('academy panel routes every conductor around non-endpoint equipment images'
   await page.locator('#m-select').click();
   await pointerClickSvgDeviceBody(page, 'academy-ps1');
   await pointerClickSvgDeviceBody(page, 'academy-hmi1', true);
+  await openAdvancedTools(page);
   const assistant = page.locator('.v3-wiring-assistant');
   await expect(assistant.locator('.v3-wiring-selection')).toContainText('academy-hmi1 ↔ academy-ps1');
   await expect(assistant.locator('.v3-wiring-flow')).toBeVisible();
@@ -958,8 +969,9 @@ test('typed wiring assistant selects two devices and finishes the missing 0 V re
   await applyDocument(page, plusOnlyLoadDocument());
 
   const assistant = page.locator('.v3-wiring-assistant');
-  await expect(assistant).toBeVisible();
   await boxSelectSvgDevices(page, ['dc-open', 'load-open']);
+  await openAdvancedTools(page);
+  await expect(assistant).toBeVisible();
   await expect(assistant.locator('.v3-wiring-selection')).toContainText('dc-open ↔ load-open');
   await expect(assistant.locator('.v3-wiring-flow')).toBeVisible();
   await expect(assistant.locator('.v3-wiring-flow')).toContainText('+ 공급');
@@ -1037,6 +1049,31 @@ test('v3 Validate exposes an OPEN_RETURN_PATH for a +24V-only load', async ({ ha
   await expect(page.locator('#validation .core-validation-status')).toContainText('FAIL');
   await expect(page.locator('#validation')).toContainText('OPEN_RETURN_PATH');
   await expect(page.locator('#validation')).toContainText('0V/N 귀로');
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
+
+test('selecting a validation issue moves to its problem wire and opens wire properties', async ({ harness }) => {
+  const { page, consoleErrors, pageErrors } = harness;
+  await chooseMode(page, 'prewire');
+  await applyDocument(page, plusOnlyLoadDocument());
+  await completeVisibleV3Workflow(page);
+
+  await page.locator('#document-properties > summary').click();
+  await expect(page.locator('#document-properties')).not.toHaveAttribute('open', '');
+
+  await page.locator('#b-validate-panel').click();
+  const issue = page.locator('#validation .core-issue').filter({ hasText: 'OPEN_RETURN_PATH' }).first();
+  await expect(issue).toBeVisible();
+  await page.keyboard.press('0');
+  const before = await page.locator('#canvas').getAttribute('viewBox');
+  await issue.click();
+
+  await expect(page.locator('#g-wires .wire.sel[data-id="positive-only"]')).toHaveCount(1);
+  await expect(page.locator('#selection-properties')).toContainText('선 속성');
+  await expect(page.locator('#selection-properties')).toContainText('positive-only');
+  await expect(page.locator('#stat')).toContainText('검증 위치로 이동');
+  await expect.poll(async () => page.locator('#canvas').getAttribute('viewBox')).not.toBe(before);
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

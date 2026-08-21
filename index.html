@@ -8,8 +8,8 @@
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:'Segoe UI','Malgun Gothic',sans-serif;background:#1a1a1a;color:#ddd;font-size:13px}
-body{display:grid;grid-template-columns:210px 1fr 260px;grid-template-rows:auto 1fr;min-height:100vh;transition:grid-template-columns .2s}
-body.hide-left{grid-template-columns:0 1fr 260px}
+body{display:grid;grid-template-columns:210px 1fr 320px;grid-template-rows:auto 1fr;min-height:100vh;transition:grid-template-columns .2s}
+body.hide-left{grid-template-columns:0 1fr 320px}
 body.hide-right{grid-template-columns:210px 1fr 0}
 body.hide-left.hide-right{grid-template-columns:0 1fr 0}
 header{grid-column:1/4}
@@ -231,6 +231,26 @@ body.sim-mode .device.coil-on{filter:drop-shadow(0 0 6px rgba(255,200,0,.6))}
 #right h3.collapsed + .panel-body{display:none}
 .panel-body{margin-bottom:6px}
 .box{background:#262626;border-radius:4px;padding:6px 8px;margin-bottom:8px;font-size:11px}
+.inspector-empty{margin:0;color:#9aa3ad;line-height:1.5}
+.inspector-title{margin:0 0 7px;color:#fff;font-size:12px}
+.inspector-grid{display:grid;grid-template-columns:82px minmax(0,1fr);gap:5px 7px;align-items:center}
+.inspector-grid>span{color:#9aa3ad;font-size:10px}
+.inspector-grid>output{min-width:0;overflow:hidden;text-overflow:ellipsis;color:#eef4ff;font:10px Consolas,monospace}
+.inspector-grid input,.inspector-grid select{width:100%;min-width:0;border:1px solid #52606d;border-radius:4px;background:#151a20;color:#eef4ff;padding:4px 5px;font-size:10px}
+.inspector-grid input[type=checkbox]{width:auto;justify-self:start}
+.inspector-actions{display:flex;gap:5px;margin-top:8px}
+.inspector-actions button,.validation-actions button{flex:1;border:1px solid #52606d;border-radius:4px;background:#243447;color:#eef4ff;padding:5px 7px;cursor:pointer;font-size:10px}
+.inspector-actions button:hover,.validation-actions button:hover{background:#31506d;border-color:#7cb9eb}
+.inspector-terminal-list{display:grid;gap:3px;margin-top:8px;max-height:150px;overflow:auto}
+.inspector-terminal{display:flex;justify-content:space-between;gap:6px;width:100%;border:1px solid #3c4854;border-radius:3px;background:#1a2027;color:#dbe8f3;padding:4px 5px;text-align:left;font-size:9px;cursor:pointer}
+.inspector-terminal:hover{border-color:#e4a53a;background:#2b261d}
+#document-properties{margin-top:8px;border-top:1px solid #39434d;padding-top:7px}
+#document-properties>summary{cursor:pointer;color:#a9c7df;font-size:10px;font-weight:700}
+#document-properties>#goals{margin-top:7px}
+.validation-actions{display:flex;margin-bottom:7px}
+#validation .err,#validation .func,#validation .quality,#validation .core-issue{display:block;width:100%;border-top:0;border-right:0;border-bottom:0;background:#20252b;text-align:left;padding:6px 7px;margin:4px 0;border-radius:0 4px 4px 0}
+#validation .err:hover,#validation .func:hover,#validation .quality:hover,#validation .core-issue:hover{background:#303a44}
+#validation .issue-move-hint{display:block;margin-top:3px;color:#9db8cc;font-size:9px}
 .err{color:#f88;border-left:3px solid #d33;padding-left:6px;margin:3px 0}
 .func{color:#9cf;border-left:3px solid #4a90e2;padding-left:6px;margin:3px 0}
 .quality{color:#fc8;border-left:3px solid #fa0;padding-left:6px;margin:3px 0}
@@ -249,32 +269,12 @@ body.sim-mode .device.coil-on{filter:drop-shadow(0 0 6px rgba(255,200,0,.6))}
 .goal-step.bad:before{content:'✗';color:#d44}
 .goal-step.bad{color:#f88}
 .goal-step.next{font-weight:700;color:#ffeb3b;background:rgba(255,235,59,0.1);padding-left:10px;border-left:3px solid #ffeb3b;margin-left:-3px}
-/* 현장 작업 순서 / 품질 체크리스트 */
-.wo-phase{font-size:10px;color:#aaa;margin:3px 0;padding:4px 6px 4px 18px;position:relative;border-radius:3px;line-height:1.4}
-.wo-phase:before{content:'☐';position:absolute;left:2px;top:4px;color:#666}
-.wo-phase.done{color:#8f8;background:rgba(80,160,80,.08)}
-.wo-phase.done:before{content:'✓';color:#6c6}
-.wo-phase.next{color:#ffeb3b;background:rgba(255,235,59,.1);border-left:3px solid #ffeb3b;font-weight:700}
-.wo-phase .wo-tip{display:block;color:#a8d8c8;font-size:9px;margin-top:2px;font-weight:400}
-.wo-bar{height:6px;background:#333;border-radius:3px;overflow:hidden;margin:4px 0 8px}
-.wo-bar>i{display:block;height:100%;background:linear-gradient(90deg,#2a8,#4a90e2);border-radius:3px;transition:width .25s}
-.qc-item{font-size:10px;color:#aaa;margin:2px 0;padding-left:14px;position:relative}
-.qc-item:before{content:'·';position:absolute;left:2px;color:#aaa}
-.qc-item.ok{color:#8f8}
-.qc-item.ok:before{content:'✓';color:#6c6}
-.qc-item.bad{color:#f88}
-.qc-item.bad:before{content:'!';color:#d44}
-.qc-item.warn{color:#fc8}
-.qc-item.warn:before{content:'△';color:#fa0}
 .wire-tag{font-size:8px;font-family:'Segoe UI','Malgun Gothic','Cascadia Mono',sans-serif;font-weight:800;fill:#111827;pointer-events:none}
 .wire-tag-bg{fill:rgba(255,255,255,.94);stroke:#111827;stroke-width:.7;pointer-events:none}
 .wire-ferrule{pointer-events:all;cursor:text}
 .wire-ferrule rect{fill:#f8fafc;stroke:#334155;stroke-width:1.2;vector-effect:non-scaling-stroke}
 .wire-ferrule text{fill:#111827;font-size:9px;font-family:'Cascadia Mono','Segoe UI',sans-serif;font-weight:800;text-anchor:middle;dominant-baseline:middle;paint-order:stroke fill;stroke:#fff;stroke-width:.7px}
 .wire-ferrule:focus rect,.wire-ferrule:hover rect{fill:#fff7cc;stroke:#d97706;stroke-width:2}
-.netchip{display:inline-block;padding:1px 5px;border-radius:8px;color:#fff;font-size:10px;margin:1px;font-family:'Consolas',monospace}
-#legend{font-size:10px;color:#aaa;line-height:1.6}
-#legend span{display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:4px;border-radius:2px}
 input[type=file]{display:none}
 .kbd{background:#333;padding:1px 5px;border-radius:3px;border:1px solid #555;font-family:monospace;font-size:10px;color:#ccc}
 /* 제어반 레이아웃 */
@@ -343,6 +343,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <script src="src/runtime/modbus-runtime.js"></script>
 <script src="src/runtime/drive-runtime.js"></script>
 <script src="src/ui/device-config.js"></script>
+<script src="src/ui/workbench-inspector-core.js"></script>
 <script type="module" src="/src/renderer/main.ts"></script>
 </head>
 <body>
@@ -543,76 +544,20 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
   </div>
 </div>
 <aside id="right">
-<h3>🔧 현장 작업순서 <span id="wo-progress" style="font-size:10px;color:#8cf"></span></h3>
-<div class="panel-body"><div id="work-order" class="box muted">제어반 모드에서 단계가 표시됩니다</div></div>
-<h3>🎯 미션 코치 <span id="mission-progress" style="font-size:10px;color:#8cf"></span></h3>
-<div class="panel-body" id="goals"></div>
-<h3>📋 현장 품질체크</h3>
-<div class="panel-body"><div id="field-quality" class="box muted">결선 후 자동 점검</div></div>
-<h3 class="collapsed">⚡ 시뮬 모니터</h3>
-<div class="panel-body"><div id="sim-monitor" class="box muted" style="font-family:monospace;font-size:10px;min-height:42px">시뮬 ON 시 상태 표시</div></div>
-<h3>🔍 검증 결과</h3>
-<div class="panel-body"><div id="validation" class="box muted">검증 버튼을 누르세요</div></div>
-<h3 class="collapsed">🌐 넷 리스트</h3>
-<div class="panel-body"><div id="netlist" class="box muted">와이어 없음</div></div>
-<h3 class="collapsed">📊 통계</h3>
-<div class="panel-body"><div id="stats" class="box muted">-</div></div>
-<h3 class="collapsed">💡 도움말</h3>
-<div class="panel-body"><div class="box" style="font-size:10px;line-height:1.6">
-좌측 부품 클릭/드래그→캔버스<br>
-단자 클릭→다른 단자 클릭=결선<br>
-부품 더블클릭=중앙으로 이동<br>
-부품 우클릭=색상 변경<br>
-와이어 클릭=흰 점 드래그로 경로 정리<br>
-<span class="kbd">V</span>선택 <span class="kbd">W</span>결선 <span class="kbd">Space</span>이동<br>
-<span class="kbd">F</span>화면맞춤 <span class="kbd">T</span>자동정렬<br>
-<span class="kbd">S</span>시뮬 <span class="kbd">/</span>검색 <span class="kbd">L/R</span>패널접기<br>
-<span class="kbd">Del</span>삭제 <span class="kbd">Esc</span>취소 <span class="kbd">Ctrl+Z</span>실행취소<br>
-<span class="kbd">K</span>위치 고정/해제 · 우클릭 메뉴에서도 가능<br>
-<span class="kbd">Ctrl+C/V</span>복사붙여넣기 · 노란 모서리 핸들로 크기 조절<br>
-<br><b style="color:#9cf">제어반 모드</b><br>
-DIN 레일/도어에만 장비 배치<br>
-배선덕트를 따라 자동 라우팅<br>
-배전 모드: 버스(+24V/0V/PE) 선택 후 단자 클릭<br>
-단자대 선택 후 점퍼 자동으로 브릿지<br>
-<br><b style="color:#9cf">현장 연습 흐름</b><br>
-우측 <b>현장 작업순서</b> 1→7 단계 따라 진행<br>
-①전원배치 ②PLC/TB ③도어 ④AC ⑤DC배전 ⑥I/O ⑦검증<br>
-# 선번 = 와이어 번호표 (유지보수 배선표)<br>
-📄 리포트 = 선번·BOM·작업순서·품질 내보내기<br>
-<br><b style="color:#9cf">레일 설정</b><br>
-⚙ 레일설정 또는 상단 <b>행/횡열</b> 선택 후 적용<br>
-· 행(단): 세로 DIN 레일 개수 1~6<br>
-· 횡열: 가로 분할 1~3 (열 사이 세로 덕트)
-</div></div>
-<h3 class="collapsed">🎨 극성 범례</h3>
-<div class="panel-body"><div id="legend">
-<div style="margin:4px 0 2px;color:#fc8;font-weight:700;font-size:10px">⚡ 전원선</div>
-<div><span style="background:#8b4513"></span>AC L/상선 (갈색)</div>
-<div><span style="background:#2563eb"></span>AC N/중성선 (파랑)</div>
-<div><span style="background:#dc2626"></span>DC +24V/V+ (빨강)</div>
-<div><span style="background:#1565c0"></span>DC 0V/24G/CM/MG (청색·용도별 공통 구분)</div>
-<div><span style="background:#65a30d"></span>PE/FG 접지 (녹황)</div>
-<div><span style="background:#64748b"></span>PLC 입력 COM (+24V/0V 선택형)</div>
-<div><span style="background:#737373"></span>릴레이 COM/접점 (무전압·연결 전위 상속)</div>
-<div><span style="background:#b45309"></span>인버터 U/V/W 모터 출력 (R/S/T 입력과 분리)</div>
-<div style="margin:6px 0 2px;color:#8f8;font-weight:700;font-size:10px">📡 신호선</div>
-<div><span style="background:#0a0"></span>입력 DI (초록)</div>
-<div><span style="background:#fa0"></span>출력 DO (노랑)</div>
-<div><span style="background:#0891b2"></span>아날로그 + (밝은 청록)</div>
-<div><span style="background:#0e7490"></span>아날로그 G/귀로 (진한 청록)</div>
-<div><span style="background:#ea580c"></span>RS232 TX (주황)</div>
-<div><span style="background:#16a34a"></span>RS232 RX (초록)</div>
-<div><span style="background:#7c3aed"></span>RS485 A/+ (보라)</div>
-<div><span style="background:#c026d3"></span>RS485 B/− (자홍)</div>
-<div><span style="background:#475569"></span>통신 SG (PE·아날로그 G와 분리)</div>
-<div><span style="background:#999"></span>스위치 접점 (회색)</div>
-<div style="margin-top:6px;padding:5px;border:1px solid #5b4630;border-radius:3px;color:#f4c27a">
-  같은 글자라도 다른 단자: V+=DC전원 · V1=아날로그입력 · VR=12V 기준공급 · V/T2=모터상<br>
-  COM=입력/접점 공통 · CM=제어0V · MG=출력0V · G=아날로그귀로 · SG=통신기준 · PE/FG=보호접지
+<h3>🔧 속성</h3>
+<div class="panel-body">
+  <div id="selection-properties" class="box"><p class="inspector-empty">장비나 선을 선택하면 여기에서 위치·회전·선번·굵기·경로 고정을 확인하고 수정할 수 있습니다.</p></div>
+  <details id="document-properties">
+    <summary>문서·검증 조건</summary>
+    <p class="inspector-empty">단자 역할 구분: V+=DC전원 · V1=아날로그입력 · VR=12V 기준공급 · V/T2=모터상</p>
+    <div id="goals"></div>
+  </details>
 </div>
-<div style="margin-top:6px;font-size:10px;color:#888">기본: 연결 시 전원/신호 자동 색구분<br>(상단 스와치에서 고정색 선택 가능)</div>
-</div></div>
+<h3>🔍 결선 검증</h3>
+<div class="panel-body">
+  <div class="validation-actions"><button id="b-validate-panel" type="button">검증 실행</button></div>
+  <div id="validation" class="box muted">검증 버튼을 누르세요</div>
+</div>
 </aside>
 <script>
 const {
@@ -5914,11 +5859,14 @@ function selectedDeviceIds(){
 }
 let lastSelectionNotification='';
 function notifySelectionChanged(){
+  renderSelectionProperties();
   const deviceIds=selectedDeviceIds().sort();
-  const signature=deviceIds.join('\u0000');
+  const wireId=S.selWire&&S.wires.some(wire=>wire.id===S.selWire)?S.selWire:null;
+  const jumperId=S.selJumper&&S.jumpers?.some(jumper=>jumper.id===S.selJumper)?S.selJumper:null;
+  const signature=[deviceIds.join('\u0000'),wireId||'',jumperId||''].join('\u0001');
   if(signature===lastSelectionNotification)return;
   lastSelectionNotification=signature;
-  queueMicrotask(()=>window.dispatchEvent(new CustomEvent('workshop-selection-change',{detail:{deviceIds}})));
+  queueMicrotask(()=>window.dispatchEvent(new CustomEvent('workshop-selection-change',{detail:{deviceIds,wireId,jumperId}})));
 }
 function clearSelection(){
   S.selWire=null;
@@ -5940,6 +5888,164 @@ function setMultiDeviceSelection(ids){
   const arr=selectedDeviceIds();
   S.selDev=arr.length===1?arr[0]:null;
   S.selWire=null;
+}
+function inspectorRow(grid,label,control){
+  const name=document.createElement('span');name.textContent=label;
+  grid.append(name,control);
+  return control;
+}
+function inspectorOutput(value){
+  const output=document.createElement('output');output.textContent=String(value??'—');
+  return output;
+}
+function inspectorInput(value,type='text'){
+  const input=document.createElement('input');input.type=type;input.value=String(value??'');
+  return input;
+}
+function endpointPropertyText(endpoint){
+  const device=S.devices[endpoint?.dev];
+  const def=LIB[device?.type];
+  const term=def?.terminals?.find(entry=>entry.id===endpoint?.term);
+  return `${def?.label||endpoint?.dev||'?'} · ${term?.label||endpoint?.term||'?'}`;
+}
+function applyInspectorChange(mutator,message){
+  snapshot();
+  mutator();
+  render();
+  status(message);
+}
+function renderSelectionProperties(){
+  const panel=$('#selection-properties');
+  if(!panel)return;
+  panel.replaceChildren();
+  const wire=S.selWire?S.wires.find(entry=>entry.id===S.selWire):null;
+  const deviceIds=selectedDeviceIds();
+  const jumper=S.selJumper?S.jumpers?.find(entry=>entry.id===S.selJumper):null;
+  if(wire){
+    const heading=document.createElement('h4');heading.className='inspector-title';heading.textContent='선 속성';panel.appendChild(heading);
+    const grid=document.createElement('div');grid.className='inspector-grid';panel.appendChild(grid);
+    inspectorRow(grid,'ID',inspectorOutput(wire.id));
+    inspectorRow(grid,'시작',inspectorOutput(endpointPropertyText(wire.from)));
+    inspectorRow(grid,'도착',inspectorOutput(endpointPropertyText(wire.to)));
+    const tag=inspectorRow(grid,'선번',inspectorInput(wire.tag||''));
+    tag.setAttribute('aria-label','선번');
+    tag.addEventListener('change',()=>{
+      const value=tag.value.trim();if(value===(wire.tag||''))return;
+      applyInspectorChange(()=>{wire.tag=value;},`${wire.id} 선번을 ${value||'미지정'}(으)로 변경했습니다`);
+    });
+    const gauge=inspectorRow(grid,'굵기',inspectorInput(wire.gauge||''));
+    gauge.setAttribute('aria-label','전선 굵기');
+    gauge.addEventListener('change',()=>{
+      const value=gauge.value.trim();if(value===(wire.gauge||''))return;
+      applyInspectorChange(()=>{wire.gauge=value;},`${wire.id} 전선 굵기를 ${value||'미지정'}(으)로 변경했습니다`);
+    });
+    inspectorRow(grid,'경유점',inspectorOutput(`${wire.waypoints?.length||0}개`));
+    const locked=document.createElement('input');locked.type='checkbox';locked.checked=isWireRouteLocked(wire);
+    locked.setAttribute('aria-label','선 경로 고정');
+    locked.addEventListener('change',()=>setWireRouteLocked(wire.id,locked.checked));
+    inspectorRow(grid,'경로 고정',locked);
+    const actions=document.createElement('div');actions.className='inspector-actions';
+    const focus=document.createElement('button');focus.type='button';focus.textContent='이 선으로 이동';focus.addEventListener('click',()=>focusWorkbenchRefs([wire.id]));
+    actions.appendChild(focus);panel.appendChild(actions);
+    return;
+  }
+  if(deviceIds.length===1){
+    const id=deviceIds[0],device=S.devices[id],def=LIB[device.type];
+    const heading=document.createElement('h4');heading.className='inspector-title';heading.textContent=def?.label||device.type;panel.appendChild(heading);
+    const grid=document.createElement('div');grid.className='inspector-grid';panel.appendChild(grid);
+    inspectorRow(grid,'ID',inspectorOutput(id));
+    inspectorRow(grid,'종류',inspectorOutput(device.type));
+    if(device.orderCode)inspectorRow(grid,'품번',inspectorOutput(device.orderCode));
+    const x=inspectorRow(grid,'X',inspectorInput(Math.round(Number(device.x)||0),'number'));
+    const y=inspectorRow(grid,'Y',inspectorInput(Math.round(Number(device.y)||0),'number'));
+    x.setAttribute('aria-label','장비 X 위치');y.setAttribute('aria-label','장비 Y 위치');
+    const rotation=document.createElement('select');
+    for(const angle of [0,90,180,270]){const option=document.createElement('option');option.value=String(angle);option.textContent=`${angle}°`;rotation.appendChild(option);}
+    rotation.value=String(Number(device.rot)||0);inspectorRow(grid,'회전',rotation);
+    const scale=inspectorRow(grid,'배율',inspectorInput(deviceScale(device),'number'));scale.step='0.05';scale.min='0.35';scale.max='3';
+    rotation.setAttribute('aria-label','장비 회전');scale.setAttribute('aria-label','장비 배율');
+    const locked=document.createElement('input');locked.type='checkbox';locked.checked=isDeviceLocked(device);locked.setAttribute('aria-label','장비 위치 고정');inspectorRow(grid,'위치 고정',locked);
+    const move=()=>{
+      const nextX=Number(x.value),nextY=Number(y.value);if(!Number.isFinite(nextX)||!Number.isFinite(nextY))return;
+      if(nextX===Number(device.x)&&nextY===Number(device.y))return;
+      applyInspectorChange(()=>{device.x=nextX;device.y=nextY;clearWireWaypointsForDevices([id]);},`${def?.label||id} 위치를 (${nextX}, ${nextY})(으)로 변경했습니다`);
+    };
+    x.addEventListener('change',move);y.addEventListener('change',move);
+    rotation.addEventListener('change',()=>{
+      const value=Number(rotation.value);if(value===Number(device.rot||0))return;
+      applyInspectorChange(()=>{device.rot=value;clearWireWaypointsForDevices([id]);},`${def?.label||id} 회전을 ${value}°로 변경했습니다`);
+    });
+    scale.addEventListener('change',()=>{
+      const value=Math.min(3,Math.max(.35,Number(scale.value)||1));if(value===deviceScale(device))return;
+      applyInspectorChange(()=>{device.scale=value;clearWireWaypointsForDevices([id]);},`${def?.label||id} 배율을 ${value.toFixed(2)}로 변경했습니다`);
+    });
+    locked.addEventListener('change',()=>setDevicesLocked([id],locked.checked));
+    const terminals=document.createElement('div');terminals.className='inspector-terminal-list';
+    for(const term of def?.terminals||[]){
+      if(term.hidden)continue;
+      const button=document.createElement('button');button.type='button';button.className='inspector-terminal';
+      const name=document.createElement('span');name.textContent=term.label||term.id;
+      const count=document.createElement('span');count.textContent=`${terminalConnectionCount({dev:id,term:term.id})}선 · ${POL[term.pol]?.name||term.pol||'중성'}`;
+      button.append(name,count);button.addEventListener('click',()=>focusWorkbenchRefs([`${id}:${term.id}`]));terminals.appendChild(button);
+    }
+    if(terminals.childElementCount)panel.appendChild(terminals);
+    return;
+  }
+  if(deviceIds.length>1){
+    const heading=document.createElement('h4');heading.className='inspector-title';heading.textContent=`장비 ${deviceIds.length}개 선택`;panel.appendChild(heading);
+    const text=document.createElement('p');text.className='inspector-empty';text.textContent=deviceIds.join(', ');panel.appendChild(text);
+    return;
+  }
+  if(jumper){
+    const heading=document.createElement('h4');heading.className='inspector-title';heading.textContent='점퍼 속성';panel.appendChild(heading);
+    const grid=document.createElement('div');grid.className='inspector-grid';panel.appendChild(grid);
+    inspectorRow(grid,'ID',inspectorOutput(jumper.id));inspectorRow(grid,'장비',inspectorOutput(jumper.deviceId));inspectorRow(grid,'단자',inspectorOutput((jumper.terms||[]).join(' ↔ ')));
+    return;
+  }
+  const empty=document.createElement('p');empty.className='inspector-empty';empty.textContent=`선택 없음 · 장비 ${Object.keys(S.devices).length}개 · 선 ${S.wires.length}개`;panel.appendChild(empty);
+}
+function focusBoundsInViewport(bounds){
+  const rect=elSvg.getBoundingClientRect();
+  const view=window.WorkbenchInspectorCore?.viewportForBounds(bounds,{width:rect.width,height:rect.height});
+  if(!view)return false;
+  S.pan.k=view.k;S.pan.x=view.panX;S.pan.y=view.panY;applyTransform();
+  return true;
+}
+function wireFocusBounds(wires){
+  const points=[];
+  for(const wire of wires){
+    const from=S.devices[wire.from.dev]&&termAbs(S.devices[wire.from.dev],wire.from.term);
+    const to=S.devices[wire.to.dev]&&termAbs(S.devices[wire.to.dev],wire.to.term);
+    if(from)points.push(from);if(to)points.push(to);
+    for(const point of wire.waypoints||[])points.push(point);
+  }
+  return window.WorkbenchInspectorCore?.boundsFromPoints(points)||null;
+}
+function focusWorkbenchRefs(refs){
+  tracedForwardWires=new Set();tracedReturnWires=new Set();tracedPeWires=new Set();
+  const values=[...new Set((refs||[]).map(String))];
+  const wireIds=window.WorkbenchInspectorCore?.resolveWireIds(values,S.wires)||[];
+  highlightedTerms=new Set(values.filter(ref=>ref.includes(':')).map(ref=>ref.replace(':','.')));
+  if(wireIds.length){
+    highlightedWires=new Set(wireIds);
+    S.selWire=wireIds[0];S.selJumper=null;S.selDev=null;S.selDevs.clear();
+    const bounds=wireFocusBounds(wireIds.map(id=>S.wires.find(wire=>wire.id===id)).filter(Boolean));
+    if(bounds)focusBoundsInViewport(bounds);
+    renderWires();renderDevices();
+    status(`검증 위치로 이동 · ${wireIds.length}개 선 강조 · ${wireIds[0]} 선택`);
+    return {wireIds,deviceIds:[]};
+  }
+  const deviceRefs=new Set();
+  for(const ref of values){
+    if(S.devices[ref])deviceRefs.add(ref);
+    const separator=ref.indexOf(':');if(separator>0&&S.devices[ref.slice(0,separator)])deviceRefs.add(ref.slice(0,separator));
+  }
+  const deviceIds=[...deviceRefs];setMultiDeviceSelection(deviceIds);highlightedWires=new Set();
+  const bounds=window.WorkbenchInspectorCore?.boundsFromPoints(deviceIds.flatMap(id=>{const box=deviceBounds(id);return box?[{x:box.x1,y:box.y1},{x:box.x2,y:box.y2}]:[];}));
+  if(bounds)focusBoundsInViewport(bounds);
+  renderWires();renderDevices();
+  status(deviceIds.length?`검증 위치로 이동 · 장비 ${deviceIds.join(', ')}`:'검증 항목에 이동 가능한 선 또는 장비 참조가 없습니다');
+  return {wireIds:[],deviceIds};
 }
 function deviceBounds(id){
   const d=S.devices[id], def=LIB[d?.type];
@@ -9429,8 +9535,6 @@ function render(){
   renderWiringFlow();
   renderJumpers();
   updateMissionCoach();
-  renderNetlist();
-  renderStats();
   try{window.PLCTrainerMultiView?.renderActive?.();}catch(error){console.warn('멀티뷰 갱신 실패',error);}
   try{(window.PLCTrainerAutomationLabs||window.PLCTrainerPalletizer3D)?.renderActive?.();}catch(error){console.warn('자동화 실습실 갱신 실패',error);}
   const jc=$('#jcounter'); if(jc)jc.textContent=(S.jumpers||[]).length;
@@ -9868,27 +9972,6 @@ function evaluateFieldWorkOrder(nets){
   const done=phases.filter(p=>p.done).length;
   return {phases, done, total:phases.length, pct: Math.round(done/phases.length*100)};
 }
-function updateFieldWorkOrderUI(){
-  const el=$('#work-order');
-  const prog=$('#wo-progress');
-  if(!el)return;
-  try{
-    const wo=evaluateFieldWorkOrder();
-    if(prog) prog.textContent=`(${wo.done}/${wo.total})`;
-    let html=`<div class="wo-bar"><i style="width:${wo.pct}%"></i></div>`;
-    html+=`<div style="font-size:10px;color:#8cf;margin-bottom:4px">현장 표준 작업 ${wo.pct}% · ${wo.done}/${wo.total} 단계</div>`;
-    for(const p of wo.phases){
-      const cls=p.done?'done':(p.next?'next':'');
-      html+=`<div class="wo-phase ${cls}">${p.title}${p.next||!p.done?`<span class="wo-tip">${p.tip}</span>`:''}</div>`;
-    }
-    if(wo.done===wo.total){
-      html+=`<div class="ok" style="margin-top:6px">현장 작업순서 완료 — 리포트 저장 권장</div>`;
-    }
-    el.innerHTML=html;
-  }catch(e){
-    el.innerHTML='<span class="muted">작업순서 계산 중 오류</span>';
-  }
-}
 function evaluateFieldQuality(nets){
   nets=nets||lastNets||[];
   const items=[];
@@ -9927,23 +10010,6 @@ function evaluateFieldQuality(nets){
     items.push({id:'pe', label:`접지(PE) 결선 ${peWired}/${peTerms}`, ok:peWired>0, warn:peWired===0, tip:'케이스/모터 PE는 접지바에 연결'});
   }
   return items;
-}
-function updateFieldQualityUI(){
-  const el=$('#field-quality');
-  if(!el)return;
-  try{
-    const items=evaluateFieldQuality();
-    let html='';
-    for(const it of items){
-      const cls=it.ok?'ok':(it.bad?'bad':(it.warn?'warn':''));
-      html+=`<div class="qc-item ${cls}" title="${it.tip||''}">${it.label}</div>`;
-    }
-    const okN=items.filter(i=>i.ok).length;
-    html+=`<div style="margin-top:6px;font-size:10px;color:#929292">품질 ${okN}/${items.length} 통과 · 항목 호버=힌트</div>`;
-    el.innerHTML=html;
-  }catch(e){
-    el.innerHTML='<span class="muted">품질 점검 대기</span>';
-  }
 }
 function validateFieldPracticeRules(nets){
   // 색 불일치 경고: 전원 극성인데 회색/검정만 쓴 경우
@@ -10095,70 +10161,25 @@ function renderValidation(){
     for(const iss of items){
       const d=document.createElement('div');
       d.className=sec.className;
-      d.innerHTML=`<b>${sec.title}</b>: ${iss.msg}`+(iss.members?`<br><span class="muted">net: ${iss.members}</span>`:'');
+      const title=document.createElement('b');title.textContent=`${sec.title}: `;d.appendChild(title);
+      d.appendChild(document.createTextNode(iss.msg));
+      if(iss.members){
+        d.appendChild(document.createElement('br'));
+        const members=document.createElement('span');members.className='muted';members.textContent=`net: ${iss.members}`;d.appendChild(members);
+      }
       if(iss.wires?.length){
         d.style.cursor='pointer';
+        d.tabIndex=0;d.setAttribute('role','button');
+        d.setAttribute('aria-label',`${iss.msg} · 문제 선으로 이동`);
+        const hint=document.createElement('span');hint.className='issue-move-hint';hint.textContent='선택하면 문제 선으로 이동';d.appendChild(hint);
+        d.addEventListener('click',()=>focusWorkbenchRefs(iss.wires));
+        d.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();focusWorkbenchRefs(iss.wires);}});
         d.addEventListener('mouseenter',()=>{highlightedWires=new Set(iss.wires);renderWires();});
         d.addEventListener('mouseleave',()=>{highlightedWires=new Set();renderWires();});
       }
       el.appendChild(d);
     }
   }
-}
-
-function renderNetlist(){
-  const el=$('#netlist'); el.innerHTML='';
-  if(lastNets.length===0){el.className='box muted';el.textContent='와이어 없음';return;}
-  el.className='box';
-  lastNets.forEach((n,i)=>{
-    const pols=[...new Set(n.members.map(m=>m.pol).filter(Boolean))];
-    const repPol=pols[0]||'NEUTRAL';
-    const colorForPol=pol=>Object.prototype.hasOwnProperty.call(POL,pol)&&POL[pol].color||'#666';
-    const c=colorForPol(repPol);
-    const d=document.createElement('div');
-    d.style.marginBottom='4px';
-    d.style.borderLeft=`3px solid ${c}`;
-    d.style.paddingLeft='5px';
-    d.style.cursor='pointer';
-    const title=document.createElement('b');
-    title.textContent=`NET ${i+1}`;
-    d.appendChild(title);
-    d.appendChild(document.createTextNode(' '));
-    const summary=document.createElement('span');
-    summary.className='muted';
-    summary.textContent=`(${n.wires.length}선, ${pols.join('/')})`;
-    d.appendChild(summary);
-    d.appendChild(document.createElement('br'));
-    n.members.forEach(m=>{
-      const lbl=LIB[S.devices[m.dev]?.type]?.label||m.dev;
-      const chip=document.createElement('span');
-      chip.className='netchip';
-      chip.style.background=colorForPol(m.pol);
-      chip.textContent=`${String(lbl).split(' ')[0]}.${m.label||m.term}`;
-      d.appendChild(chip);
-    });
-    d.addEventListener('mouseenter',()=>{
-      highlightedWires=new Set(n.wires);
-      highlightedTerms=new Set(n.members.map(m=>m.dev+'.'+m.term));
-      renderWires(); renderDevices();
-    });
-    d.addEventListener('mouseleave',()=>{
-      highlightedWires=new Set(); highlightedTerms=new Set();
-      renderWires(); renderDevices();
-    });
-    el.appendChild(d);
-  });
-}
-
-function renderStats(){
-  const el=$('#stats');
-  const dn=Object.keys(S.devices).length;
-  const wn=S.wires.length;
-  const en=lastErrors.size;
-  const nn=lastNets.length;
-  const open=openCircuitHints.length;
-  el.className='box';
-  el.innerHTML=`부품 <b>${dn}</b>개 · 와이어 <b>${wn}</b>개<br>네트 <b>${nn}</b>개 · 오류 <b style="color:${en?'#f88':'#8f8'}">${en}</b>개 · 미완성 동반단자 <b style="color:${open?'#ffb24a':'#8f8'}">${open}</b>개`;
 }
 
 /* ===================================================================
@@ -10177,17 +10198,8 @@ function updateMissionCoach(){
     window.dispatchEvent(new CustomEvent('workshop-render-missions'));
     return;
   }
-  // Re-use and enhance existing renderGoals behavior + add progress
+  // Keep the legacy mission renderer as a fail-safe until the typed shell mounts.
   if(typeof renderGoals === 'function') renderGoals();
-
-  const prog = $('#mission-progress');
-  if(!prog || !S.goal) { if(prog) prog.textContent=''; return; }
-
-  const goal = GOALS.find(g=>g.id===S.goal);
-  if(!goal) return;
-  const total = goal.checks ? goal.checks.length : 0;
-  const done = goal.checks ? goal.checks.filter(c=>c._done).length : 0;
-  prog.textContent = total ? `(${done}/${total})` : '';
 }
 
 function updateSimMonitor(){
@@ -10348,8 +10360,6 @@ function exportTrainerReport(){
 function refreshTrainerUI(){
   try{ updateMissionCoach(); }catch(e){}
   try{ updateSimMonitor(); }catch(e){}
-  try{ updateFieldWorkOrderUI(); }catch(e){}
-  try{ updateFieldQualityUI(); }catch(e){}
 }
 
 function autoPlaceGoalDevices(types){
@@ -12621,10 +12631,9 @@ $('#b-search').onclick=()=>{
 $('#b-validate').onclick=()=>{
   validate();
   renderWires();
-  renderNetlist();
-  renderStats();
   status(`검증 완료: 오류 ${lastErrors.size}개, net ${lastNets.length}개`);
 };
+$('#b-validate-panel')?.addEventListener('click',()=>$('#b-validate')?.click());
 $('#b-export-report').onclick=()=>{ exportTrainerReport(); };
 $('#b-router').onclick=organizeWireRoutes;
 $('#b-labels').onclick=function(){S.showLabels=!S.showLabels;this.classList.toggle('active',S.showLabels);renderDevices();};
@@ -13227,18 +13236,7 @@ window.LegacyTrainerBridge={
     return {ok:true,code:assessment.code||'COMPATIBLE',reason:assessment.reason};
   },
   focusRefs(refs){
-    tracedForwardWires=new Set();tracedReturnWires=new Set();tracedPeWires=new Set();
-    const values=new Set(refs||[]);
-    highlightedWires=new Set([...values].filter(ref=>S.wires.some(wire=>wire.id===ref)));
-    highlightedTerms=new Set([...values].filter(ref=>ref.includes(':')).map(ref=>ref.replace(':','.')));
-    const deviceRefs=new Set();
-    for(const ref of values){
-      if(S.devices[ref])deviceRefs.add(ref);
-      const separator=ref.indexOf(':');
-      if(separator>0 && S.devices[ref.slice(0,separator)])deviceRefs.add(ref.slice(0,separator));
-    }
-    setMultiDeviceSelection([...deviceRefs]);
-    renderWires();renderDevices();
+    return focusWorkbenchRefs(refs);
   },
   showWiringFlowV3(steps){
     setWiringFlowSteps(Array.isArray(steps)?steps:[]);

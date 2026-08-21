@@ -47,7 +47,7 @@ test('full application script initializes with all device packs and modular runt
   };
   context.window=context;context.globalThis=context;context.self=context;context.addEventListener=()=>{};context.removeEventListener=()=>{};context.dispatchEvent=()=>true;context.open=()=>null;
   vm.createContext(context);
-  for(const f of ['public/safety-policy.js','src/device-packs/device-pack-registry.js','src/device-packs/ls-xgb-v24-pack.js','src/device-packs/ls-xgb-expansion-pack.js','src/device-packs/automation-equipment-pack.js','src/runtime/rack-runtime.js','src/runtime/analog-runtime.js','src/runtime/modbus-runtime.js','src/runtime/drive-runtime.js','src/ui/device-config.js']){
+  for(const f of ['public/safety-policy.js','src/device-packs/device-pack-registry.js','src/device-packs/ls-xgb-v24-pack.js','src/device-packs/ls-xgb-expansion-pack.js','src/device-packs/automation-equipment-pack.js','src/runtime/rack-runtime.js','src/runtime/analog-runtime.js','src/runtime/modbus-runtime.js','src/runtime/drive-runtime.js','src/ui/device-config.js','src/ui/workbench-inspector-core.js']){
     vm.runInContext(fs.readFileSync(path.join(ROOT,f),'utf8'),context,{filename:f,timeout:10000});
   }
   const html=fs.readFileSync(path.join(ROOT,'index.html'),'utf8');const script=html.match(/<script>([\s\S]*?)<\/script>/i)[1];
