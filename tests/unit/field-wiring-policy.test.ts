@@ -79,9 +79,9 @@ describe('field wiring color and ferrule policy', () => {
     expect(html).toContain("image:CODEX_BOM+'boundary-ac-source-imagen-v1.png'");
     expect(html).toContain("image:CODEX_BOM+'pushbutton-no-green-imagen-v1.png'");
     expect(html).toContain("image:CODEX_BOM+'pushbutton-nc-red-imagen-v1.png'");
-    expect(html).toContain("image:CODEX_BOM+'lamp-green-imagen-v1.png'");
-    expect(html).toContain("image:CODEX_BOM+'lamp-yellow-imagen-v1.png'");
-    expect(html).toContain("image:CODEX_BOM+'lamp-white-imagen-v1.png'");
+    expect(html).toContain("image:CODEX_BOM+'lamp-green-flat-screw-v1.png'");
+    expect(html).toContain("image:CODEX_BOM+'lamp-yellow-flat-screw-v1.png'");
+    expect(html).toContain("image:CODEX_BOM+'lamp-white-flat-screw-v1.png'");
     expect(html).toContain("image:XBC_DN60SU_IMAGE");
     expect(html).toContain("appendFerrule(pa,fromDef,ferruleFrom,'wire-ferrule-from')");
     expect(html).toContain("appendFerrule(pb,toDef,ferruleTo,'wire-ferrule-to')");

@@ -106,6 +106,15 @@ test('the BOM launcher has a delegated click path that survives palette rebuilds
   assert.match(source, /targetDocument\.removeEventListener\('click', handleLauncherClick, true\)/);
 });
 
+test('the BOM panel controls the real fail-safe panel power state', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'equipment-order-panel.ts'), 'utf8');
+  assert.match(source, /aria-label', '제어반 전원 ON\/OFF'/);
+  assert.match(source, /options\.setPanelPower\(panelPowerToggle\.checked\)/);
+  assert.match(source, /mode !== 'practice' && options\.getPanelPower\(\)/);
+  assert.match(html, /readPanelPower\(\)\{return !!SIM\.on;\}/);
+  assert.match(html, /if\(requested\)startSim\(\);[\s\S]*?else stopSim\(\);/);
+});
+
 test('image rendering preserves an explicit device aspect ratio without replacing its asset', () => {
   assert.match(html, /imagePreserveAspectRatio:'xMidYMid meet'/);
   assert.match(html, /def\.imagePreserveAspectRatio\|\|'none'/);
@@ -181,4 +190,14 @@ test('palette distinguishes exact official manuals from family and unresolved ed
   assert.match(html, /const FAMILY_MANUAL_DEVICE_TYPES=new Set\(\['IG5A','SERVO-DRV','MC','EOCR'\]\)/);
   assert.match(html, /type==='MY-MD02'.*공식 제조사·매뉴얼 미확인/);
   assert.match(html, /d\.dataset\.manualStatus=manualStatus\.kind/);
+});
+
+test('palette removes test boundaries and incomplete visuals while preserving requested relay exceptions', () => {
+  assert.match(html, /const PALETTE_QUALITY_KEEP_TYPES=new Set\(\['RELAY-8P','RELAY-14P','XBC-DR64H','XBC-DN64H'\]\)/);
+  assert.match(html, /const PALETTE_LOW_QUALITY_TYPES=new Set\(\['PSU24'\]\)/);
+  assert.match(html, /def\?\.reviewBoundary===true/);
+  assert.match(html, /PROFILE_ONLY_DEVICE_TYPES\.has\(type\)/);
+  assert.match(html, /\|\| !def\?\.image/);
+  assert.match(html, /if\(isPaletteQualityHidden\(type,def\)\)continue/);
+  assert.match(html, /!isPaletteQualityHidden\(k,v\)/);
 });

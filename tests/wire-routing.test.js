@@ -96,9 +96,10 @@ test('renderer exposes a dedicated non-committing wiring-flow overlay', () => {
   assert.match(html, /showWiringFlowV3\(steps\)/);
 });
 
-test('wire cleanup is an undoable action that removes stale manual waypoints', () => {
+test('wire cleanup is undoable, removes stale manual waypoints, and preserves locked routes', () => {
   assert.match(html, /function\s+organizeWireRoutes\s*\(/);
-  assert.match(html, /for\(const w of S\.wires\)\s*w\.waypoints=\[\]/);
+  assert.match(html, /if\(isWireRouteLocked\(w\)\)\{protectedCount\+\+;continue;\}/);
+  assert.match(html, /w\.waypoints=\[\]/);
   assert.match(html, /S\.routerOrtho=true/);
   assert.match(html, /\$\('#b-router'\)\.onclick=organizeWireRoutes/);
   assert.match(html, /id="b-router"[^>]*>🧹 선 정리<\/button>/);

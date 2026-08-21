@@ -143,6 +143,8 @@ export interface WireV2 {
   tag?: string;
   gauge?: string;
   waypoints?: Array<{ x: number; y: number }>;
+  routeLocked?: boolean;
+  manualColor?: boolean;
 }
 
 export interface JumperV2 {

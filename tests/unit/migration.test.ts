@@ -66,6 +66,30 @@ describe('legacy workshop migration', () => {
     if (result.ok) expect(result.document.wires[0].waypoints).toBeUndefined();
   });
 
+  it('migrates manual waypoint locks without changing the saved route', async () => {
+    const withLockedRoute = structuredClone(legacy) as typeof legacy & {
+      w: Array<(typeof legacy.w)[number] & {
+        waypoints?: Array<{ x: number; y: number }>;
+        routeLocked?: boolean;
+        manualColor?: boolean;
+      }>;
+    };
+    withLockedRoute.w[0].waypoints = [{ x: 100, y: 120 }];
+    withLockedRoute.w[0].routeLocked = true;
+    withLockedRoute.w[0].color = '#2563eb';
+    withLockedRoute.w[0].manualColor = true;
+
+    const result = await migrateWorkshop(withLockedRoute);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.document.wires[0]).toMatchObject({
+      waypoints: [{ x: 100, y: 120 }],
+      routeLocked: true,
+      color: '#2563eb',
+      manualColor: true,
+    });
+  });
+
   it('copies v1 localStorage to v2 without deleting or rewriting the source', async () => {
     const values = new Map<string, string>([['wiring-workshop-v2', JSON.stringify(legacy)]]);
     const storage = {

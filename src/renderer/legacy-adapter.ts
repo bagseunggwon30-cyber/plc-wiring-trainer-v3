@@ -61,6 +61,8 @@ interface LegacyWire {
   tag?: string;
   gauge?: string;
   waypoints?: Array<{ x: number; y: number }> | null;
+  routeLocked?: boolean;
+  manualColor?: boolean;
 }
 interface LegacyDevice extends Record<string, unknown> {
   type: string;
@@ -180,6 +182,8 @@ export async function adaptLegacyState(
         tag: wire.tag,
         gauge: wire.gauge,
         waypoints: Array.isArray(wire.waypoints) ? wire.waypoints : undefined,
+        routeLocked: wire.routeLocked,
+        manualColor: wire.manualColor,
       };
     }),
     jumpers: (state.jumpers ?? []).map((jumper) => ({

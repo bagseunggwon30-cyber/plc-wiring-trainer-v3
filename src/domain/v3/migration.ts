@@ -36,10 +36,10 @@ const v1Keys = new Set([
   'd', 'w', 'n', 'goal', 'boardMode', 'cabinet', 'rails', 'ducts', 'doorPanel', 'panelConfig', 'jumpers', 'terminalCalibration',
 ]);
 const v2DeviceKeys = new Set(['id', 'profileId', 'profileVersion', 'evidenceLevel', 'legacyType', 'missingProfile', 'x', 'y', 'rotation', 'configuration']);
-const v2WireKeys = new Set(['id', 'from', 'to', 'color', 'tag', 'gauge', 'waypoints']);
+const v2WireKeys = new Set(['id', 'from', 'to', 'color', 'tag', 'gauge', 'waypoints', 'routeLocked', 'manualColor']);
 const v2JumperKeys = new Set(['id', 'deviceId', 'terminalIds']);
 const v1DeviceKeys = new Set(['type', 'x', 'y', 'rot']);
-const v1WireKeys = new Set(['id', 'from', 'to', 'color', 'tag', 'gauge', 'waypoints']);
+const v1WireKeys = new Set(['id', 'from', 'to', 'color', 'tag', 'gauge', 'waypoints', 'routeLocked', 'manualColor']);
 const v1JumperKeys = new Set(['id', 'deviceId', 'terms']);
 
 function compareText(left: string, right: string): number {

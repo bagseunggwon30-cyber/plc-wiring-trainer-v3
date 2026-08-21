@@ -83,6 +83,33 @@ describe('legacy renderer to WorkshopDocument v2 adapter', () => {
     expect(document.wires[0].waypoints).toBeUndefined();
   });
 
+  it('preserves manually locked wire routes across the legacy renderer bridge', async () => {
+    const document = await adaptLegacyState({
+      devices: {
+        source: { type: 'BOUNDARY-DC', __v2ProfileId: 'boundary:dc-supply' },
+        load: { type: 'BOUNDARY-LOAD', __v2ProfileId: 'boundary:load' },
+      },
+      wires: [{
+        id: 'w1',
+        from: { dev: 'source', term: '+' },
+        to: { dev: 'load', term: '+' },
+        waypoints: [{ x: 120, y: 80 }, { x: 240, y: 160 }],
+        routeLocked: true,
+        color: '#dc2626',
+        manualColor: true,
+      }],
+      jumpers: [],
+      revision: 4,
+    }, 'practice', DEVICE_PROFILES);
+
+    expect(document.wires[0]).toMatchObject({
+      waypoints: [{ x: 120, y: 80 }, { x: 240, y: 160 }],
+      routeLocked: true,
+      color: '#dc2626',
+      manualColor: true,
+    });
+  });
+
   it('preserves jumpers, settings, layout, and opaque legacy fields', async () => {
     const document = await adaptLegacyState({
       devices: { psu: { type: 'MDR-100', x: 1, y: 2, locked: true } },

@@ -15,6 +15,8 @@ const LegacyWireSchema = z
     waypoints: z.array(z.object({ x: z.number(), y: z.number() }))
       .nullish()
       .transform((value) => value ?? undefined),
+    routeLocked: z.boolean().optional(),
+    manualColor: z.boolean().optional(),
   })
   .passthrough();
 const LegacyJumperSchema = z.object({
@@ -116,6 +118,8 @@ export async function migrateWorkshop(input: unknown, options: MigrationOptions 
       tag: wire.tag,
       gauge: wire.gauge,
       waypoints: wire.waypoints ?? undefined,
+      routeLocked: wire.routeLocked,
+      manualColor: wire.manualColor,
     })),
     jumpers: (source.jumpers ?? []).map((jumper) => ({
       id: jumper.id,

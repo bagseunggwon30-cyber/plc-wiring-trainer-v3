@@ -143,6 +143,8 @@ export const WorkshopDocumentV2Schema = z
         waypoints: z.array(z.object({ x: z.number(), y: z.number() }))
           .nullish()
           .transform((value) => value ?? undefined),
+        routeLocked: z.boolean().optional(),
+        manualColor: z.boolean().optional(),
       }),
     ),
     jumpers: z.array(

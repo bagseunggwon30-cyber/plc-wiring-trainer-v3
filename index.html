@@ -189,6 +189,19 @@ body.calib-mode #calib-actions{display:inline-flex}
 .wire.live{stroke:#ff0 !important;stroke-width:6;filter:drop-shadow(0 0 5px rgba(255,255,0,.85));animation:flow .8s linear infinite}
 .wire-hit{stroke:rgba(0,0,0,0);stroke-width:18;filter:none;pointer-events:stroke;vector-effect:non-scaling-stroke}
 .wire-hit:hover{stroke:rgba(255,150,0,.12);stroke-width:18}
+.wire-hit.editable{cursor:copy}
+.wire.route-locked{stroke-dasharray:2 1}
+.wire-handle{fill:#fff;stroke:#f60;stroke-width:2;cursor:move;vector-effect:non-scaling-stroke}
+.wire-handle:hover{fill:#fff3d6;stroke-width:3}
+.wire-handle.locked{fill:#f2c94c;stroke:#7a4b00;cursor:not-allowed}
+.wire-insert-handle{fill:#fff8e8;stroke:#f60;stroke-width:1.5;cursor:copy;vector-effect:non-scaling-stroke}
+.wire-insert-handle:hover{fill:#ffd27a;stroke-width:2.5}
+.wire-insert-plus{fill:#9a4d00;font-size:8px;font-weight:900;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+.wire-lock-badge{fill:#20242a;stroke:#f2c94c;stroke-width:1.4;pointer-events:none;vector-effect:non-scaling-stroke}
+.wire-lock-badge-text{fill:#ffe082;font-size:10px;font-weight:800;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+.wire-color-palette{display:grid;grid-template-columns:repeat(8,24px);gap:5px;padding:5px 8px 8px}
+.wire-color-chip{width:24px;height:24px;border:2px solid #707780;border-radius:5px;cursor:pointer;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.45)}
+.wire-color-chip:hover,.wire-color-chip.active{border-color:#fff;outline:2px solid #f59e0b;outline-offset:1px}
 .wire-error-x{fill:none;stroke:#e11;stroke-width:2.4;stroke-linecap:round;pointer-events:none;filter:drop-shadow(0 0 2px rgba(200,0,0,.6))}
 .wire-error-badge{fill:#e11;stroke:#600;stroke-width:1;pointer-events:none}
 .wire-error-badge-text{fill:#fff;font-size:9px;font-weight:800;pointer-events:none;font-family:Segoe UI,Malgun Gothic,sans-serif}
@@ -413,7 +426,7 @@ header .mode-btn.active{background:#2a7a4a;border-color:#3a9a5a}
 <button id="b-simulate" title="시뮬레이션 ON/OFF (S)">▶ 시뮬</button>
 <button id="b-tidy" title="부품 자동 정렬 (T)">🧹 정렬</button>
 <button id="b-rotate" title="선택 부품 90도 회전 (R)">🔄 회전</button>
-<button id="b-lock" title="선택 부품 위치 고정/해제 (K) — 이동·회전·크기 잠금">🔒 고정</button>
+<button id="b-lock" title="선택 부품 위치 또는 선택 선 경로 고정/해제 (K)">🔒 고정</button>
 <button id="b-export-img" title="PNG 내보내기">🖼 PNG</button>
 <button id="b-search" title="부품 검색 (/)">🔍</button>
 </span>
@@ -1251,6 +1264,44 @@ const LIB = {
   }],
   notes:'⚠ 공식 J219-E1-22 p.8·10·20: 코일 14=+24V, 13=0V. 무여자시 9-1/12-4(b·NC), 여자시 9-5/12-8(a·NO). D2 내장 다이오드 때문에 역극성 결선 금지.',
   polarityCritical:[['14','13']]
+},
+'RELAY-8P':{cat:'switch',label:'Metamec 8핀 릴레이',sub:'결선-1.pptx 원본 선화 · 접점/핀 번호 미확인 · 연습 전용',
+  w:161,h:330,color:'#737373',icon:'relay',
+  assetId:'manual:metamec-relay-8p-ppt-v1',assetApproval:'educational',practiceOnly:true,
+  terminalMarkerStyle:'screw-center-ring',terminalMarkerRadius:4.5,
+  terminals:[
+    {id:'P01',x:57.9,y:7.0,side:'T',label:'P01',pol:'NEUTRAL'},
+    {id:'P02',x:104.6,y:7.0,side:'T',label:'P02',pol:'NEUTRAL'},
+    {id:'P03',x:55.0,y:48.4,side:'T',label:'P03',pol:'NEUTRAL'},
+    {id:'P04',x:109.9,y:48.4,side:'T',label:'P04',pol:'NEUTRAL'},
+    {id:'P05',x:55.0,y:281.2,side:'B',label:'P05',pol:'NEUTRAL'},
+    {id:'P06',x:109.9,y:281.2,side:'B',label:'P06',pol:'NEUTRAL'},
+    {id:'P07',x:60.5,y:323.3,side:'B',label:'P07',pol:'NEUTRAL'},
+    {id:'P08',x:107.4,y:323.3,side:'B',label:'P08',pol:'NEUTRAL'},
+  ],
+  notes:'사용자 제공 결선-1.pptx 슬라이드 1의 그림 78을 그대로 사용한 8핀 릴레이. 정확한 형식명과 접점/코일 핀맵이 확인되지 않아 P01~P08 독립 단자로 제공하며 사전 결선 검토에는 사용하지 않는다.'
+},
+'RELAY-14P':{cat:'switch',label:'Metamec 14핀 릴레이',sub:'결선-1.pptx 원본 선화 · 접점/핀 번호 미확인 · 연습 전용',
+  w:170,h:330,color:'#737373',icon:'relay',
+  assetId:'manual:metamec-relay-14p-ppt-v1',assetApproval:'educational',practiceOnly:true,
+  terminalMarkerStyle:'screw-center-ring',terminalMarkerRadius:4.5,
+  terminals:[
+    {id:'P01',x:38.8,y:19.1,side:'T',label:'P01',pol:'NEUTRAL'},
+    {id:'P02',x:69.9,y:19.1,side:'T',label:'P02',pol:'NEUTRAL'},
+    {id:'P03',x:101.9,y:19.1,side:'T',label:'P03',pol:'NEUTRAL'},
+    {id:'P04',x:133.0,y:19.1,side:'T',label:'P04',pol:'NEUTRAL'},
+    {id:'P05',x:38.8,y:59.2,side:'T',label:'P05',pol:'NEUTRAL'},
+    {id:'P06',x:69.9,y:59.2,side:'T',label:'P06',pol:'NEUTRAL'},
+    {id:'P07',x:101.9,y:59.2,side:'T',label:'P07',pol:'NEUTRAL'},
+    {id:'P08',x:133.0,y:59.2,side:'T',label:'P08',pol:'NEUTRAL'},
+    {id:'P09',x:38.8,y:275.1,side:'B',label:'P09',pol:'NEUTRAL'},
+    {id:'P10',x:133.0,y:273.5,side:'B',label:'P10',pol:'NEUTRAL'},
+    {id:'P11',x:38.8,y:313.0,side:'B',label:'P11',pol:'NEUTRAL'},
+    {id:'P12',x:69.9,y:313.0,side:'B',label:'P12',pol:'NEUTRAL'},
+    {id:'P13',x:101.9,y:313.0,side:'B',label:'P13',pol:'NEUTRAL'},
+    {id:'P14',x:133.0,y:313.0,side:'B',label:'P14',pol:'NEUTRAL'},
+  ],
+  notes:'사용자 제공 결선-1.pptx 슬라이드 1의 그림 101을 그대로 사용한 14핀 릴레이. 정확한 형식명과 접점/코일 핀맵이 확인되지 않아 P01~P14 독립 단자로 제공하며 사전 결선 검토에는 사용하지 않는다.'
 },
 'MY-MD02':{cat:'sensor',label:'MD02 온습도',sub:'Modbus RTU · DC5-30V · RS485 · 4핀',
   w:190,h:130,color:'#2a8',
@@ -2215,6 +2266,12 @@ Object.assign(LIB['MY2N'],{
   geometryHash:'85A5FBBA7B390ECF9DD9E15BB93AF1C9A9A01AF4902487AD0E69474F91CE9D59',
   assetApproval:'pending',manualOverlay:true
 });
+Object.assign(LIB['RELAY-8P'],{
+  image:IMG+'manual/metamec-relay-8p-ppt.png',imageBox:{x:0,y:0,w:161,h:330},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false
+});
+Object.assign(LIB['RELAY-14P'],{
+  image:IMG+'manual/metamec-relay-14p-ppt.png',imageBox:{x:0,y:0,w:170,h:330},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false
+});
 Object.assign(LIB['TIMER'],{image:FLAT+'timer-flat.png',imageHasLabels:false});
 Object.assign(LIB['FLICKER'],{image:FLAT+'flicker-flat.png',imageHasLabels:false});
 Object.assign(LIB['COUNTER'],{image:FLAT+'counter-flat.png',imageHasLabels:false});
@@ -2740,14 +2797,18 @@ Object.assign(LIB['LINEAR-RAIL'],{
   ]
 });
 
-Object.assign(LIB['LAMP-G'],{w:160,h:190,image:CODEX_BOM+'lamp-green-imagen-v1.png',imageBox:{x:0,y:0,w:160,h:160},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false,
-  assetId:'codex:lamp-green-imagen-v1',assetApproval:'educational',terminals:[{id:'+',x:58,y:190,visual:{x:58,y:145},hit:{x:58,y:145,r:12},anchor:{x:58,y:190},side:'B',label:'+',pol:'DC+'},{id:'-',x:101,y:190,visual:{x:101,y:145},hit:{x:101,y:145,r:12},anchor:{x:101,y:190},side:'B',label:'-',pol:'DC-'}]});
-Object.assign(LIB['LAMP-Y'],{w:160,h:190,image:CODEX_BOM+'lamp-yellow-imagen-v1.png',imageBox:{x:0,y:0,w:160,h:160},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false,
-  assetId:'codex:lamp-yellow-imagen-v1',assetApproval:'educational',terminals:[{id:'+',x:58,y:190,visual:{x:58,y:146},hit:{x:58,y:146,r:12},anchor:{x:58,y:190},side:'B',label:'+',pol:'DC+'},{id:'-',x:101,y:190,visual:{x:101,y:146},hit:{x:101,y:146,r:12},anchor:{x:101,y:190},side:'B',label:'-',pol:'DC-'}]});
-Object.assign(LIB['LAMP-W'],{w:160,h:190,image:CODEX_BOM+'lamp-white-imagen-v1.png',imageBox:{x:0,y:0,w:160,h:190},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false,
-  assetId:'codex:lamp-white-imagen-v1',assetApproval:'educational',terminals:[{id:'+',x:60,y:190,visual:{x:60,y:159},hit:{x:60,y:159,r:12},anchor:{x:60,y:190},side:'B',label:'+',pol:'DC+'},{id:'-',x:101,y:190,visual:{x:101,y:159},hit:{x:101,y:159,r:12},anchor:{x:101,y:190},side:'B',label:'-',pol:'DC-'}]});
-Object.assign(LIB['LAMP'],{w:160,h:190,image:CODEX_BOM+'lamp-yellow-imagen-v1.png',imageBox:{x:0,y:0,w:160,h:160},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:false,
-  assetId:'codex:lamp-yellow-imagen-v1',assetApproval:'educational',terminals:[{id:'+',x:58,y:190,visual:{x:58,y:146},hit:{x:58,y:146,r:12},anchor:{x:58,y:190},side:'B',label:'+',pol:'DC+'},{id:'-',x:101,y:190,visual:{x:101,y:146},hit:{x:101,y:146,r:12},anchor:{x:101,y:190},side:'B',label:'-',pol:'DC-'}]});
+const flatLampScrewTerminals=()=>[
+  {id:'+',x:72,y:33,visual:{x:72,y:33},hit:{x:72,y:33,r:12},anchor:{x:72,y:0},side:'T',label:'+',pol:'DC+'},
+  {id:'-',x:108,y:33,visual:{x:108,y:33},hit:{x:108,y:33,r:12},anchor:{x:108,y:0},side:'T',label:'-',pol:'DC-'}
+];
+Object.assign(LIB['LAMP-G'],{w:180,h:180,image:CODEX_BOM+'lamp-green-flat-screw-v1.png',imageBox:{x:0,y:0,w:180,h:180},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:true,
+  assetId:'codex:lamp-green-flat-screw-v1',assetApproval:'educational',terminals:flatLampScrewTerminals()});
+Object.assign(LIB['LAMP-Y'],{w:180,h:180,image:CODEX_BOM+'lamp-yellow-flat-screw-v1.png',imageBox:{x:0,y:0,w:180,h:180},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:true,
+  assetId:'codex:lamp-yellow-flat-screw-v1',assetApproval:'educational',terminals:flatLampScrewTerminals()});
+Object.assign(LIB['LAMP-W'],{w:180,h:180,image:CODEX_BOM+'lamp-white-flat-screw-v1.png',imageBox:{x:0,y:0,w:180,h:180},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:true,
+  assetId:'codex:lamp-white-flat-screw-v1',assetApproval:'educational',terminals:flatLampScrewTerminals()});
+Object.assign(LIB['LAMP'],{w:180,h:180,image:CODEX_BOM+'lamp-yellow-flat-screw-v1.png',imageBox:{x:0,y:0,w:180,h:180},imagePreserveAspectRatio:'xMidYMid meet',imageHasLabels:true,
+  assetId:'codex:lamp-yellow-flat-screw-v1',assetApproval:'educational',terminals:flatLampScrewTerminals()});
 Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',imageBox:{x:0,y:0,w:170,h:220},imageHasLabels:false,
   terminals:[{id:'+',x:55,y:25,side:'T',label:'+',pol:'DC+'},{id:'-',x:115,y:195,side:'B',label:'-',pol:'DC-'}]});
 
@@ -3243,20 +3304,27 @@ Object.assign(LIB['BUZZER'],{w:170,h:220,image:CODEX+'buzzer-codex-clean.png',im
     ]
   });
 
-  // 28-32) 램프/버저 — 하단 2나사 실측
-  const lampTerms=[
-    {id:'+',x:52,y:190,side:'B',label:'+',pol:'DC+'},
-    {id:'-',x:118,y:194,side:'B',label:'-',pol:'DC-'},
-  ];
-  for(const t of ['LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER']){
+  // 28-31) 평면 램프 — 이미지 상단의 +/- 나사 중심에 클릭 단자 정렬
+  for(const t of ['LAMP-G','LAMP-Y','LAMP-W','LAMP']){
     if(!LIB[t])continue;
     Object.assign(LIB[t],{
-      w:170,h:220,
-      imageBox:{x:0,y:0,w:170,h:220},
-      imageHasLabels:false,
-      terminals:lampTerms.map(x=>({...x}))
+      w:180,h:180,
+      imageBox:{x:0,y:0,w:180,h:180},
+      imageHasLabels:true,
+      terminals:flatLampScrewTerminals()
     });
   }
+
+  // 32) 버저 — 기존 하단 2나사 배치 유지
+  if(LIB['BUZZER'])Object.assign(LIB['BUZZER'],{
+    w:170,h:220,
+    imageBox:{x:0,y:0,w:170,h:220},
+    imageHasLabels:false,
+    terminals:[
+      {id:'+',x:52,y:190,side:'B',label:'+',pol:'DC+'},
+      {id:'-',x:118,y:194,side:'B',label:'-',pol:'DC-'}
+    ]
+  });
 
   // 33) EXP2 후면 단자 — 하단 전원/통신 블록
   Object.assign(LIB['EXP2-700'],{
@@ -3439,7 +3507,7 @@ function terminalHitRadius(def,t){
   return t.r || (def.terminals.length>32 ? 7.2 : 8.5);
 }
 /** 교육용 기본 등록 타입(초기 스냅샷). 보정 시 다른 장비 타입도 자동 추가됨 */
-const TERMINAL_DATA_DEVICE_TYPES=['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DN32H','XBC-DR32H','EXP2-700','XBL-C41A','MDR-100','XBF-AH04A','XBF-PD02A','EOCR','MC','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
+const TERMINAL_DATA_DEVICE_TYPES=['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DN32H','XBC-DR32H','EXP2-700','XBL-C41A','MDR-100','XBF-AH04A','XBF-PD02A','EOCR','MC','MC-22B-DC24','MY2N','RELAY-8P','RELAY-14P','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI','IG5A','POS-MOD','SERVO-DRV','SERVO-MOTOR','LINEAR-RAIL','MCCB','FUSE','TB4','TB10','PB-1C','SEL-2P','SEL-3P','TIMER','FLICKER','COUNTER','PSU24','MY-MD02','LAMP-G','LAMP-Y','LAMP-W','LAMP','BUZZER'];
 const REVIEW_PROFILE_TERMINAL_TYPES=new Set(['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBC-DN32H','XBC-DR32H','EXP2-700','XBL-C41A','XBF-AH04A','XBF-PD02A','MDR-100','MC-22B-DC24','MY2N','EOCR3DE-05DUH','UT-2.5','UT-2.5-PE','UT-4-HESI']);
 const LSK_CALIB='wiring-workshop-terminal-calib-v1';
 function cloneTerminalData(value){
@@ -4568,6 +4636,7 @@ const S={
   pan:{x:0,y:0,k:1},
   draggingDev:null,
   draggingTerm:null,
+  wireDragging:null,
   boxSelect:null,
   paletteDragType:null,
   paletteDragDropped:false,
@@ -4811,6 +4880,8 @@ markDinCenterMount('XBC-DN32H',{tags:['din','plc'],minClearance:{left:24,right:2
 markDinCenterMount('MDR-100',{tags:['din','power']});
 markDinCenterMount('MC-22B-DC24',{tags:['din','power','contactor']});
 markDinCenterMount('MY2N',{tags:['din','relay','socket']});
+markDinCenterMount('RELAY-8P',{tags:['din','relay']});
+markDinCenterMount('RELAY-14P',{tags:['din','relay']});
 markDinCenterMount('EOCR3DE-05DUH',{tags:['din','power','protection']});
 markDinCenterMount('UT-2.5',{tags:['din','terminal'],terminalStrip:true,allowRepeat:true,minClearance:{left:1,right:1,top:6,bottom:6}});
 markDinCenterMount('UT-2.5-PE',{tags:['din','terminal','pe'],terminalStrip:true,allowRepeat:true,minClearance:{left:1,right:1,top:6,bottom:6}});
@@ -5777,7 +5848,7 @@ function routePanelWire(p1,p2,wire,excludeIds,laneOffset=0,routeContext=null){
   const offA=28+cableBoostForDev(wire?.from?.dev);
   const offB=28+cableBoostForDev(wire?.to?.dev);
   // 항상 장애물 회피 직각 라우팅 우선 (덕트는 routeOrtho 내부 후보로 포함)
-  return routeOrtho(p1,p2,offA,offB,wire?.waypoints,ids,laneOffset,routeContext);
+  return routeOrtho(p1,p2,offA,offB,wire?.waypoints,ids,laneOffset,routeContext,isWireRouteLocked(wire));
 }
 
 function serializeState(){
@@ -6025,9 +6096,7 @@ function applyScaleToDevices(ids, value, opts={}){
       if(def) dev.y=dinSnapY(def, rail, deviceScale(dev));
     }
   }
-  for(const w of S.wires){
-    if(idSet.has(w.from.dev)||idSet.has(w.to.dev)) w.waypoints=[];
-  }
+  clearWireWaypointsForDevices(idSet);
 }
 function deviceWorldCenter(dev){
   const wh=deviceWH(dev);
@@ -6079,9 +6148,7 @@ function updateDeviceResize(pt){
     dev.x=r.cx-wh.w/2;
     dev.y=r.cy-wh.h/2;
   }
-  for(const w of S.wires){
-    if(w.from.dev===r.id||w.to.dev===r.id) w.waypoints=[];
-  }
+  clearWireWaypointsForDevices([r.id]);
   renderDevices();
   renderWires();
   status(`크기 ${Math.round(next*100)}% · 손을 떼면 확정`);
@@ -8687,7 +8754,7 @@ function pickSafeRoute(candidates, obs, endpointIds,occupiedSegments=[]){
   // 안전 경로 없으면 null — 호출측에서 채널 A* 시도
   return null;
 }
-function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=0,routeContext=null){
+function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=0,routeContext=null,lockRoute=false){
   // 겹친 장비 위 단자라도 실제 와이어의 명시적 끝점 장비를 우선한다.
   const devA=excludeIds?.[0] || findDeviceAtPoint(p1) || null;
   const devB=excludeIds?.[1] || findDeviceAtPoint(p2) || null;
@@ -8870,7 +8937,7 @@ function routeOrtho(p1,p2,offsetA=28,offsetB=28,waypoints,excludeIds,laneOffset=
     // 전용 레인이 좁은 장비 간격을 닫은 경우에는 기본 리드아웃으로 한 번 더
     // 탐색한다. 점유 비용은 그대로 유지되므로 가능한 다른 통로가 우선된다.
     if(Math.abs(laneOffset)>0.1){
-      return routeOrtho(p1,p2,offsetA,offsetB,waypoints,excludeIds,0,routeContext);
+      return routeOrtho(p1,p2,offsetA,offsetB,waypoints,excludeIds,0,routeContext,lockRoute);
     }
     // 관통 경로를 그려 정상처럼 보이게 하지 않는다. 양 끝 스텁만 표시하면
     // 사용자는 ROUTE_BLOCKED_BY_OBSTACLES 상태를 보고 장비 간격을 넓힐 수 있다.
@@ -9012,6 +9079,95 @@ function editWireFerrule(w,endpoint){
   status(`압착단자 번호 저장 · ${w.id} ${endpoint==='from'?'시작':'종단'} = ${value}`);
 }
 
+function snapWirePoint(point){
+  return {x:Math.round(point.x/10)*10,y:Math.round(point.y/10)*10};
+}
+function closestPointOnWirePath(path,point){
+  const total=Number(path?.getTotalLength?.())||0;
+  if(!total)return {point:{...point},offset:0};
+  const steps=Math.max(24,Math.min(240,Math.ceil(total/12)));
+  let bestOffset=0,bestPoint=path.getPointAtLength(0),bestDistance=Infinity;
+  for(let i=0;i<=steps;i++){
+    const offset=total*i/steps;
+    const sample=path.getPointAtLength(offset);
+    const distance=Math.hypot(sample.x-point.x,sample.y-point.y);
+    if(distance<bestDistance){bestDistance=distance;bestOffset=offset;bestPoint=sample;}
+  }
+  let span=total/steps;
+  for(let pass=0;pass<7;pass++){
+    const left=Math.max(0,bestOffset-span),right=Math.min(total,bestOffset+span);
+    for(let i=0;i<=8;i++){
+      const offset=left+(right-left)*i/8;
+      const sample=path.getPointAtLength(offset);
+      const distance=Math.hypot(sample.x-point.x,sample.y-point.y);
+      if(distance<bestDistance){bestDistance=distance;bestOffset=offset;bestPoint=sample;}
+    }
+    span/=3;
+  }
+  return {point:{x:bestPoint.x,y:bestPoint.y},offset:bestOffset};
+}
+function wireWaypointInsertIndex(path,wire,point){
+  const offset=closestPointOnWirePath(path,point).offset;
+  const waypointOffsets=(wire.waypoints||[]).map(wp=>closestPointOnWirePath(path,wp).offset);
+  const nextIndex=waypointOffsets.findIndex(existing=>existing>offset+0.5);
+  return nextIndex<0?waypointOffsets.length:nextIndex;
+}
+function wirePathElement(wireId){
+  return elWire.querySelector(`path.wire-hit[data-id="${CSS.escape(wireId)}"]`)
+    ||elWire.querySelector(`path.wire[data-id="${CSS.escape(wireId)}"]`);
+}
+function beginWireWaypointInsert(wireId,point,path=null){
+  const wire=S.wires.find(w=>w.id===wireId);
+  if(!wire)return false;
+  if(isWireRouteLocked(wire)){
+    status(`🔒 ${wire.id} 경로가 고정되어 있습니다 · K 또는 고정 버튼으로 해제하세요`);
+    return false;
+  }
+  const snapped=snapWirePoint(point);
+  if(!Array.isArray(wire.waypoints))wire.waypoints=[];
+  const duplicateIndex=wire.waypoints.findIndex(wp=>Math.hypot(wp.x-snapped.x,wp.y-snapped.y)<6);
+  snapshot();
+  let waypointIndex=duplicateIndex;
+  if(waypointIndex<0){
+    const routePath=path||wirePathElement(wireId);
+    waypointIndex=routePath?wireWaypointInsertIndex(routePath,wire,snapped):wire.waypoints.length;
+    wire.waypoints.splice(waypointIndex,0,snapped);
+  }
+  S.selWire=wireId;S.selDev=null;S.selDevs.clear();
+  S.wireDragging={wireId,wpIdx:waypointIndex,created:duplicateIndex<0,moved:false};
+  renderWires();
+  status(`경로점 ${waypointIndex+1} ${duplicateIndex<0?'추가':'선택'} · 드래그로 이동한 뒤 K 또는 📌 선 고정`);
+  return true;
+}
+function removeWireWaypoint(wireId,waypointIndex){
+  const wire=S.wires.find(w=>w.id===wireId);
+  if(!wire||!Array.isArray(wire.waypoints)||!wire.waypoints[waypointIndex])return false;
+  if(isWireRouteLocked(wire)){
+    status(`🔒 ${wire.id} 경로가 고정되어 있습니다 · 먼저 고정을 해제하세요`);
+    return false;
+  }
+  snapshot();
+  wire.waypoints.splice(waypointIndex,1);
+  renderWires();
+  status(`경로점 제거 · 남은 점 ${wire.waypoints.length}개`);
+  return true;
+}
+function wireSegmentMidpoints(pathData){
+  const points=[];
+  const regex=/([ML])\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g;
+  let match,previous=null;
+  while((match=regex.exec(pathData||''))){
+    const command=match[1],point={x:Number(match[2]),y:Number(match[3])};
+    if(command==='L'&&previous){
+      const length=Math.hypot(point.x-previous.x,point.y-previous.y);
+      if(length>=36)points.push({x:(point.x+previous.x)/2,y:(point.y+previous.y)/2,length});
+    }
+    previous=point;
+    if(command==='M')previous=point;
+  }
+  return points.slice(0,18);
+}
+
 function renderWires(){
   elWire.innerHTML='';
   // 와이어 인덱스 약간씩 오프셋해 겹침 분산
@@ -9069,20 +9225,23 @@ function renderWires(){
       if(isPanelConstrained() && Object.keys(S.ducts||{}).length && !(w.waypoints&&w.waypoints.length)){
         d=routePanelWire(pa,pb,w,[w.from.dev,w.to.dev],laneOffset,routeContext);
       }else{
-        d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset,routeContext);
+        d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset,routeContext,isWireRouteLocked(w));
       }
     }else{
-      d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset,routeContext);
+      d=routeOrtho(pa,pb,offA,offB,w.waypoints,[w.from.dev,w.to.dev],laneOffset,routeContext,isWireRouteLocked(w));
     }
     const routeBlocked=(d.match(/\bM\b/g)||[]).length>1;
     if(!routeBlocked)rememberWireRoute(d,w.id,routeContext.occupiedSegments);
     const hitPath=document.createElementNS(SVGNS,'path');
     hitPath.setAttribute('d',d);
-    hitPath.setAttribute('class','wire wire-hit'+(routeBlocked?' route-blocked':''));
+    hitPath.setAttribute('class','wire wire-hit'
+      +(routeBlocked?' route-blocked':'')
+      +(isWireRouteLocked(w)?' route-locked':'')
+      +(S.selWire===w.id&&!isWireRouteLocked(w)?' editable':''));
     hitPath.dataset.id=w.id;
     elWire.appendChild(hitPath);
     let stroke=w.color||'#222';
-    if(stroke==='auto' || S.autoColor){
+    if(stroke==='auto' || (S.autoColor&&!w.manualColor)){
       // 자동 모드: 현재 단자 극성 기준으로 전원/신호 색 재적용
       const fa=termAbs(a,w.from.term), fb=termAbs(b,w.to.term);
       const fromT=terminalDescriptor(w.from)?.term;
@@ -9096,6 +9255,7 @@ function renderWires(){
     pathOuter.setAttribute('d',d);
     let cls='wire';
     if(S.selWire===w.id)cls+=' sel';
+    if(isWireRouteLocked(w))cls+=' route-locked';
     if(isErr)cls+=' error';
     if(routeBlocked)cls+=' route-blocked';
     if(highlightedWires.has(w.id))cls+=' highlight';
@@ -9214,31 +9374,46 @@ function renderWires(){
       const pinA=termAbs(a,w.from.term), pinB=termAbs(b,w.to.term);
       drawMountedCableAssembly(w, pinA, pinB, fromDef, toDef, stroke);
     }
-    /* 선택된 와이어에 컨트롤포인트 핸들 표시 (드래그용) */
+    /* 선택된 와이어: 선분 클릭용 + 핸들, 기존 경유점 드래그, 경로 잠금 표시 */
     if(S.selWire===w.id && S.routerOrtho){
       const wps=w.waypoints||[];
-      // 기본 미드포인트 핸들 (waypoint 없을 때)
-      if(wps.length===0){
-        const mp={x:(pa.x+pb.x)/2, y:(pa.y+pb.y)/2};
+      const locked=isWireRouteLocked(w);
+      if(!locked){
+        for(const midpoint of wireSegmentMidpoints(d)){
+          if(wps.some(wp=>Math.hypot(wp.x-midpoint.x,wp.y-midpoint.y)<16))continue;
+          const handle=document.createElementNS(SVGNS,'circle');
+          handle.setAttribute('cx',midpoint.x);handle.setAttribute('cy',midpoint.y);handle.setAttribute('r',4.5);
+          handle.setAttribute('class','wire-insert-handle');
+          handle.dataset.wireId=w.id;
+          const title=document.createElementNS(SVGNS,'title');title.textContent='클릭하거나 드래그해 이 구간에 경로점 추가';handle.appendChild(title);
+          elWire.appendChild(handle);
+          const plus=document.createElementNS(SVGNS,'text');
+          plus.setAttribute('x',midpoint.x);plus.setAttribute('y',midpoint.y+.3);plus.setAttribute('class','wire-insert-plus');plus.textContent='+';
+          elWire.appendChild(plus);
+        }
+      }
+      wps.forEach((wp,i)=>{
         const h=document.createElementNS(SVGNS,'circle');
-        h.setAttribute('cx',mp.x); h.setAttribute('cy',mp.y); h.setAttribute('r',5);
-        h.setAttribute('fill','#fff'); h.setAttribute('stroke','#f60'); h.setAttribute('stroke-width',2);
-        h.setAttribute('class','wire-handle'); h.style.cursor='move';
-        h.dataset.wireId=w.id; h.dataset.wpIdx='-1';  // 새로 만들어야 함
+        h.setAttribute('cx',wp.x); h.setAttribute('cy',wp.y); h.setAttribute('r',locked?5.5:5);
+        h.setAttribute('class','wire-handle'+(locked?' locked':''));
+        h.dataset.wireId=w.id; h.dataset.wpIdx=i;
+        const title=document.createElementNS(SVGNS,'title');
+        title.textContent=locked?'고정된 경로점 · K로 경로 고정 해제':'드래그로 이동 · 더블클릭으로 제거';
+        h.appendChild(title);
         elWire.appendChild(h);
-      } else {
-        wps.forEach((wp,i)=>{
-          const h=document.createElementNS(SVGNS,'circle');
-          h.setAttribute('cx',wp.x); h.setAttribute('cy',wp.y); h.setAttribute('r',5);
-          h.setAttribute('fill','#fff'); h.setAttribute('stroke','#f60'); h.setAttribute('stroke-width',2);
-          h.setAttribute('class','wire-handle'); h.style.cursor='move';
-          h.dataset.wireId=w.id; h.dataset.wpIdx=i;
-          elWire.appendChild(h);
-        });
+      });
+      if(locked){
+        const badge=document.createElementNS(SVGNS,'circle');
+        badge.setAttribute('cx',mx);badge.setAttribute('cy',my-18);badge.setAttribute('r',9);badge.setAttribute('class','wire-lock-badge');
+        elWire.appendChild(badge);
+        const lockText=document.createElementNS(SVGNS,'text');
+        lockText.setAttribute('x',mx);lockText.setAttribute('y',my-17.5);lockText.setAttribute('class','wire-lock-badge-text');lockText.textContent='🔒';
+        const title=document.createElementNS(SVGNS,'title');title.textContent='경로 고정됨';lockText.appendChild(title);elWire.appendChild(lockText);
       }
     }
   }
   $('#wcounter').textContent=S.wires.length;
+  syncSelectionLockUI();
 }
 
 function render(){
@@ -10692,8 +10867,8 @@ function tidyLayout(){
     }
     cy += rowH + GAP*2;
   }
-  // 와이어 waypoint는 부품 위치 변경시 무효화
-  for(const w of S.wires) w.waypoints=[];
+  // 사용자가 고정한 수동 경로는 유지하고 나머지만 새 배치에 맞게 재계산한다.
+  for(const w of S.wires)if(!isWireRouteLocked(w))w.waypoints=[];
   render(); zoomFit();
   refreshTrainerUI();
   status(lockedSkip?`🧹 정렬 완료 (고정 ${lockedSkip}개는 유지)`:'🧹 카테고리별 자동 정렬 완료');
@@ -10703,11 +10878,15 @@ function tidyLayout(){
 function organizeWireRoutes(){
   if(!S.wires.length){status('정리할 결선이 없습니다');return;}
   snapshot();
-  for(const w of S.wires) w.waypoints=[];
+  let protectedCount=0;
+  for(const w of S.wires){
+    if(isWireRouteLocked(w)){protectedCount++;continue;}
+    w.waypoints=[];
+  }
   S.routerOrtho=true;
   $('#b-router')?.classList.add('active');
   renderWires();
-  status(`🧹 선 정리 완료 · ${S.wires.length}가닥을 장비 우회 배선 레인으로 재계산했습니다 (Ctrl+Z로 복원)`);
+  status(`🧹 선 정리 완료 · ${S.wires.length-protectedCount}가닥 재계산${protectedCount?` · 고정 ${protectedCount}가닥 유지`:''} (Ctrl+Z로 복원)`);
 }
 
 /* PNG 내보내기 (D) */
@@ -10830,6 +11009,75 @@ function toggleSelectedDeviceLock(){
   setDevicesLocked(ids, !allLocked);
 }
 
+/** 선택 와이어의 수동 경유점을 자동 변형·드래그에서 보호한다. */
+function selectedWire(){
+  return S.selWire?S.wires.find(w=>w.id===S.selWire)||null:null;
+}
+function isWireRouteLocked(wireOrId){
+  const wire=typeof wireOrId==='string'?S.wires.find(w=>w.id===wireOrId):wireOrId;
+  return !!wire?.routeLocked;
+}
+function setWireRouteLocked(wireId,locked){
+  const wire=S.wires.find(w=>w.id===wireId);
+  if(!wire){status('고정할 선을 먼저 선택하세요');return false;}
+  snapshot();
+  wire.routeLocked=!!locked;
+  S.wireDragging=null;
+  render();
+  status(locked
+    ? `🔒 ${wire.id} 경로 고정 · 경로점 이동과 자동 선 정리에서 보호됩니다`
+    : `🔓 ${wire.id} 경로 고정 해제 · 선을 클릭해 경로점을 추가하거나 드래그하세요`);
+  return true;
+}
+function setWireManualColor(wireId,color){
+  const wire=S.wires.find(w=>w.id===wireId);
+  if(!wire){status('색상을 변경할 선을 먼저 선택하세요');return false;}
+  snapshot();
+  if(color==='auto'){
+    wire.color='auto';
+    wire.manualColor=false;
+  }else{
+    wire.color=color;
+    wire.manualColor=true;
+  }
+  renderWires();
+  const names={auto:'자동', '#8b4513':'갈색', '#111111':'검정', '#6b7280':'회색', '#15803d':'초록', '#facc15':'노랑', '#dc2626':'빨강', '#2563eb':'파랑', '#f97316':'주황'};
+  status(`🎨 ${wire.tag||wire.id} 선 색상: ${names[color]||color}${color==='auto'?' (단자 역할 기준)':''}`);
+  return true;
+}
+function toggleSelectedLock(){
+  const wire=selectedWire();
+  if(wire){setWireRouteLocked(wire.id,!isWireRouteLocked(wire));return;}
+  toggleSelectedDeviceLock();
+}
+function syncSelectionLockUI(){
+  const button=$('#b-lock');
+  if(!button)return;
+  const wire=selectedWire();
+  if(wire){
+    const locked=isWireRouteLocked(wire);
+    button.textContent=locked?'🔓 선 해제':'📌 선 고정';
+    button.title=locked?'선택 선 경로 고정 해제 (K)':'선택 선의 현재 경유점 경로 고정 (K)';
+    button.classList.toggle('active',locked);
+    return;
+  }
+  const ids=selectedDeviceIds();
+  const locked=ids.length>0&&ids.every(id=>isDeviceLocked(id));
+  button.textContent=locked?'🔓 위치 해제':'🔒 고정';
+  button.title='선택 부품 위치 또는 선택 선 경로 고정/해제 (K)';
+  button.classList.toggle('active',locked);
+}
+function clearWireWaypointsForDevices(deviceIds){
+  const ids=deviceIds instanceof Set?deviceIds:new Set(deviceIds||[]);
+  let cleared=0,protectedCount=0;
+  for(const wire of S.wires){
+    if(!ids.has(wire.from.dev)&&!ids.has(wire.to.dev))continue;
+    if(isWireRouteLocked(wire)){protectedCount++;continue;}
+    if(wire.waypoints?.length){wire.waypoints=[];cleared++;}
+  }
+  return {cleared,protectedCount};
+}
+
 /** 장비 표시 배율 (0.35~3.0) */
 function deviceScale(dev){
   const s=Number(dev?.scale);
@@ -10898,6 +11146,17 @@ const EXACT_MANUAL_DEVICE_TYPES=new Set([
 ]);
 const PROFILE_ONLY_DEVICE_TYPES=new Set(['XBC-DN32UP','XBC-DN60SU','XBC-DP32UP','XBL-C41A','XBF-PD02A']);
 const FAMILY_MANUAL_DEVICE_TYPES=new Set(['IG5A','SERVO-DRV','MC','EOCR']);
+const PALETTE_QUALITY_KEEP_TYPES=new Set(['RELAY-8P','RELAY-14P','XBC-DR64H','XBC-DN64H']);
+const PALETTE_LOW_QUALITY_TYPES=new Set(['PSU24']);
+function isPaletteQualityHidden(type,def){
+  if(def?.hidden)return true;
+  const identity=`${type} ${def?.label||''}`;
+  if(PALETTE_QUALITY_KEEP_TYPES.has(type)||/(?:^|[-\s])64H(?:$|[-\s])/i.test(identity))return false;
+  return def?.reviewBoundary===true
+    || PROFILE_ONLY_DEVICE_TYPES.has(type)
+    || PALETTE_LOW_QUALITY_TYPES.has(type)
+    || !def?.image;
+}
 function paletteManualStatus(type){
   if(type.startsWith('BOUNDARY-'))return {kind:'boundary',label:'시험 경계 · 제품 아님'};
   if(PROFILE_ONLY_DEVICE_TYPES.has(type))return {kind:'family',label:'공식 핀 확인 · 검토 기능 미완'};
@@ -10937,7 +11196,7 @@ function buildPalette(){
     });
     el.appendChild(h);
     for(const [type,def] of Object.entries(LIB)){
-      if(def.hidden)continue;
+      if(isPaletteQualityHidden(type,def))continue;
       if(def.cat!==cat)continue;
       const d=document.createElement('div');
       d.className='pal'; d.dataset.cat=cat; d.dataset.search=(def.label+' '+(def.sub||'')+' '+type).toLowerCase();
@@ -11183,20 +11442,28 @@ elSvg.addEventListener('mousedown',e=>{
       }
     }
   }
-  // 와이어 핸들 드래그
+  // 선택 선의 각 구간에 표시되는 + 핸들: 누른 지점에 경유점을 만들고 즉시 드래그
+  if(e.target.classList.contains('wire-insert-handle')){
+    if(e.button!==0)return;
+    const wid=e.target.dataset.wireId;
+    e.preventDefault();e.stopPropagation();
+    beginWireWaypointInsert(wid,svgPt(e),wirePathElement(wid));
+    return;
+  }
+  // 기존 와이어 경유점 드래그
   if(e.target.classList.contains('wire-handle')){
+    if(e.button!==0)return;
     const wid=e.target.dataset.wireId;
     const wpIdx=parseInt(e.target.dataset.wpIdx);
     const w=S.wires.find(x=>x.id===wid);
     if(!w)return;
-    snapshot();
-    if(wpIdx===-1){
-      // 신규 waypoint 생성
-      w.waypoints=[svgPt(e)];
-      S.wireDragging={wireId:wid, wpIdx:0};
-    } else {
-      S.wireDragging={wireId:wid, wpIdx};
+    if(isWireRouteLocked(w)){
+      status(`🔒 ${w.id} 경로가 고정되어 있습니다 · K 또는 고정 버튼으로 해제하세요`);
+      return;
     }
+    snapshot();
+    S.wireDragging={wireId:wid,wpIdx,created:false,moved:false};
+    e.preventDefault();e.stopPropagation();
     return;
   }
   // 단자 클릭/드래그 결선
@@ -11227,14 +11494,12 @@ elSvg.addEventListener('mousedown',e=>{
   if(e.target.classList.contains('wire')){
     const wid=e.target.dataset.id;
     if(S.selWire===wid){
-      snapshot();
-      S.wires=S.wires.filter(w=>w.id!==wid);
-      clearSelection();
-      render(); status('와이어 삭제');
+      e.preventDefault();e.stopPropagation();
+      beginWireWaypointInsert(wid,svgPt(e),e.target);
       return;
     }
     S.selWire=wid; S.selDev=null; S.selDevs.clear();
-    render(); status('와이어 선택 — 한 번 더 클릭하면 삭제, 흰 점 드래그로 경로 조정');
+    render(); status('와이어 선택 · 원하는 선 구간을 클릭해 점 추가 → 드래그 이동 → K 또는 📌 선 고정 · Delete=선 삭제');
     return;
   }
   // 부품 드래그
@@ -11353,9 +11618,12 @@ elSvg.addEventListener('mousemove',e=>{
   }
   if(S.wireDragging){
     const w=S.wires.find(x=>x.id===S.wireDragging.wireId);
-    if(w && w.waypoints){
+    if(w && w.waypoints && !isWireRouteLocked(w)){
       // 그리드 스냅
-      w.waypoints[S.wireDragging.wpIdx]={x:Math.round(pt.x/10)*10, y:Math.round(pt.y/10)*10};
+      const next=snapWirePoint(pt);
+      const current=w.waypoints[S.wireDragging.wpIdx];
+      if(!current||current.x!==next.x||current.y!==next.y)S.wireDragging.moved=true;
+      w.waypoints[S.wireDragging.wpIdx]=next;
       scheduleInteractiveRender({wires:true});
     }
     return;
@@ -11479,6 +11747,14 @@ elSvg.addEventListener('mouseup',e=>{
     }
     return;
   }
+  if(S.wireDragging){
+    const drag=S.wireDragging;
+    const wire=S.wires.find(w=>w.id===drag.wireId);
+    S.wireDragging=null;
+    renderWires();
+    status(`경로점 ${drag.wpIdx+1} 위치 확정${wire?.waypoints?.[drag.wpIdx]?` (${wire.waypoints[drag.wpIdx].x}, ${wire.waypoints[drag.wpIdx].y})`:''} · K 또는 📌 선 고정으로 보호`);
+    return;
+  }
   if(S.boxSelect){
     const active=S.boxSelect.active;
     const count=selectedDeviceIds().length;
@@ -11516,7 +11792,7 @@ elSvg.addEventListener('mouseup',e=>{
     S.draggingDev=null;
     render();
   }
-  S.panning=null; S.wireDragging=null;
+  S.panning=null;
   // 시뮬 모드: PB 떼기
   if(SIM.on && SIM.pressed.size){
     SIM.pressed.clear();
@@ -11542,7 +11818,8 @@ elSvg.addEventListener('mouseleave',()=>{
     const d=S.devices[item.id];
     if(d){d.x=item.x;d.y=item.y;}
   }
-  S.draggingDev=null;S.panning=null;S.draggingTerm=null;S.boxSelect=null;S.resizingDev=null;
+  const abandonedWireDrag=!!S.wireDragging;
+  S.draggingDev=null;S.panning=null;S.draggingTerm=null;S.wireDragging=null;S.boxSelect=null;S.resizingDev=null;
   if(elOverlay)elOverlay.innerHTML='';
   if(elSelectBox)elSelectBox.style.display='none';
   if(wasDraggingTerm&&S.pending){
@@ -11552,6 +11829,9 @@ elSvg.addEventListener('mouseleave',()=>{
     }else{
       cancelPendingWire('캔버스를 벗어나 드래그 결선을 취소했습니다');
     }
+  }else if(abandonedWireDrag){
+    renderWires();
+    status('경로점 이동 종료 · K 또는 📌 선 고정으로 현재 경로를 보호할 수 있습니다');
   }
 });
 
@@ -11571,6 +11851,12 @@ elSvg.addEventListener('wheel',e=>{
 },{passive:false});
 
 elSvg.addEventListener('dblclick',e=>{
+  const wireHandle=e.target.closest?.('.wire-handle');
+  if(wireHandle){
+    e.preventDefault();e.stopPropagation();
+    removeWireWaypoint(wireHandle.dataset.wireId,Number(wireHandle.dataset.wpIdx));
+    return;
+  }
   const g=e.target.closest('.device');
   if(!g)return;
   const devId=g.dataset.id;
@@ -11602,6 +11888,15 @@ elSvg.addEventListener('dblclick',e=>{
 
 // 우클릭 컨텍스트 메뉴 (단자 추가/삭제 + 회전/색상)
 elSvg.addEventListener('contextmenu',e=>{
+  const wireEl=e.target.closest?.('.wire, .wire-handle, .wire-insert-handle');
+  const wireId=wireEl?.dataset?.id||wireEl?.dataset?.wireId;
+  if(wireId&&S.wires.some(w=>w.id===wireId)){
+    e.preventDefault();
+    S.selWire=wireId;S.selDev=null;S.selDevs.clear();
+    renderWires();
+    showWireContextMenu(e.clientX,e.clientY,wireId);
+    return;
+  }
   const termEl=e.target.closest?.('.terminal, .terminal-hit, .calib-anchor');
   const g=e.target.closest('.device') || (termEl?.dataset?.id ? elDev.querySelector(`.device[data-id="${termEl.dataset.id}"]`) : null);
   // 단자에 우클릭한 경우 장비 id/term 추출
@@ -11634,6 +11929,60 @@ function ctxMenuSep(menu){
   const s=document.createElement('div');
   s.style.cssText='height:1px;background:#444;margin:6px 0';
   menu.appendChild(s);
+}
+
+function showWireContextMenu(px,py,wireId){
+  document.querySelectorAll('.ctx-menu').forEach(x=>x.remove());
+  const wire=S.wires.find(w=>w.id===wireId);
+  if(!wire)return;
+  const menu=document.createElement('div');
+  menu.className='ctx-menu';
+  menu.style.cssText=`position:fixed;left:${px}px;top:${py}px;background:#222;border:1px solid #555;
+    border-radius:4px;padding:6px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.5);font-size:11px;color:#ddd;min-width:230px`;
+  const title=document.createElement('div');
+  title.textContent=`${wire.tag||wire.id} · 경로점 ${(wire.waypoints||[]).length}개`;
+  title.style.cssText='font-weight:800;color:#9cf;padding:4px 8px 7px';menu.appendChild(title);
+  const colorTitle=document.createElement('div');
+  colorTitle.textContent='선 색상 변경';
+  colorTitle.style.cssText='font-weight:700;color:#ddd;padding:3px 8px 1px';menu.appendChild(colorTitle);
+  const colorPalette=document.createElement('div');
+  colorPalette.className='wire-color-palette';
+  const colors=[
+    ['auto','자동'],['#8b4513','갈색'],['#111111','검정'],['#6b7280','회색'],
+    ['#15803d','초록'],['#facc15','노랑'],['#dc2626','빨강'],['#2563eb','파랑'],['#f97316','주황']
+  ];
+  for(const [color,label] of colors){
+    const chip=document.createElement('button');
+    chip.type='button';chip.className='wire-color-chip';chip.title=label;chip.setAttribute('aria-label',`선 색상 ${label}`);
+    chip.style.background=color==='auto'
+      ? 'linear-gradient(135deg,#8b4513 0 20%,#111 20% 40%,#6b7280 40% 60%,#15803d 60% 80%,#facc15 80%)'
+      : color;
+    const active=color==='auto'?!wire.manualColor:wire.manualColor&&String(wire.color).toLowerCase()===color;
+    chip.classList.toggle('active',active);
+    chip.onclick=event=>{event.preventDefault();event.stopPropagation();menu.remove();setWireManualColor(wireId,color);};
+    colorPalette.appendChild(chip);
+  }
+  menu.appendChild(colorPalette);
+  ctxMenuSep(menu);
+  const locked=isWireRouteLocked(wire);
+  ctxMenuItem(menu,locked?'🔓 선 경로 고정 해제 (K)':'📌 현재 선 경로 고정 (K)',()=>setWireRouteLocked(wireId,!locked),{accent:true});
+  ctxMenuItem(menu,'＋ 선을 클릭해 경로점 추가',()=>{
+    S.selWire=wireId;renderWires();
+    status('원하는 선 구간을 클릭해 경로점을 추가하고 드래그하세요');
+  },{disabled:locked});
+  ctxMenuItem(menu,'○ 경로점 모두 지우고 자동 경로로',()=>{
+    if(isWireRouteLocked(wire)){status('먼저 선 경로 고정을 해제하세요');return;}
+    snapshot();wire.waypoints=[];renderWires();status(`${wire.id} 수동 경로점을 모두 지웠습니다`);
+  },{disabled:locked||!(wire.waypoints||[]).length});
+  ctxMenuSep(menu);
+  ctxMenuItem(menu,'🗑 선 삭제 (Delete)',()=>{
+    snapshot();S.wires=S.wires.filter(w=>w.id!==wireId);clearSelection();render();status('와이어 삭제');
+  },{danger:true});
+  document.body.appendChild(menu);
+  const rect=menu.getBoundingClientRect();
+  if(rect.right>innerWidth)menu.style.left=Math.max(4,innerWidth-rect.width-4)+'px';
+  if(rect.bottom>innerHeight)menu.style.top=Math.max(4,innerHeight-rect.height-4)+'px';
+  setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
 }
 
 function openDeviceRuntimeConfig(devId){
@@ -11850,7 +12199,7 @@ function showDeviceContextMenu(px,py,devId,def,ctx={}){
       const dev=S.devices[devId];
       if(deg===0) dev.rot=0;
       else dev.rot=((dev.rot||0)+deg+360)%360;
-      for(const w of S.wires){ if(w.from.dev===devId||w.to.dev===devId) w.waypoints=[]; }
+      clearWireWaypointsForDevices([devId]);
       menu.remove(); render();
     };
     rotRow.appendChild(b);
@@ -12111,7 +12460,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='l'||e.key==='L'){document.body.classList.toggle('hide-left');}
   if(!e.ctrlKey && !e.metaKey && (e.key==='k'||e.key==='K')){
     e.preventDefault();
-    toggleSelectedDeviceLock();
+    toggleSelectedLock();
     return;
   }
   if(e.key==='r'||e.key==='R'){
@@ -12122,9 +12471,7 @@ document.addEventListener('keydown',e=>{
       const dev=S.devices[S.selDev];
       dev.rot = ((dev.rot||0)+90)%360;
       // 와이어 waypoint는 무효화 (회전 후 어색해지므로)
-      for(const w of S.wires){
-        if(w.from.dev===S.selDev || w.to.dev===S.selDev) w.waypoints=[];
-      }
+      clearWireWaypointsForDevices([S.selDev]);
       render(); status('🔄 90도 회전 ('+dev.rot+'°)');
     } else {
       // 패널 토글
@@ -12255,15 +12602,15 @@ $('#b-rotate').onclick=()=>{
   snapshot();
   const dev=S.devices[S.selDev];
   dev.rot = ((dev.rot||0)+90)%360;
-  for(const w of S.wires){ if(w.from.dev===S.selDev||w.to.dev===S.selDev) w.waypoints=[]; }
+  clearWireWaypointsForDevices([S.selDev]);
   render(); status('🔄 회전 ('+dev.rot+'°)');
 };
-$('#b-lock')?.addEventListener('click',()=>toggleSelectedDeviceLock());
+$('#b-lock')?.addEventListener('click',()=>toggleSelectedLock());
 $('#b-export-img').onclick=exportPNG;
 $('#b-search').onclick=()=>{
   const q=prompt('부품 검색 (이름 일부)');
   if(!q)return;
-  const found=Object.entries(LIB).filter(([k,v])=>!v.hidden && (v.label+' '+v.sub+' '+k).toLowerCase().includes(q.toLowerCase()));
+  const found=Object.entries(LIB).filter(([k,v])=>!isPaletteQualityHidden(k,v) && (v.label+' '+v.sub+' '+k).toLowerCase().includes(q.toLowerCase()));
   if(!found.length){alert('검색 결과 없음');return;}
   if(found.length===1){snapshot();addDevice(found[0][0]);render();return;}
   const list=found.map(([k,v],i)=>`${i+1}. ${v.label}`).join('\n');
@@ -12800,7 +13147,8 @@ window.LegacyTrainerBridge={
     S.devices=nextDevices;
     S.wires=(document.wires||[]).map(wire=>({
       id:wire.id,from:{dev:wire.from.deviceId,term:wire.from.terminalId},to:{dev:wire.to.deviceId,term:wire.to.terminalId},
-      color:wire.color,tag:wire.tag,gauge:wire.gauge,waypoints:wire.waypoints
+      color:wire.color,tag:wire.tag,gauge:wire.gauge,waypoints:wire.waypoints,
+      routeLocked:!!wire.routeLocked,manualColor:!!wire.manualColor
     }));
     S.jumpers=(document.jumpers||[]).map(jumper=>({
       id:jumper.id,type:'terminal-bridge',deviceId:jumper.deviceId,terms:[...jumper.terminalIds],pol:'NEUTRAL',color:'#d33',removable:true
@@ -12844,6 +13192,17 @@ window.LegacyTrainerBridge={
   undo(){undo();},
   redo(){redo();},
   setStatus(message){status(message);},
+  readPanelPower(){return !!SIM.on;},
+  setPanelPower(on){
+    const requested=!!on;
+    if(requested===SIM.on){
+      if(requested)simulate();
+      return SIM.on;
+    }
+    if(requested)startSim();
+    else stopSim();
+    return SIM.on;
+  },
   readSelection(){return {deviceIds:selectedDeviceIds().sort()};},
   clearDeviceSelection(){
     clearSelection();

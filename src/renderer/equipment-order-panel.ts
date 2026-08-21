@@ -17,6 +17,8 @@ export interface EquipmentOrderPanelOptions {
   readonly createPanelLayout: (rows: number) => Readonly<Record<string, unknown>>;
   readonly applyOrder: (document: WorkshopDocumentV2, summary: string) => void | Promise<void>;
   readonly restoreBackup?: () => boolean | Promise<boolean>;
+  readonly getPanelPower: () => boolean;
+  readonly setPanelPower: (on: boolean) => boolean;
   readonly setStatus: (message: string) => void;
 }
 
@@ -38,7 +40,7 @@ function installStyle(targetDocument: Document): void {
   .equipment-order-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:15px 16px;border-bottom:1px solid #3d5368}.equipment-order-header h2{margin:0;font-size:18px;color:#bfe4ff}.equipment-order-header p{margin:4px 0 0;color:#9fb4c7;font-size:11px;line-height:1.45}
   .equipment-order-close{border:0;background:transparent;color:#dbe9f5;font-size:20px;cursor:pointer}.equipment-order-body{padding:14px 16px}.equipment-order-zone-note{margin:0 0 12px;padding:9px 11px;border-left:3px solid #4e91c8;background:#101b25;color:#c5d6e5;font-size:11px;line-height:1.55}
   .equipment-order-category{margin:13px 0 5px;color:#8fd0ff;font-size:12px}.equipment-order-table{width:100%;border-collapse:collapse;font-size:11px}.equipment-order-table th,.equipment-order-table td{padding:7px;border-bottom:1px solid #314354;text-align:left}.equipment-order-table th{color:#9ec9ea;background:#101b25;position:sticky;top:0}.equipment-order-table td:nth-child(2){color:#aebfce}.equipment-order-table input{width:82px;padding:7px;border:1px solid #587087;border-radius:4px;background:#09121a;color:#fff;text-align:right;font-weight:700}
-  .equipment-order-auto-wire{display:flex;align-items:center;gap:11px;margin:13px 0;padding:11px 12px;border:1px solid #3f5d73;border-radius:7px;background:#101b25;cursor:pointer}.equipment-order-auto-wire-copy{display:grid;gap:2px}.equipment-order-auto-wire-copy strong{color:#d9efff;font-size:12px}.equipment-order-auto-wire-copy small{color:#91a9ba;font-size:10px;line-height:1.45}.equipment-order-switch{position:relative;flex:0 0 auto;width:44px;height:24px}.equipment-order-switch input{position:absolute;opacity:0;pointer-events:none}.equipment-order-switch-track{position:absolute;inset:0;border:1px solid #62798c;border-radius:999px;background:#273643;transition:.16s}.equipment-order-switch-track::after{content:'';position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#c4d1db;transition:.16s}.equipment-order-switch input:checked+.equipment-order-switch-track{border-color:#54ae77;background:#24613e}.equipment-order-switch input:checked+.equipment-order-switch-track::after{transform:translateX(20px);background:#fff}.equipment-order-switch input:focus-visible+.equipment-order-switch-track{outline:2px solid #8fd0ff;outline-offset:2px}
+  .equipment-order-toggle{display:flex;align-items:center;gap:11px;margin:13px 0;padding:11px 12px;border:1px solid #3f5d73;border-radius:7px;background:#101b25;cursor:pointer}.equipment-order-auto-wire-copy{display:grid;gap:2px}.equipment-order-auto-wire-copy strong{color:#d9efff;font-size:12px}.equipment-order-auto-wire-copy small{color:#91a9ba;font-size:10px;line-height:1.45}.equipment-order-panel-power.on{border-color:#4e9d69;background:#10271b;box-shadow:inset 0 0 0 1px rgba(78,157,105,.18)}.equipment-order-panel-power.on strong{color:#8ff0ac}.equipment-order-switch{position:relative;flex:0 0 auto;width:44px;height:24px}.equipment-order-switch input{position:absolute;opacity:0;pointer-events:none}.equipment-order-switch-track{position:absolute;inset:0;border:1px solid #62798c;border-radius:999px;background:#273643;transition:.16s}.equipment-order-switch-track::after{content:'';position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#c4d1db;transition:.16s}.equipment-order-switch input:checked+.equipment-order-switch-track{border-color:#54ae77;background:#24613e}.equipment-order-switch input:checked+.equipment-order-switch-track::after{transform:translateX(20px);background:#fff}.equipment-order-switch input:focus-visible+.equipment-order-switch-track{outline:2px solid #8fd0ff;outline-offset:2px}.equipment-order-switch input:disabled+.equipment-order-switch-track{opacity:.45;cursor:not-allowed}
   .equipment-order-presets{display:flex;flex-wrap:wrap;gap:6px;margin:13px 0}.equipment-order-presets button,.equipment-order-actions button{padding:8px 11px;border:1px solid #536d84;border-radius:5px;background:#172a39;color:#edf6ff;cursor:pointer}.equipment-order-summary{min-height:44px;padding:10px;border-radius:5px;background:#0c151d;color:#bfe5c9;font-size:11px;line-height:1.5}.equipment-order-summary.invalid{color:#ffc08c;border:1px solid #8a5933}
   .equipment-order-safety{margin:10px 0 0;color:#f6cf8f;font-size:10px;line-height:1.5}.equipment-order-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #3d5368}.equipment-order-actions .confirm{background:#24613e;border-color:#4e9d69;font-weight:700}.equipment-order-actions button:disabled{opacity:.45;cursor:not-allowed}
   @media(max-width:720px){.equipment-order-table th:nth-child(2),.equipment-order-table td:nth-child(2){display:none}.equipment-order-dialog{max-height:96vh}.equipment-order-table input{width:66px}}
@@ -54,6 +56,7 @@ export function installEquipmentOrderPanel(
   let currentMode = options.getMode();
   let quantities = defaultControlPanelBomQuantities();
   let automaticWiring = true;
+  let panelPowerOn = options.getPanelPower();
   try {
     automaticWiring = targetDocument.defaultView?.localStorage.getItem(AUTO_WIRING_STORAGE_KEY) !== 'false';
   } catch {
@@ -63,7 +66,7 @@ export function installEquipmentOrderPanel(
   const launcher = targetDocument.createElement('button');
   launcher.type = 'button';
   launcher.className = 'equipment-order-launcher';
-  launcher.innerHTML = '📋 제어반 BOM 구성<small>장비별 수량 입력 → 고정 구역 배치 → I/O 자동 결선</small>';
+  launcher.innerHTML = '📋 제어반 BOM 구성<small>장비별 수량 입력 → 자동 배치/결선 → 제어반 전원 ON/OFF</small>';
 
   const backdrop = targetDocument.createElement('div');
   backdrop.className = 'equipment-order-backdrop';
@@ -97,7 +100,7 @@ export function installEquipmentOrderPanel(
   table.className = 'equipment-order-table';
   table.innerHTML = '<thead><tr><th>장비</th><th>자동 결선 용도</th><th>수량</th></tr></thead><tbody></tbody>';
   const autoWireLabel = targetDocument.createElement('label');
-  autoWireLabel.className = 'equipment-order-auto-wire';
+  autoWireLabel.className = 'equipment-order-toggle equipment-order-auto-wire';
   const switchWrap = targetDocument.createElement('span'); switchWrap.className = 'equipment-order-switch';
   const autoWireToggle = targetDocument.createElement('input');
   autoWireToggle.type = 'checkbox'; autoWireToggle.checked = automaticWiring;
@@ -109,6 +112,18 @@ export function installEquipmentOrderPanel(
   const switchHelp = targetDocument.createElement('small');
   switchHelp.textContent = '전원·차단기 구성이 없으면 첨부 예시처럼 연습용 DC24V 직접 결선을 사용합니다.';
   switchCopy.append(switchTitle, switchHelp); autoWireLabel.append(switchWrap, switchCopy);
+  const panelPowerLabel = targetDocument.createElement('label');
+  panelPowerLabel.className = 'equipment-order-toggle equipment-order-panel-power';
+  const panelPowerSwitchWrap = targetDocument.createElement('span'); panelPowerSwitchWrap.className = 'equipment-order-switch';
+  const panelPowerToggle = targetDocument.createElement('input');
+  panelPowerToggle.type = 'checkbox'; panelPowerToggle.checked = panelPowerOn;
+  panelPowerToggle.setAttribute('role', 'switch'); panelPowerToggle.setAttribute('aria-label', '제어반 전원 ON/OFF');
+  const panelPowerTrack = targetDocument.createElement('span'); panelPowerTrack.className = 'equipment-order-switch-track';
+  panelPowerSwitchWrap.append(panelPowerToggle, panelPowerTrack);
+  const panelPowerCopy = targetDocument.createElement('span'); panelPowerCopy.className = 'equipment-order-auto-wire-copy';
+  const panelPowerTitle = targetDocument.createElement('strong');
+  const panelPowerHelp = targetDocument.createElement('small');
+  panelPowerCopy.append(panelPowerTitle, panelPowerHelp); panelPowerLabel.append(panelPowerSwitchWrap, panelPowerCopy);
   const presets = targetDocument.createElement('div');
   presets.className = 'equipment-order-presets';
   const standard = targetDocument.createElement('button'); standard.type = 'button'; standard.textContent = '기본 제어반 수량';
@@ -117,7 +132,7 @@ export function installEquipmentOrderPanel(
   const summary = targetDocument.createElement('div'); summary.className = 'equipment-order-summary'; summary.setAttribute('role', 'status');
   const safety = targetDocument.createElement('p'); safety.className = 'equipment-order-safety';
   safety.textContent = '확인 시 현재 작업을 로컬에 백업한 뒤 새 제어반으로 교체합니다. 자동 결선은 연습 모드 전용이며, 교육용 프로필은 VERIFIED_PREWIRE 근거로 사용되지 않습니다.';
-  body.append(zoneNote, table, autoWireLabel, presets, summary, safety);
+  body.append(zoneNote, table, autoWireLabel, panelPowerLabel, presets, summary, safety);
 
   const actions = targetDocument.createElement('footer');
   actions.className = 'equipment-order-actions';
@@ -127,7 +142,21 @@ export function installEquipmentOrderPanel(
   actions.append(restore, cancel, confirm);
   dialog.append(header, body, actions); backdrop.appendChild(dialog); targetDocument.body.appendChild(backdrop);
 
+  const syncPanelPower = (): void => {
+    panelPowerOn = options.getPanelPower();
+    panelPowerToggle.checked = panelPowerOn;
+    panelPowerToggle.disabled = currentMode !== 'practice';
+    panelPowerLabel.classList.toggle('on', panelPowerOn);
+    panelPowerTitle.textContent = panelPowerOn ? '제어반 전원 ON' : '제어반 전원 OFF';
+    panelPowerHelp.textContent = currentMode !== 'practice'
+      ? '사전 결선 검토 모드에서는 안전을 위해 전원을 켤 수 없습니다.'
+      : panelPowerOn
+        ? '연습용 시뮬레이션 통전 중 · 버튼과 릴레이 동작을 시험할 수 있습니다.'
+        : '코일·활성선·타이머가 안전하게 초기화된 무전원 상태입니다.';
+  };
+
   const updateSummary = (): void => {
+    syncPanelPower();
     const validation = validateControlPanelBomQuantities(quantities, {
       automaticWiring,
       allowDirectPowerFallback: automaticWiring,
@@ -138,8 +167,8 @@ export function installEquipmentOrderPanel(
       ? '사전 결선 검토 모드에서는 자동 결선을 실행하지 않습니다. 상단 모드 버튼에서 연습 모드로 전환하세요.'
       : validation.ok
         ? automaticWiring
-          ? `입력 ${validation.inputPointCount}점 · 일반 출력 ${validation.generalOutputCount}점 · 인버터 전용 COM ${validation.inverterOutputGroupCount}그룹 · 주문 장비 ${validation.totalOrderedDevices}대 · 전원부 미선택 시 DC24V 직접 결선`
-          : `주문 장비 ${validation.totalOrderedDevices}대 · 장비만 자동 배치 · 결선은 직접 작성`
+          ? `제어반 전원 ${panelPowerOn ? 'ON' : 'OFF'} · 입력 ${validation.inputPointCount}점 · 일반 출력 ${validation.generalOutputCount}점 · 인버터 전용 COM ${validation.inverterOutputGroupCount}그룹 · 주문 장비 ${validation.totalOrderedDevices}대 · 전원부 미선택 시 DC24V 직접 결선`
+          : `제어반 전원 ${panelPowerOn ? 'ON' : 'OFF'} · 주문 장비 ${validation.totalOrderedDevices}대 · 장비만 자동 배치 · 결선은 직접 작성`
         : `${validation.code} · ${validation.message}`;
     confirm.disabled = !practiceAllowed || !validation.ok;
     confirm.textContent = automaticWiring ? '확인 · 자동 배치/결선' : '확인 · 장비만 배치';
@@ -194,6 +223,17 @@ export function installEquipmentOrderPanel(
     try { targetDocument.defaultView?.localStorage.setItem(AUTO_WIRING_STORAGE_KEY, String(automaticWiring)); } catch { /* no-op */ }
     updateSummary();
   });
+  panelPowerToggle.addEventListener('change', () => {
+    if (currentMode !== 'practice') {
+      syncPanelPower(); updateSummary(); return;
+    }
+    panelPowerOn = options.setPanelPower(panelPowerToggle.checked);
+    syncPanelPower();
+    options.setStatus(panelPowerOn
+      ? '제어반 전원 ON · 연습용 시뮬레이션 통전 상태입니다.'
+      : '제어반 전원 OFF · 코일·활성선·타이머 상태를 초기화했습니다.');
+    updateSummary();
+  });
   standard.addEventListener('click', () => { quantities = defaultControlPanelBomQuantities(); renderTable(); });
   clear.addEventListener('click', () => {
     quantities = Object.fromEntries(CONTROL_PANEL_BOM_ITEMS.map((item) => [item.key, 0]));
@@ -233,6 +273,7 @@ export function installEquipmentOrderPanel(
             ? `BOM 장비 ${validation.totalOrderedDevices}대 · 자동 추가 포함 ${built.totalDevices}대 · 자동 결선 ${built.totalWires}가닥`
             : `BOM 장비 ${validation.totalOrderedDevices}대 · 장비만 배치 · 결선 0가닥`,
         );
+        panelPowerOn = options.setPanelPower(panelPowerOn);
         closeDialog();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -260,7 +301,11 @@ export function installEquipmentOrderPanel(
   observer?.observe(palette!, { childList: true });
 
   return {
-    setMode(mode) { currentMode = mode; updateSummary(); },
+    setMode(mode) {
+      currentMode = mode;
+      if (mode !== 'practice' && options.getPanelPower()) options.setPanelPower(false);
+      updateSummary();
+    },
     ensureLauncher,
     destroy() {
       observer?.disconnect();

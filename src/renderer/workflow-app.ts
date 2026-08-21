@@ -107,6 +107,8 @@ interface LegacyTrainerBridge {
   undo(): void;
   redo(): void;
   setStatus(message: string): void;
+  readPanelPower(): boolean;
+  setPanelPower(on: boolean): boolean;
   readSelection(): { deviceIds: string[] };
   clearDeviceSelection(): void;
   previewSuggestedWire(
@@ -1482,6 +1484,8 @@ export function installWorkflowApp(): void {
         return false;
       }
     },
+    getPanelPower: () => bridge.readPanelPower(),
+    setPanelPower: (on) => bridge.setPanelPower(on),
     setStatus: (message) => bridge.setStatus(message),
   });
 
