@@ -54,6 +54,7 @@ public sealed partial class WiringCanvas : UserControl
     private readonly CanvasHitTester _hitTester;
     private readonly WireDraftMachine _wireDraft = new();
     private readonly OrthogonalRoutePlanner _routePlanner = new();
+    private readonly List<TerminalRefV5> _bridgeDraftTerminals = [];
     private readonly CanvasViewport _viewport = new();
     private WorkbenchStore? _store;
     private CanvasSelection _selection = CanvasSelection.Empty;
@@ -112,6 +113,8 @@ public sealed partial class WiringCanvas : UserControl
 
     public CanvasSelection Selection => _selection;
 
+    public bool BridgeModeEnabled { get; private set; }
+
     public event EventHandler<CanvasSelection>? SelectionChanged;
 
     public event EventHandler<(TerminalRefV5 Start, TerminalRefV5 End, PointV5[] Waypoints)>? WireCreationRequested;
@@ -134,12 +137,69 @@ public sealed partial class WiringCanvas : UserControl
 
     public event EventHandler<(string[] ConductorIds, string Color)>? ConductorBatchColorRequested;
 
+    public event EventHandler<TerminalRefV5[]>? BridgeCreationRequested;
+
+    public event EventHandler<bool>? BridgeModeChanged;
+
     public event EventHandler<string[]>? ConductorBatchDeleteRequested;
 
     public void Refresh()
     {
         UpdateAutomationMetadata();
         NativeCanvas.Invalidate();
+    }
+
+    public void SetBridgeMode(bool enabled)
+    {
+        BridgeModeEnabled = enabled;
+        _bridgeDraftTerminals.Clear();
+        if (enabled)
+        {
+            _wireDraft.Cancel();
+            _wirePointerWorld = null;
+            _reconnectConductorId = null;
+        }
+
+        UpdateWireHint();
+        NativeCanvas.Invalidate();
+        BridgeModeChanged?.Invoke(this, enabled);
+    }
+
+    public void RestoreBridgeDraft(IEnumerable<TerminalRefV5> terminals)
+    {
+        BridgeModeEnabled = true;
+        _bridgeDraftTerminals.Clear();
+        _bridgeDraftTerminals.AddRange(terminals.Distinct());
+        UpdateWireHint();
+        NativeCanvas.Invalidate();
+        BridgeModeChanged?.Invoke(this, true);
+    }
+
+    public void RestoreWireDraft(TerminalRefV5 start, IEnumerable<PointV5> waypoints)
+    {
+        _wireDraft.Begin(start, dragInitiated: false);
+        foreach (PointV5 waypoint in waypoints)
+        {
+            _wireDraft.AddWaypoint(waypoint);
+        }
+
+        UpdateWireHint();
+        NativeCanvas.Invalidate();
+    }
+
+    public bool LockedRoutesAreSafe(WorkshopDocumentV5 candidate, out string? conflictConductorId)
+    {
+        foreach (ConductorV5 conductor in candidate.Conductors.Where(conductor => conductor.RouteLocked))
+        {
+            if (GetRoutePoints(candidate, conductor).Length == 0)
+            {
+                conflictConductorId = conductor.Id;
+                return false;
+            }
+        }
+
+        conflictConductorId = null;
+        return true;
     }
 
     internal PointV5[] GetRenderedRoute(string conductorId)
@@ -251,6 +311,27 @@ public sealed partial class WiringCanvas : UserControl
                 $"전선 {conductor.WireNumber} ({conductor.Id})",
                 new RectV5(left - 5, top - 5, Math.Max(10, right - left + 10), Math.Max(10, bottom - top + 10)));
         }
+
+        foreach (TerminalBridgeV5 bridge in document.TerminalBridges)
+        {
+            PointV5[] points = bridge.Terminals
+                .Select(terminal => TryGetTerminalPoint(document, terminal, out PointV5 point) ? point : null)
+                .OfType<PointV5>()
+                .ToArray();
+            if (points.Length == 0)
+            {
+                continue;
+            }
+
+            double left = points.Min(point => point.X);
+            double top = points.Min(point => point.Y);
+            double right = points.Max(point => point.X);
+            double bottom = points.Max(point => point.Y);
+            AddAutomationTarget(
+                $"Bridge:{bridge.Id}",
+                $"점퍼 {bridge.Id}",
+                new RectV5(left - 7, top - 7, Math.Max(14, right - left + 14), Math.Max(14, bottom - top + 14)));
+        }
     }
 
     private void AddAutomationTarget(string automationId, string name, RectV5 worldBounds)
@@ -328,6 +409,11 @@ public sealed partial class WiringCanvas : UserControl
             DrawConductor(drawing, store.Document, conductor);
         }
 
+        foreach (TerminalBridgeV5 bridge in store.Document.TerminalBridges)
+        {
+            DrawBridge(drawing, store.Document, bridge);
+        }
+
         foreach (DeviceInstanceV5 device in store.Document.Devices)
         {
             DrawDevice(drawing, device);
@@ -347,6 +433,35 @@ public sealed partial class WiringCanvas : UserControl
                     drawing.DrawLine(ToVector(preview[index]), ToVector(preview[index + 1]), previewColor, 2);
                 }
             }
+        }
+
+
+        if (BridgeModeEnabled)
+        {
+            foreach (TerminalRefV5 terminal in _bridgeDraftTerminals)
+            {
+                if (TryGetTerminalPoint(store.Document, terminal, out PointV5 point))
+                {
+                    drawing.DrawCircle((float)point.X, (float)point.Y, 12, Color.FromArgb(255, 34, 197, 94), 3);
+                }
+            }
+        }
+    }
+
+    private void DrawBridge(CanvasDrawingSession drawing, WorkshopDocumentV5 document, TerminalBridgeV5 bridge)
+    {
+        PointV5[] points = bridge.Terminals
+            .Select(terminal => TryGetTerminalPoint(document, terminal, out PointV5 point) ? point : null)
+            .OfType<PointV5>()
+            .ToArray();
+        Color color = ParseColor(bridge.Color, Color.FromArgb(255, 249, 115, 22));
+        for (int index = 1; index < points.Length; index++)
+        {
+            PointV5 start = points[index - 1];
+            PointV5 end = points[index];
+            PointV5 corner = new(end.X, start.Y);
+            drawing.DrawLine(ToVector(start), ToVector(corner), color, 4);
+            drawing.DrawLine(ToVector(corner), ToVector(end), color, 4);
         }
     }
 
@@ -712,6 +827,23 @@ public sealed partial class WiringCanvas : UserControl
 
     private void HandleTerminalPressed(TerminalRefV5 terminal, Pointer pointer)
     {
+        if (BridgeModeEnabled)
+        {
+            int existing = _bridgeDraftTerminals.FindIndex(item => item == terminal);
+            if (existing >= 0)
+            {
+                _bridgeDraftTerminals.RemoveAt(existing);
+            }
+            else
+            {
+                _bridgeDraftTerminals.Add(terminal);
+            }
+
+            UpdateWireHint();
+            NativeCanvas.Invalidate();
+            return;
+        }
+
         if (_reconnectConductorId is not null && _store is not null)
         {
             string conductorId = _reconnectConductorId;
@@ -752,16 +884,33 @@ public sealed partial class WiringCanvas : UserControl
     private void CompleteWire(TerminalRefV5 end)
     {
         WireDraftV5? draft = _wireDraft.Current;
-        if (draft is null)
+        WorkbenchStore? store = _store;
+        if (draft is null || store is null)
         {
             return;
         }
 
-        WireCreationRequested?.Invoke(this, (draft.Start, end, draft.Waypoints));
+        var candidate = new ConductorV5(
+            "wire-draft-preview",
+            draft.Start,
+            end,
+            draft.Waypoints,
+            string.Empty,
+            "#111827",
+            0.75,
+            false);
+        if (GetRoutePoints(store.Document, candidate).Length < 2)
+        {
+            WireHint.Visibility = Visibility.Visible;
+            WireHintText.Text = "Blocked [ROUTE_NOT_FOUND] 장애물과 금지 영역을 피하는 직교 경로가 없습니다. 경로점을 조정하거나 Esc로 취소하세요.";
+            return;
+        }
+
         _wireDraft.Cancel();
         _wirePointerWorld = null;
         _wireDragActive = false;
         NativeCanvas.ReleasePointerCaptures();
+        WireCreationRequested?.Invoke(this, (draft.Start, end, draft.Waypoints));
     }
 
     private void Select(CanvasSelection selection)
@@ -805,6 +954,13 @@ public sealed partial class WiringCanvas : UserControl
 
     private void UpdateWireHint()
     {
+        if (BridgeModeEnabled)
+        {
+            WireHint.Visibility = Visibility.Visible;
+            WireHintText.Text = $"점퍼 단자 {_bridgeDraftTerminals.Count}개 선택 · Enter 확정 · 선택 단자 재클릭 해제 · Esc 취소";
+            return;
+        }
+
         if (_reconnectConductorId is not null)
         {
             WireHint.Visibility = Visibility.Visible;
@@ -848,6 +1004,33 @@ public sealed partial class WiringCanvas : UserControl
 
     private void WiringCanvas_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == VirtualKey.J && _wireDraft.Current is null && _reconnectConductorId is null)
+        {
+            SetBridgeMode(!BridgeModeEnabled);
+            e.Handled = true;
+            return;
+        }
+
+        if (BridgeModeEnabled && e.Key == VirtualKey.Enter && _bridgeDraftTerminals.Count >= 2)
+        {
+            TerminalRefV5[] terminals = [.. _bridgeDraftTerminals];
+            _bridgeDraftTerminals.Clear();
+            BridgeCreationRequested?.Invoke(this, terminals);
+            UpdateWireHint();
+            NativeCanvas.Invalidate();
+            e.Handled = true;
+            return;
+        }
+
+        if (BridgeModeEnabled && e.Key == VirtualKey.Escape)
+        {
+            _bridgeDraftTerminals.Clear();
+            UpdateWireHint();
+            NativeCanvas.Invalidate();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == VirtualKey.Escape
             && (_wireDraft.Current is not null || _reconnectConductorId is not null || _dragWaypointConductorId is not null))
         {

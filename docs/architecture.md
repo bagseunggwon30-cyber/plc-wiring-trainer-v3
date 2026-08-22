@@ -44,6 +44,8 @@
 
 `WireDraftMachine`은 클릭→클릭과 드래그→놓기를 같은 비영속 상태로 관리합니다. 빈 캔버스 경로점, `Backspace`, `Esc`, 끝단자 재연결은 결선 완료 전 revision을 소비하지 않습니다. `DeviceTransform`은 렌더링, hit-test, 단자 좌표, 문제 이동에서 같은 회전·배율 계산을 사용합니다.
 
+완성 후보가 장애물과 금지 영역을 피하는 직교 경로를 만들지 못하면 `ROUTE_NOT_FOUND`로 초안을 유지하고 문서에는 추가하지 않습니다. 잠긴 경로는 내부 world waypoint를 고정하며, 장비 이동·크기·회전 후보가 그 경로와 충돌하면 `ROUTE_LOCK_CONFLICT`로 revision/hash/undo 변경 전에 거부합니다.
+
 ## 4.3 작업공간과 모듈 경계
 
 - `WorkbenchShell`은 `패널 배치 / 결선 / 검증` 작업공간을 전환하지만 문서, 선택, viewport와 undo 기록은 하나만 유지합니다.
@@ -52,9 +54,11 @@
 - `CanvasViewport`와 Core의 `DeviceTransform`은 화면 배율과 장비 회전 계산의 책임을 분리합니다.
 - `CanvasAssetCache`는 Win2D PNG/SVG 수명을, `CanvasHitTester`는 단자→전선→장비 hit-test를 담당합니다. UIA overlay는 같은 변환으로 장비·단자·전선 ID와 화면 bounds를 노출합니다.
 - `ConnectionAssessmentService`와 `WorkbenchStore`는 신규 결선, 재결선과 점퍼에 동일한 단자 alias, 수용량, 굵기와 전기 안전 정책을 적용합니다. 차단된 후보는 revision이나 undo를 소비하지 않습니다.
+- 점퍼 도구는 두 개 이상의 단자를 비영속 초안으로 선택하고 `Enter`로 한 번에 확정합니다. 같은 단자 중복, 기존 전선·점퍼와의 직접 중복, 모든 단자 쌍의 전기 위험을 확정 전에 검사합니다.
 - `WireNumber`는 검증·속성·보고서가 공유하는 실제 선번이며 `Label`은 표시명으로만 사용합니다.
 - 잠근 전선은 당시 렌더링된 내부 경로를 waypoint로 저장하고, 자동 라우터는 전체 장애물을 다시 검사합니다.
 - `PLCW_DATA_ROOT`를 지정한 테스트는 palette, autosave, import backup과 quarantine를 모두 해당 임시 루트 안에 격리합니다.
+- 문서별 autosave writer는 revision 순서를 직렬화하며, 수동 저장은 예약된 autosave를 종료한 뒤 정상 파일을 저장하고 이전 복구본을 삭제합니다. v5 hash 불일치 복구본은 Autosave 밖에 격리되어 다시 제시되지 않습니다.
 
 ## 제거된 실행 기능의 경계
 

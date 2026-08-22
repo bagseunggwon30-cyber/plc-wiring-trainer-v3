@@ -45,7 +45,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
-    <!-- WinUI 메타패키지의 선택적 브라우저 자산을 제품 출력에서 완전히 제외합니다. -->
+    <!-- WinUI 메타패키지의 전이 WebView 런타임이 publish에 들어오지 않도록 모든 자산을 차단합니다. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77"
                       ExcludeAssets="all" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />

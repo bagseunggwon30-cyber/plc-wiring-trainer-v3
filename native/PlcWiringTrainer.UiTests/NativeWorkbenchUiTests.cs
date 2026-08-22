@@ -48,6 +48,7 @@ public sealed class NativeWorkbenchUiTests
         Assert.NotNull(session.WaitForAutomationId("Conductor:plc-common-wrong"));
         Assert.NotNull(session.FindByAutomationId("InspectorTabs"));
         Assert.NotNull(session.FindByAutomationId("SaveDocumentButton"));
+        Assert.NotNull(session.FindByAutomationId("BridgeToolButton"));
         session.SelectTab("결선 검증");
         Assert.NotNull(session.WaitForAutomationId("ValidationIssueList"));
         Assert.NotNull(session.WaitForAutomationId("RevisionStatusText"));
@@ -119,6 +120,28 @@ public sealed class NativeWorkbenchUiTests
             TimeSpan.FromSeconds(4)));
         session.FindByAutomationId("UndoButton").AsButton().Invoke();
     }
+
+    [IsolatedPointerFact]
+    public void BridgeToolSelectsMultipleTerminalsAndCommitsOneBridge()
+    {
+        using var session = NativeAppSession.Start();
+        string revisionBefore = session.FindByAutomationId("RevisionStatusText").Name;
+        session.FindByAutomationId("BridgeToolButton").AsToggleButton().Toggle();
+        AutomationElement first = session.WaitForAutomationId("Terminal:supply:+24V");
+        AutomationElement second = session.WaitForAutomationId("Terminal:lamp-1:A1");
+
+        FlaUI.Core.Input.Mouse.LeftClick(Center(first.BoundingRectangle));
+        FlaUI.Core.Input.Mouse.LeftClick(Center(second.BoundingRectangle));
+        FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.RETURN);
+
+        Assert.NotNull(session.WaitForAutomationIdPrefix("Bridge:"));
+        Assert.True(WaitUntil(
+            () => session.FindByAutomationId("RevisionStatusText").Name != revisionBefore,
+            TimeSpan.FromSeconds(4)));
+    }
+
+    private static System.Drawing.Point Center(System.Drawing.Rectangle bounds)
+        => new(bounds.Left + (bounds.Width / 2), bounds.Top + (bounds.Height / 2));
 
     private static bool WaitUntil(Func<bool> condition, TimeSpan timeout)
     {
@@ -246,6 +269,25 @@ internal sealed class NativeAppSession : IDisposable
         while (DateTime.UtcNow < deadline && !_application.HasExited);
 
         throw new InvalidOperationException($"AutomationId를 찾지 못했습니다: {automationId}");
+    }
+
+    public AutomationElement WaitForAutomationIdPrefix(string prefix, TimeSpan? timeout = null)
+    {
+        DateTime deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        do
+        {
+            AutomationElement? element = Window.FindAllDescendants()
+                .FirstOrDefault(candidate => candidate.AutomationId.StartsWith(prefix, StringComparison.Ordinal));
+            if (element is not null)
+            {
+                return element;
+            }
+
+            Thread.Sleep(150);
+        }
+        while (DateTime.UtcNow < deadline && !_application.HasExited);
+
+        throw new InvalidOperationException($"AutomationId prefix를 찾지 못했습니다: {prefix}");
     }
 
     public bool ExistsByAutomationId(string automationId)

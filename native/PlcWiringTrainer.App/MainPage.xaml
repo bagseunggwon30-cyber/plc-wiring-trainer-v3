@@ -82,6 +82,12 @@
                 Icon="AlignLeft"
                 Label="결선 정리" />
             <AppBarToggleButton
+                x:Name="BridgeToolButton"
+                AutomationProperties.AutomationId="BridgeToolButton"
+                Click="BridgeToolButton_Click"
+                Icon="Link"
+                Label="점퍼" />
+            <AppBarToggleButton
                 x:Name="PalettePaneToggle"
                 AutomationProperties.AutomationId="PalettePaneToggle"
                 Click="PalettePaneToggle_Click"
@@ -233,6 +239,8 @@
                     x:Name="WiringCanvas"
                     ConductorBatchColorRequested="WiringCanvas_ConductorBatchColorRequested"
                     ConductorBatchDeleteRequested="WiringCanvas_ConductorBatchDeleteRequested"
+                    BridgeCreationRequested="WiringCanvas_BridgeCreationRequested"
+                    BridgeModeChanged="WiringCanvas_BridgeModeChanged"
                     ConductorEditRequested="WiringCanvas_ConductorEditRequested"
                     DeviceDuplicateRequested="WiringCanvas_DeviceDuplicateRequested"
                     DeviceDropRequested="WiringCanvas_DeviceDropRequested"
@@ -334,11 +342,13 @@
                                         </Grid.ColumnDefinitions>
                                         <NumberBox
                                             x:Name="DeviceXBox"
+                                            AutomationProperties.AutomationId="DeviceXBox"
                                             Header="X"
                                             SpinButtonPlacementMode="Compact"
                                             ValueChanged="DeviceNumberBox_ValueChanged" />
                                         <NumberBox
                                             x:Name="DeviceYBox"
+                                            AutomationProperties.AutomationId="DeviceYBox"
                                             Grid.Column="1"
                                             Header="Y"
                                             SpinButtonPlacementMode="Compact"
@@ -351,12 +361,14 @@
                                         </Grid.ColumnDefinitions>
                                         <NumberBox
                                             x:Name="DeviceWidthBox"
+                                            AutomationProperties.AutomationId="DeviceWidthBox"
                                             Header="너비"
                                             Minimum="40"
                                             SpinButtonPlacementMode="Compact"
                                             ValueChanged="DeviceNumberBox_ValueChanged" />
                                         <NumberBox
                                             x:Name="DeviceHeightBox"
+                                            AutomationProperties.AutomationId="DeviceHeightBox"
                                             Grid.Column="1"
                                             Header="높이"
                                             Minimum="40"
@@ -365,6 +377,7 @@
                                     </Grid>
                                     <NumberBox
                                         x:Name="DeviceRotationBox"
+                                        AutomationProperties.AutomationId="DeviceRotationBox"
                                         Header="회전 (도)"
                                         Maximum="359"
                                         Minimum="0"
@@ -372,6 +385,7 @@
                                         ValueChanged="DeviceNumberBox_ValueChanged" />
                                     <CheckBox
                                         x:Name="DeviceLockedBox"
+                                        AutomationProperties.AutomationId="DeviceLockedBox"
                                         Click="DeviceLockedBox_Click"
                                         Content="장비 위치 잠금" />
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -394,20 +408,24 @@
                                         TextChanged="ConductorLabelBox_TextChanged" />
                                     <TextBox
                                         x:Name="ConductorColorBox"
+                                        AutomationProperties.AutomationId="ConductorColorBox"
                                         Header="색상 (#RRGGBB)"
                                         TextChanged="ConductorColorBox_TextChanged" />
                                     <CheckBox
                                         x:Name="ConductorAutomaticColorBox"
+                                        AutomationProperties.AutomationId="ConductorAutomaticColorBox"
                                         Click="ConductorAutomaticColorBox_Click"
                                         Content="단자 계약에 따른 자동 전선색" />
                                     <NumberBox
                                         x:Name="ConductorGaugeBox"
+                                        AutomationProperties.AutomationId="ConductorGaugeBox"
                                         Header="굵기 (mm²)"
                                         Minimum="0.1"
                                         SpinButtonPlacementMode="Compact"
                                         ValueChanged="ConductorGaugeBox_ValueChanged" />
                                     <CheckBox
                                         x:Name="ConductorLockedBox"
+                                        AutomationProperties.AutomationId="ConductorRouteLockedBox"
                                         Click="ConductorLockedBox_Click"
                                         Content="경로 잠금" />
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -485,7 +503,7 @@
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0">
             <Grid>
-                <TextBlock x:Name="StatusText" Text="준비" />
+                <TextBlock x:Name="StatusText" AutomationProperties.AutomationId="AutosaveStatus" Text="준비" />
                 <TextBlock
                     x:Name="RevisionText"
                     HorizontalAlignment="Right"

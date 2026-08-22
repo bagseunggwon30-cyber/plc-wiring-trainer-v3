@@ -74,7 +74,9 @@ internal sealed class DocumentSessionController : IAsyncDisposable
 
     public async Task SaveAsync(string path, CancellationToken cancellationToken = default)
     {
+        await StopAutosaveAsync();
         await _repository.SaveAsync(path, Store.Document, cancellationToken);
+        await _repository.DeleteAutosaveAsync(Store.Document.DocumentId, cancellationToken);
         CurrentPath = path;
     }
 

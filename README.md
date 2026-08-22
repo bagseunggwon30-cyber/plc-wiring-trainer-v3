@@ -7,6 +7,7 @@ Windows 전용 네이티브 PLC 결선 교육 도구입니다. UI와 실행 환�
 - `패널 배치 / 결선 / 검증` 작업공간과 하나의 문서 세션
 - 기본 접힘 장비 팔레트와 빈 캔버스 우클릭 빠른 장비 검색
 - 단자 우선 선택, 다중 장애물 직교 배선, waypoint, 팬·줌, 경로 고정과 안전 판정을 거치는 끝단자 재연결
+- `J` 또는 상단 점퍼 도구로 여러 단자를 선택하고 `Enter`로 확정하는 schema v5 점퍼 편집
 - 장비/전선 속성 편집과 undo/redo
 - DC, AC, NPN sinking, PNP sourcing, 2선식 4–20 mA, 물리 결선 검증
 - 검증 문제 클릭 시 문제 전선 선택·중앙 이동·확대·강조
@@ -30,7 +31,9 @@ dotnet test native\PlcWiringTrainer.UiTests\PlcWiringTrainer.UiTests.csproj -c D
 dotnet format PlcWiringTrainer.slnx --verify-no-changes --no-restore
 ```
 
-UI 테스트는 실제 `PlcWiringTrainer.exe`를 실행해 접근성 ID, 검증 항목 클릭, 문제 전선 이동과 속성 반영을 확인합니다. 포인터 입력을 쓰는 빠른 장비 삽입 테스트는 사용자의 데스크톱과 분리된 Windows UI 세션에서만 실행합니다.
+UI 테스트는 일반 CI가 만든 동일한 포터블 ZIP을 내려받아 내부 SHA-256 manifest를 검증한 뒤 실제 `PlcWiringTrainer.exe`를 실행합니다. `release-gate`는 격리된 interactive Windows runner의 10회 기준 흐름과 6개 해상도/DPI 조합이 모두 성공해야 통과하며 skipped 결과는 허용하지 않습니다. 포인터 입력은 사용자의 데스크톱과 분리된 Hyper-V 세션에서만 실행합니다.
+
+현재 로컬에서는 Core·빌드·정적 배포 검증까지만 수행합니다. 격리 UI와 깨끗한 Windows 포터블 증거가 없는 커밋은 `main` 병합 또는 `RELEASE_READY`로 간주하지 않습니다.
 
 ## 포터블 배포
 

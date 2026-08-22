@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using PlcWiringTrainer.App.Controls;
 using PlcWiringTrainer.App.Presentation;
 using PlcWiringTrainer.App.Services;
@@ -106,6 +108,11 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             CloseButtonText = "취소",
             DefaultButton = ContentDialogButton.Primary,
         };
+        ConfigureDialogAutomation(
+            dialog,
+            "RouteCleanupDialog",
+            (dialog.PrimaryButtonText, "ApplyRouteCleanupButton"),
+            (dialog.CloseButtonText, "CancelRouteCleanupButton"));
         if (await dialog.ShowAsync() != ContentDialogResult.Primary)
         {
             return;
@@ -148,6 +155,12 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             CloseButtonText = "현재 문서 유지",
             DefaultButton = ContentDialogButton.Primary,
         };
+        ConfigureDialogAutomation(
+            dialog,
+            "RecoveryDialog",
+            (dialog.PrimaryButtonText, "RecoverButton"),
+            (dialog.SecondaryButtonText, "DiscardRecoveryButton"),
+            (dialog.CloseButtonText, "OpenOriginalButton"));
         ContentDialogResult result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)
         {
@@ -160,6 +173,44 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
         {
             await _session.DiscardRecoveryAsync(candidate.Document.DocumentId);
             StatusText.Text = "자동 복구본을 폐기했습니다.";
+        }
+    }
+
+    private static void ConfigureDialogAutomation(
+        ContentDialog dialog,
+        string dialogAutomationId,
+        params (string Text, string AutomationId)[] buttons)
+    {
+        AutomationProperties.SetAutomationId(dialog, dialogAutomationId);
+        dialog.Loaded += (_, _) =>
+        {
+            foreach ((string text, string automationId) in buttons)
+            {
+                Button? button = Descendants(dialog)
+                    .OfType<Button>()
+                    .FirstOrDefault(candidate => string.Equals(
+                        candidate.Content?.ToString(),
+                        text,
+                        StringComparison.Ordinal));
+                if (button is not null)
+                {
+                    AutomationProperties.SetAutomationId(button, automationId);
+                }
+            }
+        };
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int index = 0; index < count; index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            yield return child;
+            foreach (DependencyObject descendant in Descendants(child))
+            {
+                yield return descendant;
+            }
         }
     }
 
@@ -381,7 +432,7 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
         (double width, double height) = GetInitialDeviceSize(profile);
         double boundedX = Math.Clamp(x, 0, Math.Max(0, Store.Document.Panel.Width - width));
         double boundedY = Math.Clamp(y, 0, Math.Max(0, Store.Document.Panel.Height - height));
-        _commands.AddDevice(new DeviceInstanceV5(
+        var device = new DeviceInstanceV5(
             id,
             profile.Id,
             profile.Version,
@@ -396,8 +447,11 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             new Dictionary<string, string>())
         {
             CatalogEntryId = profile.LegacyType,
-        });
-        StatusText.Text = $"{profile.DisplayName} 장비를 배치했습니다.";
+        };
+        if (TryAddDeviceSafely(device))
+        {
+            StatusText.Text = $"{profile.DisplayName} 장비를 배치했습니다.";
+        }
     }
 
     private void WiringCanvas_SelectionChanged(object? sender, CanvasSelection selection)
@@ -488,16 +542,6 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
         object? sender,
         (TerminalRefV5 Start, TerminalRefV5 End, PointV5[] Waypoints) terminals)
     {
-        ConnectionAssessmentV5 assessment = _connectionAssessment.Assess(
-            Store.Document,
-            terminals.Start,
-            terminals.End);
-        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
-        {
-            StatusText.Text = $"결선 차단 [{assessment.Code}] {assessment.Message}";
-            return;
-        }
-
         string wireNumber = WireNumberAllocator.Next(Store.Document);
         var conductor = new ConductorV5(
             $"wire-{Guid.NewGuid():N}",
@@ -505,17 +549,17 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             terminals.End,
             terminals.Waypoints,
             wireNumber,
-            assessment.SuggestedColor,
+            "#111827",
             0.75,
             false)
         {
             WireNumber = wireNumber,
-            DiagnosticOverride = assessment.RequiresDiagnosticOverride,
         };
-        ConnectionAssessmentV5 committed = _commands.AddConductor(conductor);
-        if (committed.Disposition == ConnectionDispositionV5.Blocked)
+        ConnectionAssessmentV5 assessment = _commands.AddConductor(conductor);
+        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
         {
-            StatusText.Text = $"결선 차단 [{committed.Code}] {committed.Message}";
+            StatusText.Text = $"결선 차단 [{assessment.Code}] {assessment.Message}";
+            WiringCanvas.RestoreWireDraft(terminals.Start, terminals.Waypoints);
             return;
         }
 
@@ -523,6 +567,34 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             ? $"경고 후 결선 [{assessment.Code}] {assessment.Message}"
             : $"{terminals.Start.Key} ↔ {terminals.End.Key} 전선을 만들었습니다.";
     }
+
+    private void BridgeToolButton_Click(object sender, RoutedEventArgs e)
+    {
+        WiringCanvas.SetBridgeMode(BridgeToolButton.IsChecked == true);
+        StatusText.Text = BridgeToolButton.IsChecked == true
+            ? "점퍼 모드 · 단자를 두 개 이상 선택한 뒤 Enter를 누르세요."
+            : "점퍼 모드를 종료했습니다.";
+        WiringCanvas.Focus(FocusState.Programmatic);
+    }
+
+    private void WiringCanvas_BridgeCreationRequested(object? sender, TerminalRefV5[] terminals)
+    {
+        var bridge = new TerminalBridgeV5($"bridge-{Guid.NewGuid():N}", terminals, "#F97316");
+        ConnectionAssessmentV5 assessment = _commands.AddTerminalBridge(bridge);
+        StatusText.Text = assessment.Disposition switch
+        {
+            ConnectionDispositionV5.Blocked => $"점퍼 차단 [{assessment.Code}] {assessment.Message}",
+            ConnectionDispositionV5.Warning => $"경고 후 점퍼 생성 [{assessment.Code}] {assessment.Message}",
+            _ => $"단자 {terminals.Length}개의 점퍼를 만들었습니다.",
+        };
+        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
+        {
+            WiringCanvas.RestoreBridgeDraft(terminals);
+        }
+    }
+
+    private void WiringCanvas_BridgeModeChanged(object? sender, bool enabled)
+        => BridgeToolButton.IsChecked = enabled;
 
     private void PaletteSearchBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshPalette();
 
@@ -643,21 +715,28 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             return;
         }
 
-        _commands.AddDevice(source with
+        DeviceInstanceV5 duplicate = source with
         {
             Id = $"device-{Guid.NewGuid():N}",
             Label = $"{source.Label} 복사",
             X = Snap(source.X + 20),
             Y = Snap(source.Y + 20),
             Locked = false,
-        });
-        StatusText.Text = $"{source.Label}을(를) 복제했습니다.";
+        };
+        if (TryAddDeviceSafely(duplicate))
+        {
+            StatusText.Text = $"{source.Label}을(를) 복제했습니다.";
+        }
     }
 
     private void WiringCanvas_DeviceRotateRequested(object? sender, string deviceId)
     {
-        _commands.UpdateDevice(deviceId, device => device with { Rotation = (device.Rotation + 90) % 360 });
-        StatusText.Text = "장비를 오른쪽으로 90° 회전했습니다.";
+        if (TryUpdateDeviceSafely(
+            deviceId,
+            device => device with { Rotation = (device.Rotation + 90) % 360 }))
+        {
+            StatusText.Text = "장비를 오른쪽으로 90° 회전했습니다.";
+        }
     }
 
     private void WiringCanvas_DeviceLockToggleRequested(object? sender, string deviceId)
@@ -699,10 +778,12 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
         object? sender,
         (string DeviceId, double X, double Y) move)
     {
-        _commands.UpdateDevice(move.DeviceId, device => device with
+        double x = Snap(move.X);
+        double y = Snap(move.Y);
+        TryUpdateDeviceSafely(move.DeviceId, device => device with
         {
-            X = Snap(move.X),
-            Y = Snap(move.Y),
+            X = x,
+            Y = y,
         });
     }
 
@@ -758,7 +839,7 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             return;
         }
 
-        _commands.UpdateDevice(_selection.Id, device => device with
+        TryUpdateDeviceSafely(_selection.Id, device => device with
         {
             X = DeviceXBox.Value,
             Y = DeviceYBox.Value,
@@ -766,6 +847,37 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             Height = Math.Max(40, DeviceHeightBox.Value),
             Rotation = NormalizeRotation(DeviceRotationBox.Value),
         });
+    }
+
+    private bool TryUpdateDeviceSafely(
+        string deviceId,
+        Func<DeviceInstanceV5, DeviceInstanceV5> update)
+    {
+        string? conflict = null;
+        bool committed = _commands.TryUpdateDevice(
+            deviceId,
+            update,
+            candidate => WiringCanvas.LockedRoutesAreSafe(candidate, out conflict));
+        if (!committed)
+        {
+            StatusText.Text = $"장비 편집 차단 [ROUTE_LOCK_CONFLICT] 잠긴 전선 '{conflict}'의 경로가 장애물을 관통합니다.";
+        }
+
+        return committed;
+    }
+
+    private bool TryAddDeviceSafely(DeviceInstanceV5 device)
+    {
+        string? conflict = null;
+        bool committed = _commands.TryAddDevice(
+            device,
+            candidate => WiringCanvas.LockedRoutesAreSafe(candidate, out conflict));
+        if (!committed)
+        {
+            StatusText.Text = $"장비 배치 차단 [ROUTE_LOCK_CONFLICT] 잠긴 전선 '{conflict}'의 경로와 겹칩니다.";
+        }
+
+        return committed;
     }
 
     private void DeviceLockedBox_Click(object sender, RoutedEventArgs e)

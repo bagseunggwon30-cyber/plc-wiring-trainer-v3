@@ -17,10 +17,22 @@ internal sealed class WorkbenchCommandDispatcher
 
     public void AddDevice(DeviceInstanceV5 device) => _store().AddDevice(device);
 
+    public bool TryAddDevice(DeviceInstanceV5 device, Func<WorkshopDocumentV5, bool> candidateGuard)
+        => _store().TryAddDevice(device, candidateGuard);
+
     public ConnectionAssessmentV5 AddConductor(ConductorV5 conductor) => _store().AddConductor(conductor);
+
+    public ConnectionAssessmentV5 AddTerminalBridge(TerminalBridgeV5 bridge)
+        => _store().AddTerminalBridge(bridge);
 
     public void UpdateDevice(string id, Func<DeviceInstanceV5, DeviceInstanceV5> update)
         => _store().UpdateDevice(id, update);
+
+    public bool TryUpdateDevice(
+        string id,
+        Func<DeviceInstanceV5, DeviceInstanceV5> update,
+        Func<WorkshopDocumentV5, bool> candidateGuard)
+        => _store().TryUpdateDevice(id, update, candidateGuard);
 
     public void UpdateConductor(string id, Func<ConductorV5, ConductorV5> update)
         => _store().UpdateConductor(id, update);

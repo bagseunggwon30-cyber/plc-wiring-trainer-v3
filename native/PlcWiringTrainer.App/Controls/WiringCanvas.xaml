@@ -33,6 +33,7 @@
 
         <Border
             x:Name="WireHint"
+            AutomationProperties.AutomationId="BridgeDraftStatus"
             Margin="14"
             Padding="10,6"
             HorizontalAlignment="Left"
