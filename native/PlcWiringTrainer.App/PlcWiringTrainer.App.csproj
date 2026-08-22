@@ -5,9 +5,9 @@
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>PlcWiringTrainer.App</RootNamespace>
     <AssemblyName>PlcWiringTrainer</AssemblyName>
-    <Version>4.0.0</Version>
-    <AssemblyVersion>4.0.0.0</AssemblyVersion>
-    <FileVersion>4.0.0.0</FileVersion>
+    <Version>4.1.0</Version>
+    <AssemblyVersion>4.1.0.0</AssemblyVersion>
+    <FileVersion>4.1.0.0</FileVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
@@ -32,10 +32,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
-    <Content Include="Assets\device-assets.v4.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -48,11 +44,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
-    <PackageReference
-      Include="Microsoft.Web.WebView2"
-      Version="1.0.3719.77"
-      ExcludeAssets="all"
-      PrivateAssets="all" />
+    <!-- WinUI declares the browser SDK transitively. Excluding every asset prevents its
+         projection and loader from entering this native-only app or publish output. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77"
+                      ExcludeAssets="all" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.4.0" />
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
@@ -63,7 +58,7 @@
   </ItemGroup>
 
   <!-- WinUI ships an unused packaging staging tree and a control-map HTML file.
-       The app has no package identity or WebView surface, so neither belongs in the product output. -->
+       The app has no package identity or embedded browser surface, so neither belongs in the product output. -->
   <Target Name="RemoveNonRuntimeWinUiBuildArtifacts" AfterTargets="Build"
           Condition="'$(TargetDir)' != '' and Exists('$(TargetDir)$(AssemblyName).exe')">
     <ItemGroup>
@@ -79,14 +74,11 @@
     <ItemGroup>
       <_NativeXamlPublishArtifacts Include="$(TargetDir)**\*.xbf" />
       <_NativeXamlPublishArtifacts Include="$(TargetDir)$(AssemblyName).pri" />
-      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)Microsoft.Web.WebView2.Core.dll" />
-      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)Microsoft.Web.WebView2.Core.Projection.dll" />
-      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)WebView2Loader.dll" />
-      <_UnusedPublishedBrowserArtifacts Include="$(PublishDir)Microsoft.UI.Xaml\Assets\map.html" />
+      <_UnusedPublishedHtmlArtifact Include="$(PublishDir)Microsoft.UI.Xaml\Assets\map.html" />
     </ItemGroup>
     <Copy SourceFiles="@(_NativeXamlPublishArtifacts)"
           DestinationFiles="@(_NativeXamlPublishArtifacts->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
-    <Delete Files="@(_UnusedPublishedBrowserArtifacts)" />
+    <Delete Files="@(_UnusedPublishedHtmlArtifact)" />
   </Target>
 </Project>

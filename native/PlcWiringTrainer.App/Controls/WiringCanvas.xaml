@@ -8,7 +8,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     AutomationProperties.AutomationId="WiringCanvas"
     AutomationProperties.Name="결선 캔버스"
+    AllowDrop="True"
+    DragOver="WiringCanvas_DragOver"
+    Drop="WiringCanvas_Drop"
     IsTabStop="True"
+    KeyDown="WiringCanvas_KeyDown"
     Unloaded="WiringCanvas_Unloaded"
     mc:Ignorable="d">
     <Grid Background="#111827">
@@ -20,7 +24,8 @@
             PointerMoved="Canvas_PointerMoved"
             PointerPressed="Canvas_PointerPressed"
             PointerReleased="Canvas_PointerReleased"
-            PointerWheelChanged="Canvas_PointerWheelChanged" />
+            PointerWheelChanged="Canvas_PointerWheelChanged"
+            RightTapped="Canvas_RightTapped" />
 
         <Border
             x:Name="WireHint"

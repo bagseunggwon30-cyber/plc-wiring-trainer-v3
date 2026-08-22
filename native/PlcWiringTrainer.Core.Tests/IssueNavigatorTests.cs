@@ -9,8 +9,8 @@ public sealed class IssueNavigatorTests
     [Fact]
     public void ResolveFallsBackFromMissingConductorToTerminalAndSelectsIncidentWire()
     {
-        WorkshopDocumentV4 document = TestDocuments.ValidNpnCircuit(plcCommonToPositive: false);
-        var issue = new ValidationIssueV4(
+        WorkshopDocumentV5 document = TestDocuments.ValidNpnCircuit(plcCommonToPositive: false);
+        var issue = new ValidationIssueV5(
             "TEST",
             ValidationSeverity.Error,
             true,
@@ -18,9 +18,9 @@ public sealed class IssueNavigatorTests
             document.Revision,
             document.ContentHash,
             [
-                new ValidationTargetV4(ValidationTargetKind.Conductor, "deleted-wire"),
-                new ValidationTargetV4(ValidationTargetKind.Terminal, "plc-1:I0", "plc-1", "I0"),
-                new ValidationTargetV4(ValidationTargetKind.Device, "plc-1", "plc-1"),
+                new ValidationTargetV5(ValidationTargetKind.Conductor, "deleted-wire"),
+                new ValidationTargetV5(ValidationTargetKind.Terminal, "plc-1:I0", "plc-1", "I0"),
+                new ValidationTargetV5(ValidationTargetKind.Device, "plc-1", "plc-1"),
             ],
             "test");
 

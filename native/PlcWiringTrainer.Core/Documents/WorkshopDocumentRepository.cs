@@ -4,11 +4,11 @@ namespace PlcWiringTrainer.Core.Documents;
 
 public interface IWorkshopDocumentRepository
 {
-    Task SaveAsync(string path, WorkshopDocumentV4 document, CancellationToken cancellationToken = default);
+    Task SaveAsync(string path, WorkshopDocumentV5 document, CancellationToken cancellationToken = default);
 
     Task<MigrationResult> LoadAsync(string path, CancellationToken cancellationToken = default);
 
-    Task SaveAutosaveAsync(WorkshopDocumentV4 document, CancellationToken cancellationToken = default);
+    Task SaveAutosaveAsync(WorkshopDocumentV5 document, CancellationToken cancellationToken = default);
 }
 
 public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
@@ -27,7 +27,7 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
 
     public async Task SaveAsync(
         string path,
-        WorkshopDocumentV4 document,
+        WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -40,7 +40,7 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
         }
 
         Directory.CreateDirectory(directory);
-        WorkshopDocumentV4 normalized = DocumentHasher.WithContentHash(document);
+        WorkshopDocumentV5 normalized = DocumentHasher.WithContentHash(document);
         string temporaryPath = $"{fullPath}.tmp.{Guid.NewGuid():N}";
         try
         {
@@ -72,7 +72,7 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
         => _migrator.MigrateAsync(path, cancellationToken);
 
     public Task SaveAutosaveAsync(
-        WorkshopDocumentV4 document,
+        WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);

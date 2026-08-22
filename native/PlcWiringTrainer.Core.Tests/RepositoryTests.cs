@@ -5,7 +5,7 @@ namespace PlcWiringTrainer.Core.Tests;
 public sealed class RepositoryTests
 {
     [Fact]
-    public async Task SaveUsesSameDirectoryTemporaryFileAndRoundTripsV4()
+    public async Task SaveUsesSameDirectoryTemporaryFileAndRoundTripsV5()
     {
         string root = TestDirectory.Create();
         string target = Path.Combine(root, "panel.plcw");
@@ -18,7 +18,7 @@ public sealed class RepositoryTests
         await repository.SaveAsync(target, TestDocuments.WithLamp() with { Name = "Replaced safely" });
         MigrationResult loaded = await repository.LoadAsync(target);
 
-        Assert.Equal(MigrationStatus.AlreadyV4, loaded.Status);
+        Assert.Equal(MigrationStatus.AlreadyV5, loaded.Status);
         Assert.Equal("Replaced safely", loaded.Document!.Name);
         Assert.Empty(Directory.EnumerateFiles(root, "*.tmp.*"));
     }

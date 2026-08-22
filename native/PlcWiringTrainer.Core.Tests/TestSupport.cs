@@ -16,27 +16,27 @@ internal static class TestDirectory
 
 internal static class TestDocuments
 {
-    public static WorkshopDocumentV4 Empty(string id = "test")
+    public static WorkshopDocumentV5 Empty(string id = "test")
     {
-        var document = new WorkshopDocumentV4
+        var document = new WorkshopDocumentV5
         {
             DocumentId = id,
             Revision = 1,
             Name = "Test panel",
             Devices = [],
             Conductors = [],
-            Jumpers = [],
-            Panel = new PanelLayoutV4(1200, 800),
-            Viewport = new ViewportV4(1, 0, 0),
-            Settings = new WorkshopSettingsV4(10, true),
+            TerminalBridges = [],
+            Panel = new PanelLayoutV5(1200, 800),
+            Viewport = new ViewportV5(1, 0, 0),
+            Settings = new WorkshopSettingsV5(10, true),
             Extensions = new Dictionary<string, JsonElement>(),
         };
         return DocumentHasher.WithContentHash(document);
     }
 
-    public static WorkshopDocumentV4 WithLamp()
+    public static WorkshopDocumentV5 WithLamp()
     {
-        WorkshopDocumentV4 document = Empty("lamp-document") with
+        WorkshopDocumentV5 document = Empty("lamp-document") with
         {
             Devices =
             [
@@ -52,9 +52,9 @@ internal static class TestDocuments
         return DocumentHasher.WithContentHash(document);
     }
 
-    public static WorkshopDocumentV4 ValidNpnCircuit(bool plcCommonToPositive)
+    public static WorkshopDocumentV5 ValidNpnCircuit(bool plcCommonToPositive)
     {
-        WorkshopDocumentV4 document = Empty("npn-document") with
+        WorkshopDocumentV5 document = Empty("npn-document") with
         {
             Devices =
             [
@@ -78,9 +78,9 @@ internal static class TestDocuments
         return DocumentHasher.WithContentHash(document);
     }
 
-    public static WorkshopDocumentV4 PnpCircuit(bool plcCommonToZero)
+    public static WorkshopDocumentV5 PnpCircuit(bool plcCommonToZero)
     {
-        WorkshopDocumentV4 document = Empty("pnp-document") with
+        WorkshopDocumentV5 document = Empty("pnp-document") with
         {
             Devices =
             [
@@ -99,9 +99,9 @@ internal static class TestDocuments
         return DocumentHasher.WithContentHash(document);
     }
 
-    public static WorkshopDocumentV4 AcShortCircuit()
+    public static WorkshopDocumentV5 AcShortCircuit()
     {
-        WorkshopDocumentV4 document = Empty("ac-short") with
+        WorkshopDocumentV5 document = Empty("ac-short") with
         {
             Devices = [Device("ac-source", "ac-source-220v", 20, 100)],
             Conductors = [Wire("short", "ac-source", "L", "ac-source", "N")],
@@ -109,9 +109,9 @@ internal static class TestDocuments
         return DocumentHasher.WithContentHash(document);
     }
 
-    public static WorkshopDocumentV4 ReversedCurrentLoop()
+    public static WorkshopDocumentV5 ReversedCurrentLoop()
     {
-        WorkshopDocumentV4 document = Empty("current-loop") with
+        WorkshopDocumentV5 document = Empty("current-loop") with
         {
             Devices =
             [
@@ -129,7 +129,7 @@ internal static class TestDocuments
         return DocumentHasher.WithContentHash(document);
     }
 
-    private static DeviceInstanceV4 Device(string id, string profileId, double x, double y)
+    private static DeviceInstanceV5 Device(string id, string profileId, double x, double y)
         => new(
             id,
             profileId,
@@ -144,7 +144,7 @@ internal static class TestDocuments
             false,
             new Dictionary<string, string>());
 
-    private static ConductorV4 Wire(
+    private static ConductorV5 Wire(
         string id,
         string startDevice,
         string startTerminal,
@@ -152,8 +152,8 @@ internal static class TestDocuments
         string endTerminal)
         => new(
             id,
-            new TerminalRefV4(startDevice, startTerminal),
-            new TerminalRefV4(endDevice, endTerminal),
+            new TerminalRefV5(startDevice, startTerminal),
+            new TerminalRefV5(endDevice, endTerminal),
             [],
             id,
             "#EF4444",

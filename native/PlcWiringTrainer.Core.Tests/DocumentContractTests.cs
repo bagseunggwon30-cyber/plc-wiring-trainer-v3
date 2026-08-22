@@ -8,10 +8,10 @@ public sealed class DocumentContractTests
     [Fact]
     public void ContentHash_IsStableAndExcludesTheHashField()
     {
-        WorkshopDocumentV4 document = TestDocuments.Empty("hash-test");
+        WorkshopDocumentV5 document = TestDocuments.Empty("hash-test");
 
-        WorkshopDocumentV4 hashedOnce = DocumentHasher.WithContentHash(document);
-        WorkshopDocumentV4 hashedTwice = DocumentHasher.WithContentHash(hashedOnce);
+        WorkshopDocumentV5 hashedOnce = DocumentHasher.WithContentHash(document);
+        WorkshopDocumentV5 hashedTwice = DocumentHasher.WithContentHash(hashedOnce);
 
         Assert.Equal(64, hashedOnce.ContentHash.Length);
         Assert.Equal(hashedOnce.ContentHash, hashedTwice.ContentHash);
@@ -19,17 +19,17 @@ public sealed class DocumentContractTests
     }
 
     [Fact]
-    public void Serializer_RoundTripsUnknownV4FieldsAndLegacyPayload()
+    public void Serializer_RoundTripsUnknownV5FieldsAndLegacyPayload()
     {
         const string json = """
             {
-              "schemaVersion": 4,
+              "schemaVersion": 5,
               "documentId": "round-trip",
               "revision": 7,
               "name": "Round trip",
               "devices": [],
               "conductors": [],
-              "jumpers": [],
+              "terminalBridges": [],
               "panel": { "width": 1200, "height": 800 },
               "viewport": { "zoom": 1, "offsetX": 0, "offsetY": 0 },
               "settings": { "gridSize": 10, "snapToGrid": true },
@@ -39,7 +39,7 @@ public sealed class DocumentContractTests
             }
             """;
 
-        WorkshopDocumentV4 loaded = WorkshopDocumentSerializer.Deserialize(json, verifyHash: false);
+        WorkshopDocumentV5 loaded = WorkshopDocumentSerializer.Deserialize(json, verifyHash: false);
         string serialized = WorkshopDocumentSerializer.Serialize(DocumentHasher.WithContentHash(loaded));
         using JsonDocument parsed = JsonDocument.Parse(serialized);
 

@@ -13,10 +13,10 @@ public sealed class AssetManifestTests
         string root = FindRepositoryRoot();
         DeviceProfileCatalog catalog = DeviceProfileCatalog.CreateDefault();
 
-        foreach (DeviceProfileV4 profile in catalog.Profiles.Where(profile => profile.IsPaletteVisible))
+        foreach (DeviceProfileV5 profile in catalog.Profiles.Where(profile => profile.IsPaletteVisible))
         {
             Assert.NotEmpty(profile.Terminals);
-            ActiveAssetV4 asset = Assert.Single(ActiveAssetManifest.Entries, item => item.ProfileId == profile.Id);
+            ActiveAssetV5 asset = Assert.Single(ActiveAssetManifest.Entries, item => item.ProfileId == profile.Id);
             string fullPath = Path.Combine(root, "native", "PlcWiringTrainer.App", asset.RelativePath.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(fullPath), fullPath);
             Assert.Equal(asset.Sha256, ComputeStableHash(fullPath));

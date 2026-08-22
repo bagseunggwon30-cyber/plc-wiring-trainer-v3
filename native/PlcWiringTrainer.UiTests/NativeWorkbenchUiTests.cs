@@ -13,14 +13,16 @@ public sealed class NativeWorkbenchUiTests
     {
         using var session = NativeAppSession.Start();
 
-        Assert.Equal("PLC Wiring Trainer 4.0", session.Window.Title);
+        Assert.Equal("PLC Wiring Trainer 4.1", session.Window.Title);
         Assert.NotNull(session.FindByAutomationId("DevicePalette"));
+        Assert.NotNull(session.FindByAutomationId("PaletteSearchBox"));
         Assert.NotNull(session.FindByAutomationId("WiringCanvas"));
         Assert.NotNull(session.FindByAutomationId("InspectorTabs"));
         Assert.NotNull(session.FindByAutomationId("SaveDocumentButton"));
-        session.SaveEvidenceScreenshot();
         session.SelectTab("결선 검증");
         Assert.NotNull(session.WaitForAutomationId("ValidationIssueList"));
+        Thread.Sleep(TimeSpan.FromSeconds(3));
+        Assert.False(session.HasExited);
     }
 
     [Fact]
@@ -78,6 +80,8 @@ internal sealed class NativeAppSession : IDisposable
     }
 
     public Window Window { get; }
+
+    public bool HasExited => _application.HasExited;
 
     public static NativeAppSession Start()
     {
@@ -177,20 +181,6 @@ internal sealed class NativeAppSession : IDisposable
         }
 
         item.AsListBoxItem().Select();
-        item.Click();
-    }
-
-    public void SaveEvidenceScreenshot()
-    {
-        string? path = Environment.GetEnvironmentVariable("PLCW_UI_EVIDENCE_PATH");
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return;
-        }
-
-        string fullPath = Path.GetFullPath(path);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        Window.CaptureToFile(fullPath);
     }
 
     private static string SafeName(AutomationElement element)

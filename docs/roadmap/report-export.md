@@ -1,8 +1,8 @@
 # 보고서 출력 재도입 조건
 
-현재 제품에는 PDF/HTML 보고서 생성 코드나 메뉴가 없습니다.
+현재 제품은 canonical JSON, pin-to-pin CSV, cable/core CSV, 단자 계획 CSV, BOM CSV를 네이티브 메뉴에서 제공합니다. HTML 중간 문서를 사용하지 않으며 CSV formula injection을 차단합니다.
 
-재도입 시 보고서는 다음 정보를 고정해야 합니다.
+PDF/XPS와 캔버스 PNG를 추가할 때는 다음 정보를 고정해야 합니다.
 
 - 문서 ID, revision, content hash
 - 검증 시나리오와 각 문제의 typed target

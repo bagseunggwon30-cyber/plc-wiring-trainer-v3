@@ -19,7 +19,7 @@ public sealed class ValidationRaceTests
         validator.ReleaseFirstRevision.TrySetResult();
         await Task.Delay(50);
 
-        Assert.Equal(ValidationFreshness.Current, store.ValidationFreshness);
+        Assert.Equal(ValidationFreshness.Pass, store.ValidationFreshness);
         Assert.Equal(currentRevision, store.ValidationResult!.Revision);
         Assert.Equal(store.Document.ContentHash, store.ValidationResult.ContentHash);
     }
@@ -32,8 +32,8 @@ public sealed class ValidationRaceTests
 
         public TaskCompletionSource ReleaseFirstRevision { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async Task<ValidationResultV4> ValidateAsync(
-            WorkshopDocumentV4 document,
+        public async Task<ValidationResultV5> ValidateAsync(
+            WorkshopDocumentV5 document,
             CancellationToken cancellationToken = default)
         {
             int call = Interlocked.Increment(ref _callCount);
@@ -43,11 +43,11 @@ public sealed class ValidationRaceTests
                 await ReleaseFirstRevision.Task;
             }
 
-            return new ValidationResultV4(
+            return new ValidationResultV5(
                 document.Revision,
                 document.ContentHash,
                 [],
-                new SimulationResultV4([]));
+                new SimulationResultV5([]));
         }
     }
 }

@@ -19,14 +19,14 @@
   -> 검증 상태 STALE
   -> 300 ms debounce
   -> 백그라운드 IValidationService
-  -> revision/hash 일치 결과만 CURRENT 반영
+  -> revision/hash 일치 결과만 PASS/FAIL/BLOCKED 반영
 ```
 
 늦게 끝난 이전 revision의 결과는 취소 여부와 무관하게 폐기합니다.
 
 ## 문제 위치 이동
 
-`IssueNavigator`는 `ValidationIssueV4.Targets`를 다음 순서로 풉니다.
+`IssueNavigator`는 `ValidationIssueV5.Targets`를 다음 순서로 풉니다.
 
 1. 존재하는 conductor
 2. terminal에 닿은 conductor, 없으면 terminal의 device
@@ -36,4 +36,16 @@
 
 ## 전기 근거 경계
 
-이미지와 전기 프로필은 별도입니다. 램프와 센서 이미지는 현재 사용자가 선택한 자산으로 해시 고정하지만 근거 등급은 `educational`입니다. NPN/PNP sourcing/sinking 판단은 이미지가 아니라 형식화된 단자 역할과 결선망으로 계산합니다.
+이미지, 카탈로그 항목, 전기 프로필은 별도입니다. 내부 브라우저로 측정한 레거시 정본은 장비 100종, 사용 가능 팔레트 68종, 단자 657점, 고유 이미지 64개입니다. 최신 램프 3종과 NPN/PNP v2 자산은 별도 정본으로 유지합니다.
+
+정확 품번 매뉴얼 16종, 계열 매뉴얼 17종, 교육용/미확정 67종의 배지는 독립적으로 표시합니다. NPN/PNP sourcing/sinking 판단은 이미지가 아니라 형식화된 단자 역할과 결선망으로 계산합니다.
+
+## 결선 편집
+
+`WireDraftMachine`은 클릭→클릭과 드래그→놓기를 같은 비영속 상태로 관리합니다. 빈 캔버스 경로점, `Backspace`, `Esc`, 끝단자 재연결은 결선 완료 전 revision을 소비하지 않습니다. `DeviceTransform`은 렌더링, hit-test, 단자 좌표, 문제 이동에서 같은 회전·배율 계산을 사용합니다.
+
+## 레거시 이후 단계의 경계
+
+- JSON 및 CSV 보고서는 HTML 중간 문서 없이 생성하고 spreadsheet formula injection을 차단합니다.
+- XG-SIM 계약은 64 KiB JSONL, timeout, fail-safe reset, 프로젝트 신원 fail-closed를 요구합니다. LS DLL과 실제 호스트는 검증 전 배포하지 않습니다.
+- `ISceneRenderer`는 2D와 같은 문서 ID/terminal ID를 받습니다. Direct3D 11 렌더러가 검증되기 전에는 3D 완료로 표시하지 않습니다.

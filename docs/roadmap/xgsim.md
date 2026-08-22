@@ -1,6 +1,6 @@
 # XG-SIM 재도입 조건
 
-현재 제품에는 XG-SIM 프로세스, 브리지, 프로토콜, 메뉴가 없습니다.
+현재 제품에는 LS DLL이나 실제 XG-SIM 호스트/메뉴가 없습니다. Core에는 제한된 JSONL 계약, 프로젝트 신원 fail-closed 결과, fail-safe reset 인터페이스만 있습니다.
 
 재도입 전 다음 계약이 필요합니다.
 

@@ -37,6 +37,20 @@
                 Click="Save_Click"
                 Icon="Save"
                 Label="저장" />
+            <AppBarButton
+                AutomationProperties.AutomationId="ExportReportButton"
+                Icon="Document"
+                Label="보고서">
+                <AppBarButton.Flyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Click="ExportCanonicalJson_Click" Text="Canonical JSON" />
+                        <MenuFlyoutItem Click="ExportPinToPinCsv_Click" Text="Pin-to-pin CSV" />
+                        <MenuFlyoutItem Click="ExportCableCoreCsv_Click" Text="Cable/core CSV" />
+                        <MenuFlyoutItem Click="ExportTerminalPlanCsv_Click" Text="단자 계획 CSV" />
+                        <MenuFlyoutItem Click="ExportBomCsv_Click" Text="BOM CSV" />
+                    </MenuFlyout>
+                </AppBarButton.Flyout>
+            </AppBarButton>
             <AppBarSeparator />
             <AppBarButton
                 x:Name="UndoButton"
@@ -89,13 +103,21 @@
                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="장비 팔레트" />
                         <TextBlock
                             Opacity="0.65"
-                            Text="장비를 눌러 캔버스에 배치합니다."
+                            Text="68종 사용 가능 · 5종 단자 보정 준비 중"
                             TextWrapping="Wrap" />
+                        <TextBox
+                            x:Name="PaletteSearchBox"
+                            Margin="0,8,0,0"
+                            AutomationProperties.AutomationId="PaletteSearchBox"
+                            PlaceholderText="장비명, 프로필, 분류 검색"
+                            TextChanged="PaletteSearchBox_TextChanged" />
                     </StackPanel>
                     <ListView
                         x:Name="PaletteList"
                         Grid.Row="1"
                         AutomationProperties.AutomationId="DevicePalette"
+                        CanDragItems="True"
+                        DragItemsStarting="PaletteList_DragItemsStarting"
                         IsItemClickEnabled="True"
                         ItemClick="PaletteList_ItemClick"
                         ItemsSource="{x:Bind PaletteItems}"
@@ -115,8 +137,9 @@
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                                         <TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayName}" TextWrapping="Wrap" />
-                                        <TextBlock FontSize="11" Opacity="0.62" Text="{x:Bind ProfileId}" />
-                                        <TextBlock FontSize="11" Foreground="#F59E0B" Text="교육용 자산" />
+                                        <TextBlock FontSize="11" Opacity="0.62" Text="{x:Bind Category}" />
+                                        <TextBlock FontSize="11" Foreground="#F59E0B" Text="{x:Bind EvidenceLabel}" TextWrapping="Wrap" />
+                                        <TextBlock FontSize="11" Opacity="0.72" Text="{x:Bind AvailabilityLabel}" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>
@@ -131,8 +154,10 @@
                 BorderThickness="0,1,1,0">
                 <controls:WiringCanvas
                     x:Name="WiringCanvas"
+                    DeviceDropRequested="WiringCanvas_DeviceDropRequested"
                     DeviceMoveRequested="WiringCanvas_DeviceMoveRequested"
                     SelectionChanged="WiringCanvas_SelectionChanged"
+                    SelectionDeleteRequested="WiringCanvas_SelectionDeleteRequested"
                     WireCreationRequested="WiringCanvas_WireCreationRequested" />
             </Border>
 

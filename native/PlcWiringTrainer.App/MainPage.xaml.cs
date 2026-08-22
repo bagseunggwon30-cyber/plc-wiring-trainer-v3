@@ -7,8 +7,11 @@ using Microsoft.UI.Xaml.Media;
 using PlcWiringTrainer.App.Controls;
 using PlcWiringTrainer.Core.Documents;
 using PlcWiringTrainer.Core.Navigation;
+using PlcWiringTrainer.Core.Reports;
 using PlcWiringTrainer.Core.Validation;
+using PlcWiringTrainer.Core.Wiring;
 using PlcWiringTrainer.Core.Workbench;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
@@ -20,11 +23,22 @@ public sealed class PaletteItem
     {
     }
 
-    public PaletteItem(string profileId, string displayName, string assetUri)
+    public PaletteItem(
+        string profileId,
+        string displayName,
+        string assetUri,
+        string category,
+        string evidenceLabel,
+        string availabilityLabel,
+        bool canPlace)
     {
         ProfileId = profileId;
         DisplayName = displayName;
         AssetUri = assetUri;
+        Category = category;
+        EvidenceLabel = evidenceLabel;
+        AvailabilityLabel = availabilityLabel;
+        CanPlace = canPlace;
     }
 
     public string ProfileId { get; set; } = string.Empty;
@@ -32,11 +46,19 @@ public sealed class PaletteItem
     public string DisplayName { get; set; } = string.Empty;
 
     public string AssetUri { get; set; } = string.Empty;
+
+    public string Category { get; set; } = string.Empty;
+
+    public string EvidenceLabel { get; set; } = string.Empty;
+
+    public string AvailabilityLabel { get; set; } = string.Empty;
+
+    public bool CanPlace { get; set; }
 }
 
 public sealed class ValidationIssueItem
 {
-    public ValidationIssueItem(ValidationIssueV4 issue)
+    public ValidationIssueItem(ValidationIssueV5 issue)
     {
         Issue = issue;
         Code = issue.Code;
@@ -56,7 +78,7 @@ public sealed class ValidationIssueItem
         });
     }
 
-    public ValidationIssueV4 Issue { get; }
+    public ValidationIssueV5 Issue { get; }
 
     public string Code { get; }
 
@@ -72,7 +94,10 @@ public sealed class ValidationIssueItem
 public sealed partial class MainPage : Page
 {
     private readonly DeviceProfileCatalog _catalog = DeviceProfileCatalog.CreateDefault();
+    private readonly IConnectionAssessmentService _connectionAssessment;
+    private readonly IReportExporter _reportExporter;
     private readonly WorkshopDocumentRepository _repository;
+    private readonly List<PaletteItem> _paletteSource = [];
     private WorkbenchStore? _store;
     private CanvasSelection _selection = CanvasSelection.Empty;
     private CancellationTokenSource? _autosaveCancellation;
@@ -82,6 +107,8 @@ public sealed partial class MainPage : Page
 
     public MainPage()
     {
+        _connectionAssessment = new ConnectionAssessmentService(_catalog);
+        _reportExporter = new ReportExporter(_catalog);
         string appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "PLC Wiring Trainer");
@@ -90,15 +117,28 @@ public sealed partial class MainPage : Page
             Path.Combine(appData, "Quarantine"));
         _repository = new WorkshopDocumentRepository(migrator, Path.Combine(appData, "Autosave"));
 
-        foreach (DeviceProfileV4 profile in _catalog.Profiles.Where(profile => profile.IsPaletteVisible))
+        foreach (DeviceProfileV5 profile in _catalog.Profiles
+            .Where(profile => profile.Availability is PaletteAvailabilityV5.Ready or PaletteAvailabilityV5.Preparation)
+            .OrderBy(profile => profile.Category, StringComparer.Ordinal)
+            .ThenBy(profile => profile.DisplayName, StringComparer.Ordinal))
         {
-            PaletteItems.Add(new PaletteItem(
+            _paletteSource.Add(new PaletteItem(
                 profile.Id,
                 profile.DisplayName,
-                $"ms-appx:///{profile.AssetPath}"));
+                $"ms-appx:///{profile.AssetPath}",
+                profile.Category,
+                profile.ManualEvidence switch
+                {
+                    ManualEvidenceStatusV5.ExactProduct => "정확 품번 · ManualVerified",
+                    ManualEvidenceStatusV5.FamilyManual => "계열 매뉴얼 · 정확 품번 확인 필요",
+                    _ => "교육용 · 근거 미확정",
+                },
+                profile.Availability == PaletteAvailabilityV5.Ready ? "사용 가능" : "준비 중 · 배치/검증 잠금",
+                profile.Availability == PaletteAvailabilityV5.Ready));
         }
 
         InitializeComponent();
+        RefreshPalette();
         AttachStore(CreateExampleDocument());
     }
 
@@ -132,7 +172,7 @@ public sealed partial class MainPage : Page
         await ReplaceStoreAsync(CreateEmptyDocument());
         _currentPath = null;
         WiringCanvas.ResetView();
-        StatusText.Text = "새 v4 문서를 만들었습니다.";
+        StatusText.Text = "새 v5 문서를 만들었습니다.";
     }
 
     private async void Open_Click(object sender, RoutedEventArgs e)
@@ -161,10 +201,10 @@ public sealed partial class MainPage : Page
             }
 
             await ReplaceStoreAsync(result.Document);
-            _currentPath = result.Status == MigrationStatus.AlreadyV4 ? file.Path : null;
+            _currentPath = result.Status == MigrationStatus.AlreadyV5 ? file.Path : null;
             WiringCanvas.ResetView();
             StatusText.Text = result.Status == MigrationStatus.Converted
-                ? $"레거시 문서를 v4로 변환했습니다. 원본 백업: {result.BackupPath}"
+                ? $"레거시 문서를 v5로 변환했습니다. 원본 백업: {result.BackupPath}"
                 : $"문서를 열었습니다: {file.Name}";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
@@ -233,16 +273,76 @@ public sealed partial class MainPage : Page
 
     private void PaletteList_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is not PaletteItem item || !_catalog.TryGet(item.ProfileId, out DeviceProfileV4 profile))
+        if (e.ClickedItem is not PaletteItem item || !_catalog.TryGet(item.ProfileId, out DeviceProfileV5 profile))
         {
             return;
         }
 
+        if (!item.CanPlace)
+        {
+            StatusText.Text = $"{profile.DisplayName}은(는) 단자 보정이 끝나기 전까지 배치할 수 없습니다.";
+            return;
+        }
+
         int index = Store.Document.Devices.Length + 1;
-        string id = $"device-{Guid.NewGuid():N}";
         double x = 100 + ((index % 5) * 145);
         double y = 100 + ((index / 5) * 120);
-        Store.AddDevice(new DeviceInstanceV4(
+        PlaceDevice(profile, x, y);
+    }
+
+    private async void ExportCanonicalJson_Click(object sender, RoutedEventArgs e)
+        => await ExportReportAsync(ReportKindV5.CanonicalJson, "Canonical JSON", ".json");
+
+    private async void ExportPinToPinCsv_Click(object sender, RoutedEventArgs e)
+        => await ExportReportAsync(ReportKindV5.PinToPinCsv, "Pin-to-pin CSV", ".csv");
+
+    private async void ExportCableCoreCsv_Click(object sender, RoutedEventArgs e)
+        => await ExportReportAsync(ReportKindV5.CableCoreCsv, "Cable/core CSV", ".csv");
+
+    private async void ExportTerminalPlanCsv_Click(object sender, RoutedEventArgs e)
+        => await ExportReportAsync(ReportKindV5.TerminalPlanCsv, "단자 계획 CSV", ".csv");
+
+    private async void ExportBomCsv_Click(object sender, RoutedEventArgs e)
+        => await ExportReportAsync(ReportKindV5.BillOfMaterialsCsv, "BOM CSV", ".csv");
+
+    private async Task ExportReportAsync(ReportKindV5 kind, string description, string extension)
+    {
+        try
+        {
+            ReportArtifactV5 artifact = await _reportExporter.ExportAsync(
+                Store.Document,
+                Store.ValidationResult,
+                kind);
+            var picker = new FileSavePicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = Path.GetFileNameWithoutExtension(artifact.SuggestedFileName),
+            };
+            picker.FileTypeChoices.Add(description, [extension]);
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.MainWindow));
+            Windows.Storage.StorageFile? file = await picker.PickSaveFileAsync();
+            if (file is null)
+            {
+                return;
+            }
+
+            await Windows.Storage.FileIO.WriteBytesAsync(file, artifact.Content);
+            StatusText.Text = artifact.VerifiedPrewire
+                ? $"VERIFIED_PREWIRE 보고서를 저장했습니다: {file.Name}"
+                : $"검토용 보고서를 저장했습니다: {file.Name}";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            StatusText.Text = $"보고서 저장 실패: {exception.Message}";
+        }
+    }
+
+    private void PlaceDevice(DeviceProfileV5 profile, double x, double y)
+    {
+        string id = $"device-{Guid.NewGuid():N}";
+        double width = Math.Max(40, profile.DefaultWidth);
+        double height = Math.Max(40, profile.DefaultHeight);
+        Store.AddDevice(new DeviceInstanceV5(
             id,
             profile.Id,
             profile.Version,
@@ -251,10 +351,13 @@ public sealed partial class MainPage : Page
             x,
             y,
             0,
-            120,
-            80,
+            width,
+            height,
             false,
-            new Dictionary<string, string>()));
+            new Dictionary<string, string>())
+        {
+            CatalogEntryId = profile.LegacyType,
+        });
         StatusText.Text = $"{profile.DisplayName} 장비를 배치했습니다.";
     }
 
@@ -266,28 +369,92 @@ public sealed partial class MainPage : Page
 
     private void WiringCanvas_WireCreationRequested(
         object? sender,
-        (TerminalRefV4 Start, TerminalRefV4 End) terminals)
+        (TerminalRefV5 Start, TerminalRefV5 End, PointV5[] Waypoints) terminals)
     {
-        bool exists = Store.Document.Conductors.Any(conductor =>
-            (conductor.Start == terminals.Start && conductor.End == terminals.End)
-            || (conductor.Start == terminals.End && conductor.End == terminals.Start));
-        if (exists)
+        ConnectionAssessmentV5 assessment = _connectionAssessment.Assess(
+            Store.Document,
+            terminals.Start,
+            terminals.End);
+        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
         {
-            StatusText.Text = "두 단자는 이미 전선으로 연결되어 있습니다.";
+            StatusText.Text = $"결선 차단 [{assessment.Code}] {assessment.Message}";
             return;
         }
 
         int wireNumber = Store.Document.Conductors.Length + 1;
-        Store.AddConductor(new ConductorV4(
+        Store.AddConductor(new ConductorV5(
             $"wire-{Guid.NewGuid():N}",
             terminals.Start,
             terminals.End,
-            [],
+            terminals.Waypoints,
             $"W{wireNumber:000}",
             "#EF4444",
             0.75,
-            false));
-        StatusText.Text = $"{terminals.Start.Key} ↔ {terminals.End.Key} 전선을 만들었습니다.";
+            false)
+        {
+            DiagnosticOverride = assessment.RequiresDiagnosticOverride,
+        });
+        StatusText.Text = assessment.Disposition == ConnectionDispositionV5.Warning
+            ? $"경고 후 결선 [{assessment.Code}] {assessment.Message}"
+            : $"{terminals.Start.Key} ↔ {terminals.End.Key} 전선을 만들었습니다.";
+    }
+
+    private void PaletteSearchBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshPalette();
+
+    private void RefreshPalette()
+    {
+        string query = PaletteSearchBox?.Text.Trim() ?? string.Empty;
+        IEnumerable<PaletteItem> items = _paletteSource;
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            items = items.Where(item =>
+                item.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                || item.ProfileId.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || item.Category.Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+
+        PaletteItems.Clear();
+        foreach (PaletteItem item in items)
+        {
+            PaletteItems.Add(item);
+        }
+    }
+
+    private void PaletteList_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    {
+        if (e.Items.FirstOrDefault() is not PaletteItem { CanPlace: true } item)
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        e.Data.SetText(item.ProfileId);
+        e.Data.RequestedOperation = DataPackageOperation.Copy;
+    }
+
+    private void WiringCanvas_DeviceDropRequested(
+        object? sender,
+        (string ProfileId, double X, double Y) drop)
+    {
+        if (_catalog.TryGet(drop.ProfileId, out DeviceProfileV5 profile)
+            && profile.Availability == PaletteAvailabilityV5.Ready)
+        {
+            PlaceDevice(profile, drop.X - (profile.DefaultWidth / 2), drop.Y - (profile.DefaultHeight / 2));
+        }
+    }
+
+    private void WiringCanvas_SelectionDeleteRequested(object? sender, CanvasSelection selection)
+    {
+        if (selection.Kind == CanvasSelectionKind.Device)
+        {
+            Store.RemoveDevice(selection.Id);
+            StatusText.Text = "장비와 연결된 전선을 한 작업으로 삭제했습니다.";
+        }
+        else if (selection.Kind == CanvasSelectionKind.Conductor)
+        {
+            Store.RemoveConductor(selection.Id);
+            StatusText.Text = "전선을 삭제했습니다.";
+        }
     }
 
     private void WiringCanvas_DeviceMoveRequested(
@@ -441,7 +608,9 @@ public sealed partial class MainPage : Page
         {
             ValidationFreshness.Stale => "STALE · 편집 내용이 바뀌어 결과를 다시 계산합니다.",
             ValidationFreshness.Running => "RUNNING · 백그라운드에서 결선을 계산 중입니다.",
-            _ => $"CURRENT · rev {Store.ValidationResult?.Revision}",
+            ValidationFreshness.Blocked => $"BLOCKED · 차단 문제 있음 · rev {Store.ValidationResult?.Revision}",
+            ValidationFreshness.Fail => $"FAIL · 검증 오류 있음 · rev {Store.ValidationResult?.Revision}",
+            _ => $"PASS · 현재 문서와 일치 · rev {Store.ValidationResult?.Revision}",
         };
 
         ValidationItems.Clear();
@@ -451,7 +620,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        foreach (ValidationIssueV4 issue in Store.ValidationResult.Issues)
+        foreach (ValidationIssueV5 issue in Store.ValidationResult.Issues)
         {
             ValidationItems.Add(new ValidationIssueItem(issue));
         }
@@ -479,7 +648,7 @@ public sealed partial class MainPage : Page
 
             if (_selection.Kind == CanvasSelectionKind.Device)
             {
-                DeviceInstanceV4? device = Store.Document.Devices.FirstOrDefault(item => item.Id == _selection.Id);
+                DeviceInstanceV5? device = Store.Document.Devices.FirstOrDefault(item => item.Id == _selection.Id);
                 if (device is null)
                 {
                     NoSelectionPanel.Visibility = Visibility.Visible;
@@ -503,7 +672,7 @@ public sealed partial class MainPage : Page
 
             if (_selection.Kind == CanvasSelectionKind.Conductor)
             {
-                ConductorV4? conductor = Store.Document.Conductors.FirstOrDefault(item => item.Id == _selection.Id);
+                ConductorV5? conductor = Store.Document.Conductors.FirstOrDefault(item => item.Id == _selection.Id);
                 if (conductor is null)
                 {
                     NoSelectionPanel.Visibility = Visibility.Visible;
@@ -534,7 +703,7 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void AttachStore(WorkshopDocumentV4 document)
+    private void AttachStore(WorkshopDocumentV5 document)
     {
         _store = new WorkbenchStore(document, new CircuitValidationService(_catalog));
         _store.Changed += Store_Changed;
@@ -543,7 +712,7 @@ public sealed partial class MainPage : Page
         _lastAutosaveRevision = 0;
     }
 
-    private async Task ReplaceStoreAsync(WorkshopDocumentV4 document)
+    private async Task ReplaceStoreAsync(WorkshopDocumentV5 document)
     {
         WorkbenchStore? previous = _store;
         if (previous is not null)
@@ -560,7 +729,7 @@ public sealed partial class MainPage : Page
         RefreshFromStore();
     }
 
-    private void ScheduleAutosave(WorkshopDocumentV4 snapshot)
+    private void ScheduleAutosave(WorkshopDocumentV5 snapshot)
     {
         _autosaveCancellation?.Cancel();
         _autosaveCancellation?.Dispose();
@@ -568,7 +737,7 @@ public sealed partial class MainPage : Page
         _ = AutosaveAfterDelayAsync(snapshot, _autosaveCancellation.Token);
     }
 
-    private async Task AutosaveAfterDelayAsync(WorkshopDocumentV4 snapshot, CancellationToken cancellationToken)
+    private async Task AutosaveAfterDelayAsync(WorkshopDocumentV5 snapshot, CancellationToken cancellationToken)
     {
         try
         {
@@ -620,31 +789,31 @@ public sealed partial class MainPage : Page
         return string.IsNullOrWhiteSpace(cleaned) ? "wiring-panel" : cleaned;
     }
 
-    private static WorkshopDocumentV4 CreateEmptyDocument()
+    private static WorkshopDocumentV5 CreateEmptyDocument()
     {
-        var document = new WorkshopDocumentV4
+        var document = new WorkshopDocumentV5
         {
             DocumentId = Guid.NewGuid().ToString("D"),
             Revision = 1,
             Name = "새 결선 문서",
             Devices = [],
             Conductors = [],
-            Jumpers = [],
-            Panel = new PanelLayoutV4(1500, 950),
-            Viewport = new ViewportV4(1, 40, 40),
-            Settings = new WorkshopSettingsV4(10, true),
+            TerminalBridges = [],
+            Panel = new PanelLayoutV5(1500, 950),
+            Viewport = new ViewportV5(1, 40, 40),
+            Settings = new WorkshopSettingsV5(10, true),
             Extensions = new Dictionary<string, JsonElement>(),
         };
         return DocumentHasher.WithContentHash(document);
     }
 
-    private static WorkshopDocumentV4 CreateExampleDocument()
+    private static WorkshopDocumentV5 CreateExampleDocument()
     {
-        DeviceInstanceV4 supply = Device("supply", "dc-supply-24v", 1, "DC 24 V 전원", 80, 270);
-        DeviceInstanceV4 sensor = Device("sensor-npn", "prox-npn-v2", 2, "NPN 근접 센서", 330, 120);
-        DeviceInstanceV4 plc = Device("plc-input", "plc-input-24v", 1, "PLC DC 입력", 650, 120);
-        DeviceInstanceV4 lamp = Device("lamp-green", "lamp-green-v1", 1, "녹색 표시등", 650, 360);
-        WorkshopDocumentV4 document = CreateEmptyDocument() with
+        DeviceInstanceV5 supply = Device("supply", "dc-supply-24v", 1, "DC 24 V 전원", 80, 270);
+        DeviceInstanceV5 sensor = Device("sensor-npn", "prox-npn-v2", 2, "NPN 근접 센서", 330, 120);
+        DeviceInstanceV5 plc = Device("plc-input", "plc-input-24v", 1, "PLC DC 입력", 650, 120);
+        DeviceInstanceV5 lamp = Device("lamp-green", "lamp-green-v1", 1, "녹색 표시등", 650, 360);
+        WorkshopDocumentV5 document = CreateEmptyDocument() with
         {
             DocumentId = "starter-panel",
             Name = "NPN 결선 점검 예제",
@@ -663,7 +832,7 @@ public sealed partial class MainPage : Page
         return DocumentHasher.WithContentHash(document);
     }
 
-    private static DeviceInstanceV4 Device(
+    private static DeviceInstanceV5 Device(
         string id,
         string profileId,
         int profileVersion,
@@ -684,7 +853,7 @@ public sealed partial class MainPage : Page
             false,
             new Dictionary<string, string>());
 
-    private static ConductorV4 Wire(
+    private static ConductorV5 Wire(
         string id,
         string label,
         string startDevice,
@@ -694,8 +863,8 @@ public sealed partial class MainPage : Page
         string color)
         => new(
             id,
-            new TerminalRefV4(startDevice, startTerminal),
-            new TerminalRefV4(endDevice, endTerminal),
+            new TerminalRefV5(startDevice, startTerminal),
+            new TerminalRefV5(endDevice, endTerminal),
             [],
             label,
             color,

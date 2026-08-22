@@ -22,7 +22,7 @@ public sealed class WorkbenchStoreTests
         Assert.Equal(ValidationFreshness.Stale, store.ValidationFreshness);
         Assert.True(store.CanUndo);
         await store.WaitForValidationAsync();
-        Assert.Equal(ValidationFreshness.Current, store.ValidationFreshness);
+        Assert.Equal(ValidationFreshness.Pass, store.ValidationFreshness);
         Assert.Equal(store.Document.ContentHash, store.ValidationResult!.ContentHash);
 
         Assert.True(store.Undo());

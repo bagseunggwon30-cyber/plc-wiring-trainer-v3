@@ -7,7 +7,9 @@ public enum ValidationFreshness
 {
     Stale,
     Running,
-    Current,
+    Pass,
+    Fail,
+    Blocked,
 }
 
 /// <summary>편집 revision, undo/redo, 검증 수명을 한 곳에서 소유합니다.</summary>
@@ -15,14 +17,14 @@ public sealed class WorkbenchStore : IAsyncDisposable
 {
     private readonly IValidationService _validationService;
     private readonly TimeSpan _validationDebounce;
-    private readonly Stack<WorkshopDocumentV4> _undo = new();
-    private readonly Stack<WorkshopDocumentV4> _redo = new();
+    private readonly Stack<WorkshopDocumentV5> _undo = new();
+    private readonly Stack<WorkshopDocumentV5> _redo = new();
     private CancellationTokenSource? _validationCancellation;
     private Task _validationTask = Task.CompletedTask;
     private bool _disposed;
 
     public WorkbenchStore(
-        WorkshopDocumentV4 document,
+        WorkshopDocumentV5 document,
         IValidationService validationService,
         TimeSpan? validationDebounce = null)
     {
@@ -34,11 +36,11 @@ public sealed class WorkbenchStore : IAsyncDisposable
         ScheduleValidation();
     }
 
-    public WorkshopDocumentV4 Document { get; private set; }
+    public WorkshopDocumentV5 Document { get; private set; }
 
     public ValidationFreshness ValidationFreshness { get; private set; }
 
-    public ValidationResultV4? ValidationResult { get; private set; }
+    public ValidationResultV5? ValidationResult { get; private set; }
 
     public bool CanUndo => _undo.Count > 0;
 
@@ -46,7 +48,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
 
     public event EventHandler? Changed;
 
-    public void UpdateDevice(string deviceId, Func<DeviceInstanceV4, DeviceInstanceV4> update)
+    public void UpdateDevice(string deviceId, Func<DeviceInstanceV5, DeviceInstanceV5> update)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
@@ -57,12 +59,12 @@ public sealed class WorkbenchStore : IAsyncDisposable
             throw new KeyNotFoundException($"장비를 찾을 수 없습니다: {deviceId}");
         }
 
-        DeviceInstanceV4[] devices = [.. Document.Devices];
+        DeviceInstanceV5[] devices = [.. Document.Devices];
         devices[index] = update(devices[index]);
         Commit(Document with { Devices = devices });
     }
 
-    public void UpdateConductor(string conductorId, Func<ConductorV4, ConductorV4> update)
+    public void UpdateConductor(string conductorId, Func<ConductorV5, ConductorV5> update)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(conductorId);
@@ -73,12 +75,12 @@ public sealed class WorkbenchStore : IAsyncDisposable
             throw new KeyNotFoundException($"전선을 찾을 수 없습니다: {conductorId}");
         }
 
-        ConductorV4[] conductors = [.. Document.Conductors];
+        ConductorV5[] conductors = [.. Document.Conductors];
         conductors[index] = update(conductors[index]);
         Commit(Document with { Conductors = conductors });
     }
 
-    public void AddDevice(DeviceInstanceV4 device)
+    public void AddDevice(DeviceInstanceV5 device)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(device);
@@ -90,7 +92,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
         Commit(Document with { Devices = [.. Document.Devices, device] });
     }
 
-    public void AddConductor(ConductorV4 conductor)
+    public void AddConductor(ConductorV5 conductor)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(conductor);
@@ -100,6 +102,109 @@ public sealed class WorkbenchStore : IAsyncDisposable
         }
 
         Commit(Document with { Conductors = [.. Document.Conductors, conductor] });
+    }
+
+    public void RemoveDevice(string deviceId)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
+        if (!Document.Devices.Any(device => device.Id == deviceId))
+        {
+            throw new KeyNotFoundException($"장비를 찾을 수 없습니다: {deviceId}");
+        }
+
+        string[] removedConductorIds = Document.Conductors
+            .Where(conductor => conductor.Start.DeviceId == deviceId || conductor.End.DeviceId == deviceId)
+            .Select(conductor => conductor.Id)
+            .ToArray();
+        TerminalBridgeV5[] bridges = Document.TerminalBridges
+            .Select(bridge => bridge with
+            {
+                Terminals = bridge.Terminals.Where(terminal => terminal.DeviceId != deviceId).ToArray(),
+            })
+            .Where(bridge => bridge.Terminals.Length >= 2)
+            .ToArray();
+        CableAssemblyV5[] cables = Document.CableAssemblies
+            .Select(cable => cable with
+            {
+                ConductorIds = cable.ConductorIds.Except(removedConductorIds, StringComparer.Ordinal).ToArray(),
+            })
+            .ToArray();
+        Commit(Document with
+        {
+            Devices = Document.Devices.Where(device => device.Id != deviceId).ToArray(),
+            Conductors = Document.Conductors
+                .Where(conductor => conductor.Start.DeviceId != deviceId && conductor.End.DeviceId != deviceId)
+                .ToArray(),
+            TerminalBridges = bridges,
+            CableAssemblies = cables,
+            TerminalAssemblies = Document.TerminalAssemblies
+                .Where(assembly => assembly.DeviceId != deviceId)
+                .ToArray(),
+            PlcRuntimeBindings = Document.PlcRuntimeBindings
+                .Where(binding => binding.DeviceId != deviceId)
+                .ToArray(),
+        });
+    }
+
+    public void RemoveConductor(string conductorId)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(conductorId);
+        if (!Document.Conductors.Any(conductor => conductor.Id == conductorId))
+        {
+            throw new KeyNotFoundException($"전선을 찾을 수 없습니다: {conductorId}");
+        }
+
+        Commit(Document with
+        {
+            Conductors = Document.Conductors.Where(conductor => conductor.Id != conductorId).ToArray(),
+            CableAssemblies = Document.CableAssemblies
+                .Select(cable => cable with
+                {
+                    ConductorIds = cable.ConductorIds
+                        .Where(id => id != conductorId)
+                        .ToArray(),
+                })
+                .ToArray(),
+        });
+    }
+
+    public void AddTerminalBridge(TerminalBridgeV5 bridge)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(bridge);
+        if (bridge.Terminals.Length < 2)
+        {
+            throw new ArgumentException("점퍼에는 두 개 이상의 단자가 필요합니다.", nameof(bridge));
+        }
+
+        if (Document.TerminalBridges.Any(item => item.Id == bridge.Id))
+        {
+            throw new InvalidOperationException($"중복 점퍼 ID입니다: {bridge.Id}");
+        }
+
+        Commit(Document with { TerminalBridges = [.. Document.TerminalBridges, bridge] });
+    }
+
+    public void UpdateViewDevicePosition(string viewId, string deviceId, PointV5 position)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
+        ArgumentNullException.ThrowIfNull(position);
+        if (!Document.Devices.Any(device => device.Id == deviceId))
+        {
+            throw new KeyNotFoundException($"장비를 찾을 수 없습니다: {deviceId}");
+        }
+
+        var layouts = new Dictionary<string, ViewLayoutV5>(Document.ViewLayouts, StringComparer.Ordinal);
+        var positions = layouts.TryGetValue(viewId, out ViewLayoutV5? layout)
+            ? new Dictionary<string, PointV5>(layout.Positions, StringComparer.Ordinal)
+            : new Dictionary<string, PointV5>(StringComparer.Ordinal);
+        positions[deviceId] = position;
+        layouts[viewId] = new ViewLayoutV5(positions);
+        Commit(Document with { ViewLayouts = layouts });
     }
 
     public bool Undo()
@@ -166,14 +271,14 @@ public sealed class WorkbenchStore : IAsyncDisposable
         }
     }
 
-    private void Commit(WorkshopDocumentV4 candidate)
+    private void Commit(WorkshopDocumentV5 candidate)
     {
         _undo.Push(Document);
         _redo.Clear();
         RestoreAsNewRevision(candidate);
     }
 
-    private void RestoreAsNewRevision(WorkshopDocumentV4 candidate)
+    private void RestoreAsNewRevision(WorkshopDocumentV5 candidate)
     {
         Document = DocumentHasher.WithContentHash(candidate with { Revision = Document.Revision + 1 });
         ValidationResult = null;
@@ -187,7 +292,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
         CancellationTokenSource? previous = _validationCancellation;
         _validationCancellation = new CancellationTokenSource();
         CancellationToken cancellationToken = _validationCancellation.Token;
-        WorkshopDocumentV4 snapshot = Document;
+        WorkshopDocumentV5 snapshot = Document;
 
         if (previous is not null)
         {
@@ -199,7 +304,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
     }
 
     private async Task ValidateAfterDebounceAsync(
-        WorkshopDocumentV4 snapshot,
+        WorkshopDocumentV5 snapshot,
         CancellationToken cancellationToken)
     {
         try
@@ -207,7 +312,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
             await Task.Delay(_validationDebounce, cancellationToken).ConfigureAwait(false);
             ValidationFreshness = ValidationFreshness.Running;
             Changed?.Invoke(this, EventArgs.Empty);
-            ValidationResultV4 result = await _validationService
+            ValidationResultV5 result = await _validationService
                 .ValidateAsync(snapshot, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -215,7 +320,11 @@ public sealed class WorkbenchStore : IAsyncDisposable
                 && string.Equals(result.ContentHash, Document.ContentHash, StringComparison.Ordinal))
             {
                 ValidationResult = result;
-                ValidationFreshness = ValidationFreshness.Current;
+                ValidationFreshness = result.Issues.Any(issue => issue.Blocking)
+                    ? ValidationFreshness.Blocked
+                    : result.Issues.Any(issue => issue.Severity == ValidationSeverity.Error)
+                        ? ValidationFreshness.Fail
+                        : ValidationFreshness.Pass;
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }

@@ -11,13 +11,13 @@ public static class WorkshopDocumentSerializer
     private static readonly JsonSerializerOptions CompactOptions = CreateOptions(writeIndented: false);
     private static readonly JsonSerializerOptions IndentedOptions = CreateOptions(writeIndented: true);
 
-    public static WorkshopDocumentV4 Deserialize(string json, bool verifyHash = true)
+    public static WorkshopDocumentV5 Deserialize(string json, bool verifyHash = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(json);
-        WorkshopDocumentV4 document = JsonSerializer.Deserialize<WorkshopDocumentV4>(json, CompactOptions)
+        WorkshopDocumentV5 document = JsonSerializer.Deserialize<WorkshopDocumentV5>(json, CompactOptions)
             ?? throw new InvalidDataException("문서 내용을 읽을 수 없습니다.");
 
-        if (document.SchemaVersion != 4)
+        if (document.SchemaVersion != 5)
         {
             throw new InvalidDataException($"지원하지 않는 문서 스키마입니다: {document.SchemaVersion}");
         }
@@ -35,13 +35,13 @@ public static class WorkshopDocumentSerializer
         return document;
     }
 
-    public static string Serialize(WorkshopDocumentV4 document)
+    public static string Serialize(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);
         return JsonSerializer.Serialize(document, IndentedOptions) + Environment.NewLine;
     }
 
-    internal static string SerializeCanonicalCandidate(WorkshopDocumentV4 document)
+    internal static string SerializeCanonicalCandidate(WorkshopDocumentV5 document)
         => JsonSerializer.Serialize(document, CompactOptions);
 
     private static JsonSerializerOptions CreateOptions(bool writeIndented)
@@ -57,21 +57,21 @@ public static class WorkshopDocumentSerializer
 
 public static class DocumentHasher
 {
-    public static WorkshopDocumentV4 WithContentHash(WorkshopDocumentV4 document)
+    public static WorkshopDocumentV5 WithContentHash(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);
         string hash = ComputeContentHash(document);
         return document with { ContentHash = hash };
     }
 
-    public static bool MatchesContentHash(WorkshopDocumentV4 document)
+    public static bool MatchesContentHash(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);
         return document.ContentHash.Length == 64
             && string.Equals(document.ContentHash, ComputeContentHash(document), StringComparison.OrdinalIgnoreCase);
     }
 
-    public static string ComputeContentHash(WorkshopDocumentV4 document)
+    public static string ComputeContentHash(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);
         string json = WorkshopDocumentSerializer.SerializeCanonicalCandidate(document with { ContentHash = string.Empty });
