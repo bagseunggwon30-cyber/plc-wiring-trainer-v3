@@ -5,9 +5,9 @@
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>PlcWiringTrainer.App</RootNamespace>
     <AssemblyName>PlcWiringTrainer</AssemblyName>
-    <Version>4.1.2</Version>
-    <AssemblyVersion>4.1.2.0</AssemblyVersion>
-    <FileVersion>4.1.2.0</FileVersion>
+    <Version>4.2.0</Version>
+    <AssemblyVersion>4.2.0.0</AssemblyVersion>
+    <FileVersion>4.2.0.0</FileVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
@@ -45,8 +45,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
-    <!-- WinUI declares the browser SDK transitively. Excluding every asset prevents its
-         projection and loader from entering this native-only app or publish output. -->
+    <!-- WinUI 메타패키지의 선택적 브라우저 자산을 제품 출력에서 완전히 제외합니다. -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77"
                       ExcludeAssets="all" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />

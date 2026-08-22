@@ -22,8 +22,10 @@ public sealed record ReportArtifactV5(
     int Revision,
     string ContentHash);
 
+/// <summary>현재 문서와 동일 revision의 검증 결과에서 네이티브 보고서 자료를 생성합니다.</summary>
 public interface IReportExporter
 {
+    /// <summary>HTML 없이 canonical JSON 또는 CSV 자료를 생성합니다.</summary>
     Task<ReportArtifactV5> ExportAsync(
         WorkshopDocumentV5 document,
         ValidationResultV5? validation,

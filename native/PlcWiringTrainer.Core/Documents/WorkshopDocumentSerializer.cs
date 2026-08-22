@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace PlcWiringTrainer.Core.Documents;
 
+/// <summary>schema v5 JSON의 역직렬화, canonical hash 계산과 직렬화를 담당합니다.</summary>
 public static class WorkshopDocumentSerializer
 {
     private static readonly JsonSerializerOptions CompactOptions = CreateOptions(writeIndented: false);
@@ -76,60 +77,8 @@ public static class DocumentHasher
         ArgumentNullException.ThrowIfNull(document);
         string json = WorkshopDocumentSerializer.SerializeCanonicalCandidate(document with { ContentHash = string.Empty });
         JsonNode root = JsonNode.Parse(json) ?? throw new InvalidDataException("문서 해시를 계산할 수 없습니다.");
-        string canonical = Canonicalize(root);
+        string canonical = JsonCanonicalizer.Canonicalize(root);
         byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
         return Convert.ToHexStringLower(digest);
-    }
-
-    private static string Canonicalize(JsonNode node)
-    {
-        var builder = new StringBuilder();
-        WriteCanonical(node, builder);
-        return builder.ToString();
-    }
-
-    private static void WriteCanonical(JsonNode? node, StringBuilder builder)
-    {
-        switch (node)
-        {
-            case null:
-                builder.Append("null");
-                break;
-            case JsonObject jsonObject:
-                builder.Append('{');
-                bool firstProperty = true;
-                foreach (KeyValuePair<string, JsonNode?> property in jsonObject.OrderBy(item => item.Key, StringComparer.Ordinal))
-                {
-                    if (!firstProperty)
-                    {
-                        builder.Append(',');
-                    }
-
-                    firstProperty = false;
-                    builder.Append(JsonSerializer.Serialize(property.Key));
-                    builder.Append(':');
-                    WriteCanonical(property.Value, builder);
-                }
-
-                builder.Append('}');
-                break;
-            case JsonArray jsonArray:
-                builder.Append('[');
-                for (int index = 0; index < jsonArray.Count; index++)
-                {
-                    if (index > 0)
-                    {
-                        builder.Append(',');
-                    }
-
-                    WriteCanonical(jsonArray[index], builder);
-                }
-
-                builder.Append(']');
-                break;
-            default:
-                builder.Append(node.ToJsonString());
-                break;
-        }
     }
 }

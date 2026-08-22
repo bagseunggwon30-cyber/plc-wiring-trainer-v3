@@ -13,7 +13,14 @@ public sealed class NativeWorkbenchUiTests
     {
         using var session = NativeAppSession.Start();
 
-        Assert.Equal("PLC Wiring Trainer 4.1.2", session.Window.Title);
+        Assert.Equal("PLC Wiring Trainer 4.2.0", session.Window.Title);
+        Assert.NotNull(session.FindByAutomationId("WorkspaceNavigation"));
+        Assert.NotNull(session.FindByAutomationId("PlacementWorkspaceButton"));
+        Assert.NotNull(session.FindByAutomationId("WiringWorkspaceButton"));
+        Assert.NotNull(session.FindByAutomationId("ValidationWorkspaceButton"));
+        AutomationElement paletteToggle = session.FindByAutomationId("PalettePaneToggle");
+        Assert.NotNull(paletteToggle);
+        paletteToggle.AsToggleButton().Toggle();
         Assert.NotNull(session.FindByAutomationId("DevicePalette"));
         Assert.NotNull(session.FindByAutomationId("PaletteSearchBox"));
         Assert.Equal(
@@ -24,7 +31,7 @@ public sealed class NativeWorkbenchUiTests
         Assert.NotNull(session.FindByAutomationId("SaveDocumentButton"));
         session.SelectTab("결선 검증");
         Assert.NotNull(session.WaitForAutomationId("ValidationIssueList"));
-        Thread.Sleep(TimeSpan.FromSeconds(3));
+        Assert.NotNull(session.WaitForAutomationId("RevisionStatusText"));
         Assert.False(session.HasExited);
     }
 
@@ -35,7 +42,7 @@ public sealed class NativeWorkbenchUiTests
         session.SelectTab("결선 검증");
 
         AutomationElement issue = session.WaitForName("NPN_INPUT_COMMON_POLARITY", TimeSpan.FromSeconds(12));
-        session.ActivateListItem(issue);
+        NativeAppSession.ActivateListItem(issue);
 
         AutomationElement canvas = session.FindByAutomationId("WiringCanvas");
         bool focusedWire = WaitUntil(
@@ -53,6 +60,7 @@ public sealed class NativeWorkbenchUiTests
     public void PaletteEditHidesAndRestoresADeviceWithoutDeletingItsAsset()
     {
         using var session = NativeAppSession.Start();
+        session.FindByAutomationId("PalettePaneToggle").AsToggleButton().Toggle();
         TextBox search = session.FindByAutomationId("PaletteSearchBox").AsTextBox();
         search.Text = "LED 표시등 녹";
 
@@ -63,6 +71,43 @@ public sealed class NativeWorkbenchUiTests
         Assert.False(session.ExistsByAutomationId("PaletteHideButton"));
         session.WaitForAutomationId("RestoreHiddenPaletteButton").AsButton().Invoke();
         Assert.NotNull(session.WaitForAutomationId("PaletteHideButton"));
+    }
+
+    [Fact(Skip = "격리된 Windows UI 세션에서만 물리 포인터 입력을 검증합니다.")]
+    public void BlankCanvasRightClickSearchPlacesADeviceWithoutOpeningThePalette()
+    {
+        using var session = NativeAppSession.Start();
+        AutomationElement canvas = session.FindByAutomationId("WiringCanvas");
+        System.Drawing.Rectangle bounds = canvas.BoundingRectangle;
+        System.Drawing.Point[] candidates =
+        [
+            new(bounds.Right - 80, bounds.Bottom - 80),
+            new(bounds.Left + 80, bounds.Bottom - 80),
+            new(bounds.Right - 80, bounds.Top + 80),
+        ];
+
+        foreach (System.Drawing.Point candidate in candidates)
+        {
+            FlaUI.Core.Input.Mouse.RightClick(candidate);
+            if (WaitUntil(
+                () => session.ExistsByAutomationId("QuickInsertSearchBox"),
+                TimeSpan.FromSeconds(1)))
+            {
+                break;
+            }
+        }
+
+        TextBox search = session.WaitForAutomationId("QuickInsertSearchBox").AsTextBox();
+        Assert.False(session.ExistsByAutomationId("DevicePalette"));
+        string revisionBefore = session.FindByAutomationId("RevisionStatusText").Name;
+        search.Text = "XBF-AD04A";
+        search.Focus();
+        FlaUI.Core.Input.Keyboard.Press(FlaUI.Core.WindowsAPI.VirtualKeyShort.RETURN);
+
+        Assert.True(WaitUntil(
+            () => session.FindByAutomationId("RevisionStatusText").Name != revisionBefore,
+            TimeSpan.FromSeconds(4)));
+        session.FindByAutomationId("UndoButton").AsButton().Invoke();
     }
 
     private static bool WaitUntil(Func<bool> condition, TimeSpan timeout)
@@ -84,7 +129,7 @@ public sealed class NativeWorkbenchUiTests
 }
 
 [CollectionDefinition("Native UI", DisableParallelization = true)]
-public sealed class NativeUiCollection;
+public sealed class NativeUiTestScope;
 
 internal sealed class NativeAppSession : IDisposable
 {
@@ -217,7 +262,7 @@ internal sealed class NativeAppSession : IDisposable
         element.AsTabItem().Select();
     }
 
-    public void ActivateListItem(AutomationElement descendant)
+    public static void ActivateListItem(AutomationElement descendant)
     {
         AutomationElement? item = descendant;
         while (item is not null && item.ControlType != ControlType.ListItem)

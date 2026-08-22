@@ -3,8 +3,10 @@ using System.Text.Json;
 
 namespace PlcWiringTrainer.Core.Palette;
 
-/// <summary>사용자가 팔레트에서 숨긴 장비 ID를 보존합니다.</summary>
-public sealed record PalettePreferencesV1(string[] HiddenProfileIds);
+/// <summary>사용자가 숨긴 장비와 보조 팔레트의 펼침 상태를 보존합니다.</summary>
+public sealed record PalettePreferencesV1(
+    string[] HiddenProfileIds,
+    bool IsPaneOpen = false);
 
 /// <summary>패키지 식별자가 없는 포터블 앱용 팔레트 설정 저장소입니다.</summary>
 public sealed class PalettePreferencesStore
@@ -69,9 +71,11 @@ public sealed class PalettePreferencesStore
     }
 
     private static PalettePreferencesV1 Normalize(PalettePreferencesV1 preferences)
-        => new(preferences.HiddenProfileIds
-            .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(id => id, StringComparer.Ordinal)
-            .ToArray());
+        => new(
+            preferences.HiddenProfileIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToArray(),
+            preferences.IsPaneOpen);
 }

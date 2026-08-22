@@ -12,6 +12,6 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
         AppWindow.SetIcon("Assets/AppIcon.ico");
         AppWindow.Resize(new SizeInt32(1560, 940));
-        RootFrame.Navigate(typeof(MainPage));
+        RootFrame.Navigate(typeof(WorkbenchShell));
     }
 }

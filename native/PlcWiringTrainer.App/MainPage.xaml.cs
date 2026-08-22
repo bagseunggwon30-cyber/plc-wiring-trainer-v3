@@ -1,181 +1,66 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using PlcWiringTrainer.App.Controls;
+using PlcWiringTrainer.App.Presentation;
+using PlcWiringTrainer.App.Services;
+using PlcWiringTrainer.App.Workbench;
 using PlcWiringTrainer.Core.Documents;
 using PlcWiringTrainer.Core.Navigation;
-using PlcWiringTrainer.Core.Palette;
 using PlcWiringTrainer.Core.Reports;
 using PlcWiringTrainer.Core.Validation;
 using PlcWiringTrainer.Core.Wiring;
 using PlcWiringTrainer.Core.Workbench;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Pickers;
+using Windows.System;
 using WinRT.Interop;
 
 namespace PlcWiringTrainer.App;
 
-public sealed class PaletteItem
+public sealed partial class WorkbenchShell : Page, IAsyncDisposable
 {
-    public PaletteItem()
-    {
-    }
-
-    public PaletteItem(
-        string profileId,
-        string displayName,
-        string assetUri,
-        string category,
-        string evidenceLabel,
-        string availabilityLabel,
-        bool canPlace,
-        bool isManualVerified)
-    {
-        ProfileId = profileId;
-        DisplayName = displayName;
-        AssetUri = assetUri;
-        Category = category;
-        EvidenceLabel = evidenceLabel;
-        AvailabilityLabel = availabilityLabel;
-        CategoryAndAvailability = $"{category} · {availabilityLabel}";
-        CanPlace = canPlace;
-        IsManualVerified = isManualVerified;
-    }
-
-    public string ProfileId { get; set; } = string.Empty;
-
-    public string DisplayName { get; set; } = string.Empty;
-
-    public string AssetUri { get; set; } = string.Empty;
-
-    public string Category { get; set; } = string.Empty;
-
-    public string EvidenceLabel { get; set; } = string.Empty;
-
-    public string AvailabilityLabel { get; set; } = string.Empty;
-
-    public string CategoryAndAvailability { get; set; } = string.Empty;
-
-    public bool CanPlace { get; set; }
-
-    public bool IsManualVerified { get; set; }
-
-    public Visibility EditVisibility { get; set; } = Visibility.Collapsed;
-
-    public string HideAutomationName => $"{DisplayName} 팔레트에서 숨기기";
-}
-
-public sealed class ValidationIssueItem
-{
-    public ValidationIssueItem(ValidationIssueV5 issue)
-    {
-        Issue = issue;
-        Code = issue.Code;
-        Message = issue.Message;
-        SeverityLabel = issue.Severity switch
-        {
-            ValidationSeverity.Error => "오류",
-            ValidationSeverity.Warning => "경고",
-            _ => "정보",
-        };
-        BlockingLabel = issue.Blocking ? "작동 차단 문제 · 눌러서 이동" : "안내 · 눌러서 이동";
-        BadgeBrush = new SolidColorBrush(issue.Severity switch
-        {
-            ValidationSeverity.Error => ColorHelper.FromArgb(255, 220, 38, 38),
-            ValidationSeverity.Warning => ColorHelper.FromArgb(255, 217, 119, 6),
-            _ => ColorHelper.FromArgb(255, 2, 132, 199),
-        });
-    }
-
-    public ValidationIssueV5 Issue { get; }
-
-    public string Code { get; }
-
-    public string Message { get; }
-
-    public string SeverityLabel { get; }
-
-    public string BlockingLabel { get; }
-
-    public Brush BadgeBrush { get; }
-}
-
-public sealed partial class MainPage : Page
-{
-    private readonly DeviceProfileCatalog _catalog = DeviceProfileCatalog.CreateDefault();
+    private readonly DeviceProfileCatalog _catalog;
     private readonly IConnectionAssessmentService _connectionAssessment;
     private readonly IReportExporter _reportExporter;
-    private readonly PalettePreferencesStore _palettePreferencesStore;
-    private readonly WorkshopDocumentRepository _repository;
-    private readonly HashSet<string> _hiddenPaletteIds;
-    private readonly List<PaletteItem> _paletteSource = [];
-    private WorkbenchStore? _store;
+    private readonly PaletteController _palette;
+    private readonly DocumentSessionController _session;
+    private readonly WorkbenchCommandDispatcher _commands;
     private CanvasSelection _selection = CanvasSelection.Empty;
-    private CancellationTokenSource? _autosaveCancellation;
-    private string? _currentPath;
-    private int _lastAutosaveRevision;
     private bool _refreshingInspector;
     private bool _refreshingValidationItems;
     private bool _paletteEditMode;
+    private PointV5 _quickInsertWorld = new(100, 100);
 
-    public MainPage()
+    public WorkbenchShell()
     {
-        _connectionAssessment = new ConnectionAssessmentService(_catalog);
-        _reportExporter = new ReportExporter(_catalog);
-        string appData = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PLC Wiring Trainer");
-        var migrator = new WorkshopDocumentMigrator(
-            Path.Combine(appData, "Import Backups"),
-            Path.Combine(appData, "Quarantine"));
-        _repository = new WorkshopDocumentRepository(migrator, Path.Combine(appData, "Autosave"));
-        string paletteSettingsPath = Environment.GetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH")
-            ?? Path.Combine(appData, "palette-preferences.v1.json");
-        _palettePreferencesStore = new PalettePreferencesStore(paletteSettingsPath);
-        _hiddenPaletteIds = new HashSet<string>(
-            _palettePreferencesStore.Load().HiddenProfileIds,
-            StringComparer.Ordinal);
-
-        foreach (DeviceProfileV5 profile in _catalog.Profiles
-            .Where(profile => profile.Availability is PaletteAvailabilityV5.Ready or PaletteAvailabilityV5.Preparation)
-            .OrderBy(profile => CategoryOrder(profile.Category))
-            .ThenBy(profile => profile.Category, StringComparer.Ordinal)
-            .ThenBy(profile => profile.DisplayName, StringComparer.Ordinal))
-        {
-            _paletteSource.Add(new PaletteItem(
-                profile.Id,
-                profile.DisplayName,
-                $"ms-appx:///{profile.AssetPath}",
-                profile.Category,
-                profile.ManualEvidence switch
-                {
-                    ManualEvidenceStatusV5.ExactProduct => $"정확 품번 · {profile.Manufacturer} {profile.PartNumber}",
-                    ManualEvidenceStatusV5.FamilyManual => "계열 매뉴얼만 있음 · 전체 주문코드 필요",
-                    _ => "제조사·전체 품번 필요 · 연습용",
-                },
-                profile.Availability == PaletteAvailabilityV5.Ready
-                    ? profile.ManualEvidence == ManualEvidenceStatusV5.ExactProduct
-                        ? "매뉴얼 검증 결선 가능"
-                        : "연습 결선만 · 사전결선 승인 불가"
-                    : "준비 중 · 배치/검증 잠금",
-                profile.Availability == PaletteAvailabilityV5.Ready,
-                profile.ManualEvidence == ManualEvidenceStatusV5.ExactProduct));
-        }
+        AppServices services = AppServices.CreateDefault();
+        _catalog = services.Catalog;
+        _connectionAssessment = services.ConnectionAssessment;
+        _reportExporter = services.ReportExporter;
+        _session = new DocumentSessionController(_catalog, services.Repository);
+        _session.Changed += Store_Changed;
+        _session.AutosaveFailed += Session_AutosaveFailed;
+        _palette = services.Palette;
+        _commands = new WorkbenchCommandDispatcher(() => Store);
 
         InitializeComponent();
-        PruneStaleHiddenPaletteIds();
+        ApplyPalettePaneState();
         RefreshPalette();
-        AttachStore(CreateExampleDocument());
+        _session.Initialize(CreateExampleDocument());
+        WiringCanvas.Store = Store;
     }
 
     public ObservableCollection<PaletteItem> PaletteItems { get; } = [];
 
     public ObservableCollection<ValidationIssueItem> ValidationItems { get; } = [];
 
-    private WorkbenchStore Store => _store ?? throw new InvalidOperationException("작업 문서가 초기화되지 않았습니다.");
+    public ObservableCollection<PaletteItem> QuickInsertItems { get; } = [];
+
+    private WorkbenchStore Store => _session.Store;
 
     private void Page_Loaded(object sender, RoutedEventArgs e)
     {
@@ -185,22 +70,18 @@ public sealed partial class MainPage : Page
     }
 
     private async void Page_Unloaded(object sender, RoutedEventArgs e)
+        => await DisposeAsync();
+
+    public async ValueTask DisposeAsync()
     {
-        _autosaveCancellation?.Cancel();
-        _autosaveCancellation?.Dispose();
-        _autosaveCancellation = null;
-        if (_store is not null)
-        {
-            _store.Changed -= Store_Changed;
-            await _store.DisposeAsync();
-            _store = null;
-        }
+        _session.Changed -= Store_Changed;
+        _session.AutosaveFailed -= Session_AutosaveFailed;
+        await _session.DisposeAsync();
     }
 
     private async void New_Click(object sender, RoutedEventArgs e)
     {
-        await ReplaceStoreAsync(CreateEmptyDocument());
-        _currentPath = null;
+        await ReplaceStoreAsync(CreateEmptyDocument(), null);
         WiringCanvas.ResetView();
         StatusText.Text = "새 v5 문서를 만들었습니다.";
     }
@@ -223,15 +104,16 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            MigrationResult result = await _repository.LoadAsync(file.Path);
+            MigrationResult result = await _session.LoadAsync(file.Path);
             if (result.Document is null)
             {
                 StatusText.Text = $"문서를 열 수 없어 격리했습니다: {result.Error}";
                 return;
             }
 
-            await ReplaceStoreAsync(result.Document);
-            _currentPath = result.Status == MigrationStatus.AlreadyV5 ? file.Path : null;
+            await ReplaceStoreAsync(
+                result.Document,
+                result.Status == MigrationStatus.AlreadyV5 ? file.Path : null);
             WiringCanvas.ResetView();
             StatusText.Text = result.Status == MigrationStatus.Converted
                 ? $"레거시 문서를 v5로 변환했습니다. 원본 백업: {result.BackupPath}"
@@ -247,7 +129,7 @@ public sealed partial class MainPage : Page
     {
         try
         {
-            string? path = _currentPath;
+            string? path = _session.CurrentPath;
             if (string.IsNullOrWhiteSpace(path))
             {
                 var picker = new FileSavePicker
@@ -266,8 +148,7 @@ public sealed partial class MainPage : Page
                 path = file.Path;
             }
 
-            await _repository.SaveAsync(path, Store.Document);
-            _currentPath = path;
+            await _session.SaveAsync(path);
             StatusText.Text = $"저장했습니다: {path}";
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -300,6 +181,51 @@ public sealed partial class MainPage : Page
     }
 
     private void ResetView_Click(object sender, RoutedEventArgs e) => WiringCanvas.ResetView();
+
+    private void WorkspaceNavigation_SelectionChanged(
+        NavigationView sender,
+        NavigationViewSelectionChangedEventArgs args)
+    {
+        string workspace = (args.SelectedItemContainer?.Tag as string) ?? "placement";
+        switch (workspace)
+        {
+            case "validation":
+                InspectorTabs.SelectedIndex = 1;
+                StatusText.Text = "검증 작업공간 · 문제를 누르면 실제 결선으로 이동합니다.";
+                break;
+            case "wiring":
+                InspectorTabs.SelectedIndex = 0;
+                StatusText.Text = "결선 작업공간 · 단자 클릭 또는 드래그로 결선합니다.";
+                break;
+            default:
+                InspectorTabs.SelectedIndex = 0;
+                StatusText.Text = "패널 배치 작업공간 · 장비를 배치하고 속성을 편집합니다.";
+                break;
+        }
+    }
+
+    private void PalettePaneToggle_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _palette.SetPaneOpen(PalettePaneToggle.IsChecked == true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"팔레트 설정 저장 실패: {exception.Message}";
+            ApplyPalettePaneState();
+            return;
+        }
+
+        ApplyPalettePaneState();
+    }
+
+    private void ApplyPalettePaneState()
+    {
+        PalettePaneToggle.IsChecked = _palette.IsPaneOpen;
+        PaletteColumn.Width = _palette.IsPaneOpen ? new GridLength(250) : new GridLength(0);
+        PalettePane.Visibility = _palette.IsPaneOpen ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     private void PaletteList_ItemClick(object sender, ItemClickEventArgs e)
     {
@@ -378,7 +304,7 @@ public sealed partial class MainPage : Page
         (double width, double height) = GetInitialDeviceSize(profile);
         double boundedX = Math.Clamp(x, 0, Math.Max(0, Store.Document.Panel.Width - width));
         double boundedY = Math.Clamp(y, 0, Math.Max(0, Store.Document.Panel.Height - height));
-        Store.AddDevice(new DeviceInstanceV5(
+        _commands.AddDevice(new DeviceInstanceV5(
             id,
             profile.Id,
             profile.Version,
@@ -403,6 +329,71 @@ public sealed partial class MainPage : Page
         RefreshInspector();
     }
 
+    private void WiringCanvas_QuickInsertRequested(object? sender, CanvasQuickInsertRequest request)
+    {
+        _quickInsertWorld = request.World;
+        QuickInsertSearchBox.Text = string.Empty;
+        RefreshQuickInsertItems();
+        QuickInsertFlyout.ShowAt(
+            WiringCanvas,
+            new FlyoutShowOptions { Position = request.Screen });
+    }
+
+    private void WiringCanvas_ConductorEditRequested(object? sender, ConductorEditRequest request)
+        => _commands.Apply(request);
+
+    private void QuickInsertFlyout_Opened(object sender, object e)
+    {
+        DispatcherQueue.TryEnqueue(() => QuickInsertSearchBox.Focus(FocusState.Programmatic));
+    }
+
+    private void QuickInsertSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        => RefreshQuickInsertItems();
+
+    private void QuickInsertSearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case VirtualKey.Down:
+                QuickInsertList.SelectedIndex = Math.Min(
+                    QuickInsertItems.Count - 1,
+                    Math.Max(0, QuickInsertList.SelectedIndex + 1));
+                e.Handled = true;
+                break;
+            case VirtualKey.Up:
+                QuickInsertList.SelectedIndex = Math.Max(0, QuickInsertList.SelectedIndex - 1);
+                e.Handled = true;
+                break;
+            case VirtualKey.Enter:
+                PlaceQuickInsertItem(QuickInsertList.SelectedItem as PaletteItem ?? QuickInsertItems.FirstOrDefault());
+                e.Handled = true;
+                break;
+            case VirtualKey.Escape:
+                QuickInsertFlyout.Hide();
+                WiringCanvas.Focus(FocusState.Programmatic);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void QuickInsertList_ItemClick(object sender, ItemClickEventArgs e)
+        => PlaceQuickInsertItem(e.ClickedItem as PaletteItem);
+
+    private void PlaceQuickInsertItem(PaletteItem? item)
+    {
+        if (item is null
+            || !item.CanPlace
+            || _palette.IsHidden(item.ProfileId)
+            || !_catalog.TryGet(item.ProfileId, out DeviceProfileV5 profile))
+        {
+            return;
+        }
+
+        PlaceDevice(profile, _quickInsertWorld.X, _quickInsertWorld.Y);
+        QuickInsertFlyout.Hide();
+        WiringCanvas.Focus(FocusState.Programmatic);
+    }
+
     private void WiringCanvas_WireCreationRequested(
         object? sender,
         (TerminalRefV5 Start, TerminalRefV5 End, PointV5[] Waypoints) terminals)
@@ -418,7 +409,7 @@ public sealed partial class MainPage : Page
         }
 
         int wireNumber = Store.Document.Conductors.Length + 1;
-        Store.AddConductor(new ConductorV5(
+        _commands.AddConductor(new ConductorV5(
             $"wire-{Guid.NewGuid():N}",
             terminals.Start,
             terminals.End,
@@ -453,14 +444,13 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        if (!_hiddenPaletteIds.Add(item.ProfileId))
+        try
         {
-            return;
+            _palette.Hide(item.ProfileId);
         }
-
-        if (!SavePalettePreferences())
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            _hiddenPaletteIds.Remove(item.ProfileId);
+            StatusText.Text = $"팔레트 설정 저장 실패: {exception.Message}";
             RefreshPalette();
             return;
         }
@@ -471,12 +461,14 @@ public sealed partial class MainPage : Page
 
     private void RestoreHiddenButton_Click(object sender, RoutedEventArgs e)
     {
-        int restored = _hiddenPaletteIds.Count;
-        string[] previousHiddenIds = [.. _hiddenPaletteIds];
-        _hiddenPaletteIds.Clear();
-        if (!SavePalettePreferences())
+        int restored = _palette.HiddenCount;
+        try
         {
-            _hiddenPaletteIds.UnionWith(previousHiddenIds);
+            _palette.RestoreAll();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"팔레트 설정 저장 실패: {exception.Message}";
             RefreshPalette();
             return;
         }
@@ -488,20 +480,7 @@ public sealed partial class MainPage : Page
     private void RefreshPalette()
     {
         string query = PaletteSearchBox?.Text.Trim() ?? string.Empty;
-        foreach (PaletteItem item in _paletteSource)
-        {
-            item.EditVisibility = _paletteEditMode ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        IEnumerable<PaletteItem> items = _paletteSource
-            .Where(item => !_hiddenPaletteIds.Contains(item.ProfileId));
-        if (!string.IsNullOrWhiteSpace(query))
-        {
-            items = items.Where(item =>
-                item.DisplayName.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || item.ProfileId.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || item.Category.Contains(query, StringComparison.OrdinalIgnoreCase));
-        }
+        IEnumerable<PaletteItem> items = _palette.Filter(query, _paletteEditMode);
 
         PaletteItems.Clear();
         foreach (PaletteItem item in items)
@@ -509,59 +488,30 @@ public sealed partial class MainPage : Page
             PaletteItems.Add(item);
         }
 
-        int hiddenKnown = _paletteSource.Count(item => _hiddenPaletteIds.Contains(item.ProfileId));
-        int verifiedVisible = _paletteSource.Count(item =>
-            item.CanPlace && item.IsManualVerified && !_hiddenPaletteIds.Contains(item.ProfileId));
-        int practiceVisible = _paletteSource.Count(item =>
-            item.CanPlace && !item.IsManualVerified && !_hiddenPaletteIds.Contains(item.ProfileId));
-        int preparationVisible = _paletteSource.Count(item => !item.CanPlace && !_hiddenPaletteIds.Contains(item.ProfileId));
+        int hiddenKnown = _palette.HiddenCount;
+        int verifiedVisible = _palette.Items.Count(item =>
+            item.CanPlace && item.IsManualVerified && !_palette.IsHidden(item.ProfileId));
+        int practiceVisible = _palette.Items.Count(item =>
+            item.CanPlace && !item.IsManualVerified && !_palette.IsHidden(item.ProfileId));
+        int preparationVisible = _palette.Items.Count(item =>
+            !item.CanPlace && !_palette.IsHidden(item.ProfileId));
         PaletteSummaryText.Text = $"검증 결선 {verifiedVisible}종 · 연습 전용 {practiceVisible}종 · 준비 중 {preparationVisible}종 · 숨김 {hiddenKnown}종";
         RestoreHiddenButton.Visibility = hiddenKnown > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void PruneStaleHiddenPaletteIds()
+    private void RefreshQuickInsertItems()
     {
-        var knownIds = new HashSet<string>(_paletteSource.Select(item => item.ProfileId), StringComparer.Ordinal);
-        string[] staleIds = _hiddenPaletteIds.Where(id => !knownIds.Contains(id)).ToArray();
-        if (staleIds.Length == 0)
+        string query = QuickInsertSearchBox?.Text.Trim() ?? string.Empty;
+        IEnumerable<PaletteItem> items = _palette.QuickInsert(query);
+
+        QuickInsertItems.Clear();
+        foreach (PaletteItem item in items)
         {
-            return;
+            QuickInsertItems.Add(item);
         }
 
-        _hiddenPaletteIds.ExceptWith(staleIds);
-        if (!SavePalettePreferences())
-        {
-            _hiddenPaletteIds.UnionWith(staleIds);
-        }
+        QuickInsertList.SelectedIndex = QuickInsertItems.Count > 0 ? 0 : -1;
     }
-
-    private bool SavePalettePreferences()
-    {
-        try
-        {
-            _palettePreferencesStore.Save(new PalettePreferencesV1([.. _hiddenPaletteIds]));
-            return true;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            StatusText.Text = $"팔레트 설정 저장 실패: {exception.Message}";
-            return false;
-        }
-    }
-
-    private static int CategoryOrder(string category)
-        => category.ToLowerInvariant() switch
-        {
-            "power" => 0,
-            "plc" => 1,
-            "hmi" => 2,
-            "motion" => 3,
-            "switch" => 4,
-            "sensor" => 5,
-            "actuator" => 6,
-            "wiring" => 7,
-            _ => 8,
-        };
 
     private void PaletteList_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
@@ -595,7 +545,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        Store.AddDevice(source with
+        _commands.AddDevice(source with
         {
             Id = $"device-{Guid.NewGuid():N}",
             Label = $"{source.Label} 복사",
@@ -608,13 +558,13 @@ public sealed partial class MainPage : Page
 
     private void WiringCanvas_DeviceRotateRequested(object? sender, string deviceId)
     {
-        Store.UpdateDevice(deviceId, device => device with { Rotation = (device.Rotation + 90) % 360 });
+        _commands.UpdateDevice(deviceId, device => device with { Rotation = (device.Rotation + 90) % 360 });
         StatusText.Text = "장비를 오른쪽으로 90° 회전했습니다.";
     }
 
     private void WiringCanvas_DeviceLockToggleRequested(object? sender, string deviceId)
     {
-        Store.UpdateDevice(deviceId, device => device with { Locked = !device.Locked });
+        _commands.UpdateDevice(deviceId, device => device with { Locked = !device.Locked });
         DeviceInstanceV5 device = Store.Document.Devices.Single(item => item.Id == deviceId);
         StatusText.Text = device.Locked ? "장비 위치를 잠갔습니다." : "장비 위치 잠금을 해제했습니다.";
     }
@@ -623,12 +573,12 @@ public sealed partial class MainPage : Page
     {
         if (selection.Kind == CanvasSelectionKind.Device)
         {
-            Store.RemoveDevice(selection.Id);
+            _commands.RemoveDevice(selection.Id);
             StatusText.Text = "장비와 연결된 전선을 한 작업으로 삭제했습니다.";
         }
         else if (selection.Kind == CanvasSelectionKind.Conductor)
         {
-            Store.RemoveConductor(selection.Id);
+            _commands.RemoveConductor(selection.Id);
             StatusText.Text = "전선을 삭제했습니다.";
         }
     }
@@ -637,7 +587,7 @@ public sealed partial class MainPage : Page
         object? sender,
         (string DeviceId, double X, double Y) move)
     {
-        Store.UpdateDevice(move.DeviceId, device => device with
+        _commands.UpdateDevice(move.DeviceId, device => device with
         {
             X = Snap(move.X),
             Y = Snap(move.Y),
@@ -686,7 +636,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        Store.UpdateDevice(_selection.Id, device => device with { Label = DeviceLabelBox.Text.Trim() });
+        _commands.UpdateDevice(_selection.Id, device => device with { Label = DeviceLabelBox.Text.Trim() });
     }
 
     private void DeviceNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -696,7 +646,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        Store.UpdateDevice(_selection.Id, device => device with
+        _commands.UpdateDevice(_selection.Id, device => device with
         {
             X = DeviceXBox.Value,
             Y = DeviceYBox.Value,
@@ -710,7 +660,7 @@ public sealed partial class MainPage : Page
     {
         if (!_refreshingInspector && _selection.Kind == CanvasSelectionKind.Device)
         {
-            Store.UpdateDevice(_selection.Id, device => device with { Locked = DeviceLockedBox.IsChecked == true });
+            _commands.UpdateDevice(_selection.Id, device => device with { Locked = DeviceLockedBox.IsChecked == true });
         }
     }
 
@@ -718,7 +668,7 @@ public sealed partial class MainPage : Page
     {
         if (!_refreshingInspector && _selection.Kind == CanvasSelectionKind.Conductor)
         {
-            Store.UpdateConductor(_selection.Id, conductor => conductor with { Label = ConductorLabelBox.Text.Trim() });
+            _commands.UpdateConductor(_selection.Id, conductor => conductor with { Label = ConductorLabelBox.Text.Trim() });
         }
     }
 
@@ -731,7 +681,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        Store.UpdateConductor(_selection.Id, conductor => conductor with { Color = ConductorColorBox.Text.ToUpperInvariant() });
+        _commands.UpdateConductor(_selection.Id, conductor => conductor with { Color = ConductorColorBox.Text.ToUpperInvariant() });
     }
 
     private void ConductorGaugeBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -740,7 +690,7 @@ public sealed partial class MainPage : Page
             && _selection.Kind == CanvasSelectionKind.Conductor
             && !double.IsNaN(ConductorGaugeBox.Value))
         {
-            Store.UpdateConductor(
+            _commands.UpdateConductor(
                 _selection.Id,
                 conductor => conductor with { GaugeMm2 = Math.Max(0.1, ConductorGaugeBox.Value) });
         }
@@ -750,7 +700,7 @@ public sealed partial class MainPage : Page
     {
         if (!_refreshingInspector && _selection.Kind == CanvasSelectionKind.Conductor)
         {
-            Store.UpdateConductor(
+            _commands.UpdateConductor(
                 _selection.Id,
                 conductor => conductor with { RouteLocked = ConductorLockedBox.IsChecked == true });
         }
@@ -761,13 +711,11 @@ public sealed partial class MainPage : Page
         DispatcherQueue.TryEnqueue(RefreshFromStore);
     }
 
+    private void Session_AutosaveFailed(object? sender, string message)
+        => DispatcherQueue.TryEnqueue(() => StatusText.Text = $"자동 복구본 저장 실패: {message}");
+
     private void RefreshFromStore()
     {
-        if (_store is null)
-        {
-            return;
-        }
-
         WiringCanvas.Refresh();
         UndoButton.IsEnabled = Store.CanUndo;
         RedoButton.IsEnabled = Store.CanRedo;
@@ -776,37 +724,20 @@ public sealed partial class MainPage : Page
         RefreshInspector();
         RefreshValidation();
 
-        if (Store.Document.Revision != _lastAutosaveRevision)
-        {
-            _lastAutosaveRevision = Store.Document.Revision;
-            ScheduleAutosave(Store.Document);
-        }
     }
 
     private void RefreshValidation()
     {
-        ValidationFreshnessText.Text = Store.ValidationFreshness switch
-        {
-            ValidationFreshness.Stale => "STALE · 편집 내용이 바뀌어 결과를 다시 계산합니다.",
-            ValidationFreshness.Running => "RUNNING · 백그라운드에서 결선을 계산 중입니다.",
-            ValidationFreshness.Blocked => $"BLOCKED · 차단 문제 있음 · rev {Store.ValidationResult?.Revision}",
-            ValidationFreshness.Fail => $"FAIL · 검증 오류 있음 · rev {Store.ValidationResult?.Revision}",
-            _ => $"PASS · 현재 문서와 일치 · rev {Store.ValidationResult?.Revision}",
-        };
+        ValidationPresentation presentation = ValidationPresenter.Present(Store);
+        ValidationFreshnessText.Text = presentation.Freshness;
 
         _refreshingValidationItems = true;
         try
         {
             ValidationItems.Clear();
-            if (Store.ValidationResult is null)
+            foreach (ValidationIssueItem item in presentation.Items)
             {
-                ValidationSummaryText.Text = "검증 대기";
-                return;
-            }
-
-            foreach (ValidationIssueV5 issue in Store.ValidationResult.Issues)
-            {
-                ValidationItems.Add(new ValidationIssueItem(issue));
+                ValidationItems.Add(item);
             }
         }
         finally
@@ -814,19 +745,12 @@ public sealed partial class MainPage : Page
             _refreshingValidationItems = false;
         }
 
-        int blocking = Store.ValidationResult.Issues.Count(issue => issue.Blocking);
-        ValidationSummaryText.Text = blocking == 0
-            ? $"차단 오류 없음 · 안내 {Store.ValidationResult.Issues.Length}건"
-            : $"차단 오류 {blocking}건 · 전체 {Store.ValidationResult.Issues.Length}건";
+        ValidationSummaryText.Text = presentation.Summary;
     }
 
     private void RefreshInspector()
     {
-        if (_store is null)
-        {
-            return;
-        }
-
+        PropertyInspectorSelection inspector = PropertyInspectorPresenter.Resolve(Store.Document, _selection);
         _refreshingInspector = true;
         try
         {
@@ -835,15 +759,8 @@ public sealed partial class MainPage : Page
             ConductorPropertiesPanel.Visibility = Visibility.Collapsed;
             TerminalPropertiesPanel.Visibility = Visibility.Collapsed;
 
-            if (_selection.Kind == CanvasSelectionKind.Device)
+            if (inspector.Device is { } device)
             {
-                DeviceInstanceV5? device = Store.Document.Devices.FirstOrDefault(item => item.Id == _selection.Id);
-                if (device is null)
-                {
-                    NoSelectionPanel.Visibility = Visibility.Visible;
-                    return;
-                }
-
                 DevicePropertiesPanel.Visibility = Visibility.Visible;
                 DeviceLabelBox.Text = device.Label;
                 DeviceXBox.Value = device.X;
@@ -872,15 +789,8 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            if (_selection.Kind == CanvasSelectionKind.Conductor)
+            if (inspector.Conductor is { } conductor)
             {
-                ConductorV5? conductor = Store.Document.Conductors.FirstOrDefault(item => item.Id == _selection.Id);
-                if (conductor is null)
-                {
-                    NoSelectionPanel.Visibility = Visibility.Visible;
-                    return;
-                }
-
                 ConductorPropertiesPanel.Visibility = Visibility.Visible;
                 ConductorLabelBox.Text = conductor.Label;
                 ConductorColorBox.Text = conductor.Color;
@@ -890,10 +800,10 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            if (_selection.Kind == CanvasSelectionKind.Terminal)
+            if (inspector.TerminalKey is { } terminalKey)
             {
                 TerminalPropertiesPanel.Visibility = Visibility.Visible;
-                TerminalReferenceText.Text = _selection.Id;
+                TerminalReferenceText.Text = terminalKey;
                 return;
             }
 
@@ -905,54 +815,12 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void AttachStore(WorkshopDocumentV5 document)
+    private async Task ReplaceStoreAsync(WorkshopDocumentV5 document, string? currentPath = null)
     {
-        _store = new WorkbenchStore(document, new CircuitValidationService(_catalog));
-        _store.Changed += Store_Changed;
-        WiringCanvas.Store = _store;
+        await _session.ReplaceAsync(document, currentPath);
+        WiringCanvas.Store = Store;
         _selection = CanvasSelection.Empty;
-        _lastAutosaveRevision = 0;
-    }
-
-    private async Task ReplaceStoreAsync(WorkshopDocumentV5 document)
-    {
-        WorkbenchStore? previous = _store;
-        if (previous is not null)
-        {
-            previous.Changed -= Store_Changed;
-        }
-
-        AttachStore(document);
-        if (previous is not null)
-        {
-            await previous.DisposeAsync();
-        }
-
         RefreshFromStore();
-    }
-
-    private void ScheduleAutosave(WorkshopDocumentV5 snapshot)
-    {
-        _autosaveCancellation?.Cancel();
-        _autosaveCancellation?.Dispose();
-        _autosaveCancellation = new CancellationTokenSource();
-        _ = AutosaveAfterDelayAsync(snapshot, _autosaveCancellation.Token);
-    }
-
-    private async Task AutosaveAfterDelayAsync(WorkshopDocumentV5 snapshot, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(700, cancellationToken);
-            await _repository.SaveAutosaveAsync(snapshot, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            DispatcherQueue.TryEnqueue(() => StatusText.Text = $"자동 복구본 저장 실패: {exception.Message}");
-        }
     }
 
     private double Snap(double value)

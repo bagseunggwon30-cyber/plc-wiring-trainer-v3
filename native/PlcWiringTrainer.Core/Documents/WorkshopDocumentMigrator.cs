@@ -21,11 +21,14 @@ public sealed record MigrationResult(
     string QuarantinePath,
     string Error);
 
+/// <summary>레거시 구조를 감지하고 원문 백업과 손실 방지 검사를 거쳐 schema v5로 변환합니다.</summary>
 public interface IWorkshopDocumentMigrator
 {
+    /// <summary>입력 파일을 변환하거나 원문을 격리하고 그 증거 경로를 반환합니다.</summary>
     Task<MigrationResult> MigrateAsync(string sourcePath, CancellationToken cancellationToken = default);
 }
 
+/// <summary>compact, V3, flat 및 기존 v4/v5 문서를 무손실 v5 문서로 이식합니다.</summary>
 public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
 {
     private static readonly Lazy<IReadOnlyDictionary<string, string>> CatalogProfileAliases = new(
@@ -788,63 +791,11 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
         }
 
         jsonObject.Remove("hash");
-        string canonical = Canonicalize(node);
+        string canonical = JsonCanonicalizer.Canonicalize(node);
         string expected = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
         if (!string.Equals(declared, expected, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException("V3 문서 내용 해시가 일치하지 않습니다.");
-        }
-    }
-
-    private static string Canonicalize(JsonNode node)
-    {
-        var builder = new StringBuilder();
-        WriteCanonical(node, builder);
-        return builder.ToString();
-    }
-
-    private static void WriteCanonical(JsonNode? node, StringBuilder builder)
-    {
-        switch (node)
-        {
-            case null:
-                builder.Append("null");
-                break;
-            case JsonObject jsonObject:
-                builder.Append('{');
-                bool first = true;
-                foreach (KeyValuePair<string, JsonNode?> property in jsonObject.OrderBy(item => item.Key, StringComparer.Ordinal))
-                {
-                    if (!first)
-                    {
-                        builder.Append(',');
-                    }
-
-                    first = false;
-                    builder.Append(JsonSerializer.Serialize(property.Key));
-                    builder.Append(':');
-                    WriteCanonical(property.Value, builder);
-                }
-
-                builder.Append('}');
-                break;
-            case JsonArray jsonArray:
-                builder.Append('[');
-                for (int index = 0; index < jsonArray.Count; index++)
-                {
-                    if (index > 0)
-                    {
-                        builder.Append(',');
-                    }
-
-                    WriteCanonical(jsonArray[index], builder);
-                }
-
-                builder.Append(']');
-                break;
-            default:
-                builder.Append(node.ToJsonString());
-                break;
         }
     }
 

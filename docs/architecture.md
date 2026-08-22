@@ -36,16 +36,23 @@
 
 ## 전기 근거 경계
 
-이미지, 카탈로그 항목, 전기 프로필은 별도입니다. 내부 브라우저로 측정한 레거시 정본은 장비 100종, 사용 가능 팔레트 68종, 단자 657점, 고유 이미지 64개입니다. 최신 램프 3종과 NPN/PNP v2 자산은 별도 정본으로 유지합니다.
+이미지, 카탈로그 항목, 전기 프로필은 별도입니다. 현재 네이티브 manifest 기준으로 분류 장비 80종, 배치 가능 팔레트 48종, 배치 가능 단자 482점, 활성 고유 이미지 46개입니다. 최신 램프 3종과 NPN/PNP v2 자산은 별도 정본으로 유지합니다.
 
-정확 품번 매뉴얼 16종, 계열 매뉴얼 17종, 교육용/미확정 67종의 배지는 독립적으로 표시합니다. NPN/PNP sourcing/sinking 판단은 이미지가 아니라 형식화된 단자 역할과 결선망으로 계산합니다.
+정확 품번 프로필 18종을 포함해 검증 결선 13종, 연습 전용 35종, 준비 중 5종을 구분합니다. 근거 배지는 이미지와 독립적으로 표시하며, NPN/PNP sourcing/sinking 판단은 형식화된 단자 역할과 결선망으로 계산합니다.
 
 ## 결선 편집
 
 `WireDraftMachine`은 클릭→클릭과 드래그→놓기를 같은 비영속 상태로 관리합니다. 빈 캔버스 경로점, `Backspace`, `Esc`, 끝단자 재연결은 결선 완료 전 revision을 소비하지 않습니다. `DeviceTransform`은 렌더링, hit-test, 단자 좌표, 문제 이동에서 같은 회전·배율 계산을 사용합니다.
 
-## 레거시 이후 단계의 경계
+## 4.2 작업공간과 모듈 경계
+
+- `WorkbenchShell`은 `패널 배치 / 결선 / 검증` 작업공간을 전환하지만 문서, 선택, viewport와 undo 기록은 하나만 유지합니다.
+- `PaletteController`는 접힘 상태, 검색, 숨김 목록과 빠른 장비 삽입 후보를 관리합니다. 빈 캔버스 우클릭 메뉴를 탐색하는 동안에는 revision을 변경하지 않습니다.
+- `WorkbenchCommandDispatcher`만 문서 변경 명령을 `WorkbenchStore`에 전달합니다. 캔버스는 선택과 편집 의도를 이벤트로 보고합니다.
+- `CanvasViewport`와 Core의 `DeviceTransform`은 화면 배율과 장비 회전 계산의 책임을 분리합니다.
+
+## 제거된 실행 기능의 경계
 
 - JSON 및 CSV 보고서는 HTML 중간 문서 없이 생성하고 spreadsheet formula injection을 차단합니다.
-- XG-SIM 계약은 64 KiB JSONL, timeout, fail-safe reset, 프로젝트 신원 fail-closed를 요구합니다. LS DLL과 실제 호스트는 검증 전 배포하지 않습니다.
-- `ISceneRenderer`는 2D와 같은 문서 ID/terminal ID를 받습니다. Direct3D 11 렌더러가 검증되기 전에는 3D 완료로 표시하지 않습니다.
+- 자동화, XG-SIM, 3D 및 빈 미션 실행 계약은 4.2 컴파일 대상에서 제거했습니다. v5 문서의 mission state, scenario, view layout 필드는 이전 문서 무손실 로드를 위해 유지합니다.
+- 재도입은 별도 프로세스 격리, 실제 설치 환경, GPU와 전기 동등성 검증을 충족한 뒤에만 진행합니다.

@@ -6,7 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:PlcWiringTrainer.App"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="PLC Wiring Trainer 4.1.2"
+    Title="PLC Wiring Trainer 4.2.0"
     mc:Ignorable="d">
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -18,17 +18,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TitleBar x:Name="AppTitleBar" Title="PLC Wiring Trainer 4.1.2">
+        <TitleBar x:Name="AppTitleBar" Title="PLC Wiring Trainer 4.2.0">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="Assets/AppIcon.ico" />
             </TitleBar.IconSource>
         </TitleBar>
 
-        <!--
-            The Frame hosts pages for your application content. Add your UI to
-            MainPage.xaml rather than here so you can use Page features such as
-            navigation events and the Loaded lifecycle.
-        -->
+        <!-- WorkbenchShell은 문서 세션과 Page 수명 주기를 공유합니다. -->
         <Frame x:Name="RootFrame" Grid.Row="1" />
     </Grid>
 </Window>

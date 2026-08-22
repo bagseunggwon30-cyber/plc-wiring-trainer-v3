@@ -16,6 +16,7 @@ public sealed class PalettePreferencesStoreTests : IDisposable
         PalettePreferencesV1 preferences = store.Load();
 
         Assert.Empty(preferences.HiddenProfileIds);
+        Assert.False(preferences.IsPaneOpen);
     }
 
     [Fact]
@@ -23,13 +24,18 @@ public sealed class PalettePreferencesStoreTests : IDisposable
     {
         var store = new PalettePreferencesStore(Path.Combine(_directory, "palette.json"));
 
-        store.Save(new PalettePreferencesV1(["lamp-green-v1", "prox-npn-v2", "lamp-green-v1"]));
+        store.Save(new PalettePreferencesV1(
+            ["lamp-green-v1", "prox-npn-v2", "lamp-green-v1"],
+            IsPaneOpen: true));
         PalettePreferencesV1 saved = store.Load();
 
         Assert.Equal(["lamp-green-v1", "prox-npn-v2"], saved.HiddenProfileIds);
+        Assert.True(saved.IsPaneOpen);
 
-        store.Save(new PalettePreferencesV1([]));
-        Assert.Empty(store.Load().HiddenProfileIds);
+        store.Save(new PalettePreferencesV1([], IsPaneOpen: false));
+        PalettePreferencesV1 restored = store.Load();
+        Assert.Empty(restored.HiddenProfileIds);
+        Assert.False(restored.IsPaneOpen);
     }
 
     [Fact]

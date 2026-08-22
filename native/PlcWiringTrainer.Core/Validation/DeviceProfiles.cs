@@ -46,26 +46,6 @@ public sealed record ManualReferenceV5(
     string Pages,
     string SourceUrl);
 
-public sealed record DeviceCatalogEntryV5(
-    string LegacyType,
-    string ProfileId,
-    string? ElectricalProfileId,
-    string Category,
-    string DisplayName,
-    string Description,
-    double DefaultWidth,
-    double DefaultHeight,
-    PaletteAvailabilityV5 Availability,
-    ManualEvidenceStatusV5 ManualEvidence,
-    DeviceArtworkV5 Artwork);
-
-public sealed record ElectricalProfileV5(
-    string Id,
-    int Version,
-    EvidenceGrade EvidenceGrade,
-    TerminalDefinitionV5[] Terminals,
-    InternalLinkV5[] InternalLinks);
-
 public sealed record DeviceProfileV5(
     string Id,
     int Version,

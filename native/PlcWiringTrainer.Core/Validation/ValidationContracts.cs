@@ -74,15 +74,19 @@ public sealed record ValidationResultV5(
     ValidationIssueV5[] Issues,
     SimulationResultV5 Simulation);
 
+/// <summary>현재 문서 revision과 content hash에 결합된 전기·물리 검증 결과를 계산합니다.</summary>
 public interface IValidationService
 {
+    /// <summary>취소 가능한 오프라인 검증을 수행합니다.</summary>
     Task<ValidationResultV5> ValidateAsync(
         WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>문서와 단자 프로필에서 파생한 회로 해를 계산합니다.</summary>
 public interface ICircuitService
 {
+    /// <summary>회로의 전위, 도통과 장비 상태를 비동기로 풉니다.</summary>
     Task<CircuitSolutionV5> SolveAsync(
         WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default);

@@ -41,6 +41,10 @@ public sealed record CanvasSelection(
     public static CanvasSelection Empty { get; } = new(CanvasSelectionKind.None, string.Empty);
 }
 
+public sealed record CanvasQuickInsertRequest(
+    PointV5 World,
+    Point Screen);
+
 public sealed partial class WiringCanvas : UserControl
 {
     private readonly DeviceProfileCatalog _catalog = DeviceProfileCatalog.CreateDefault();
@@ -48,7 +52,8 @@ public sealed partial class WiringCanvas : UserControl
     private readonly Dictionary<string, CanvasSvgDocument> _deviceSvgDocuments = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _highlightTimer;
     private readonly WireDraftMachine _wireDraft = new();
-    private readonly IRoutePlanner _routePlanner = new OrthogonalRoutePlanner();
+    private readonly OrthogonalRoutePlanner _routePlanner = new();
+    private readonly CanvasViewport _viewport = new();
     private WorkbenchStore? _store;
     private CanvasSelection _selection = CanvasSelection.Empty;
     private PointV5? _wirePointerWorld;
@@ -71,10 +76,8 @@ public sealed partial class WiringCanvas : UserControl
     private bool _panStartedWithRightButton;
     private bool _panMoved;
     private bool _suppressNextRightTap;
+    private Point _panStartScreen;
     private Point _lastPointer;
-    private double _zoom = 1;
-    private double _offsetX = 40;
-    private double _offsetY = 40;
 
     public WiringCanvas()
     {
@@ -121,40 +124,15 @@ public sealed partial class WiringCanvas : UserControl
 
     public event EventHandler<string>? DeviceLockToggleRequested;
 
+    public event EventHandler<CanvasQuickInsertRequest>? QuickInsertRequested;
+
+    public event EventHandler<ConductorEditRequest>? ConductorEditRequested;
+
     public void Refresh() => NativeCanvas.Invalidate();
 
     public void ResetView()
     {
-        double width = Math.Max(1, NativeCanvas.ActualWidth);
-        double height = Math.Max(1, NativeCanvas.ActualHeight);
-        if (_store is null || width <= 1 || height <= 1)
-        {
-            _zoom = 1;
-            _offsetX = 40;
-            _offsetY = 40;
-        }
-        else
-        {
-            DeviceInstanceV5[] devices = _store.Document.Devices;
-            double contentLeft = devices.Length == 0 ? 0 : devices.Min(device => device.X);
-            double contentTop = devices.Length == 0 ? 0 : devices.Min(device => device.Y);
-            double contentRight = devices.Length == 0
-                ? _store.Document.Panel.Width
-                : devices.Max(device => device.X + device.Width);
-            double contentBottom = devices.Length == 0
-                ? _store.Document.Panel.Height
-                : devices.Max(device => device.Y + device.Height);
-            double contentWidth = Math.Max(1, contentRight - contentLeft);
-            double contentHeight = Math.Max(1, contentBottom - contentTop);
-            _zoom = Math.Clamp(
-                Math.Min((width - 96) / contentWidth, (height - 96) / contentHeight),
-                0.25,
-                1.5);
-            double centerX = contentLeft + (contentWidth / 2);
-            double centerY = contentTop + (contentHeight / 2);
-            _offsetX = (width / 2) - (centerX * _zoom);
-            _offsetY = (height / 2) - (centerY * _zoom);
-        }
+        _viewport.Reset(_store?.Document, NativeCanvas.ActualWidth, NativeCanvas.ActualHeight);
 
         UpdateZoomText();
         NativeCanvas.Invalidate();
@@ -163,18 +141,7 @@ public sealed partial class WiringCanvas : UserControl
     public void NavigateTo(NavigationTarget target)
     {
         ArgumentNullException.ThrowIfNull(target);
-        double width = Math.Max(1, NativeCanvas.ActualWidth);
-        double height = Math.Max(1, NativeCanvas.ActualHeight);
-        double availableWidth = Math.Max(200, width - 160);
-        double availableHeight = Math.Max(200, height - 160);
-        _zoom = Math.Clamp(
-            Math.Min(availableWidth / target.FocusBounds.Width, availableHeight / target.FocusBounds.Height),
-            0.4,
-            3.5);
-        double centerX = target.FocusBounds.X + (target.FocusBounds.Width / 2);
-        double centerY = target.FocusBounds.Y + (target.FocusBounds.Height / 2);
-        _offsetX = (width / 2) - (centerX * _zoom);
-        _offsetY = (height / 2) - (centerY * _zoom);
+        _viewport.Focus(target.FocusBounds, NativeCanvas.ActualWidth, NativeCanvas.ActualHeight);
         _selection = target.Kind switch
         {
             NavigationSelectionKind.Conductor => new CanvasSelection(CanvasSelectionKind.Conductor, target.Id),
@@ -194,8 +161,6 @@ public sealed partial class WiringCanvas : UserControl
         SelectionChanged?.Invoke(this, _selection);
         NativeCanvas.Invalidate();
     }
-
-    private Matrix3x2 ViewMatrix => new((float)_zoom, 0, 0, (float)_zoom, (float)_offsetX, (float)_offsetY);
 
     private void Canvas_CreateResources(CanvasControl sender, CanvasCreateResourcesEventArgs args)
         => args.TrackAsyncAction(LoadDeviceAssetsAsync(sender).AsAsyncAction());
@@ -243,7 +208,7 @@ public sealed partial class WiringCanvas : UserControl
         }
 
         CanvasDrawingSession drawing = args.DrawingSession;
-        drawing.Transform = ViewMatrix;
+        drawing.Transform = _viewport.Matrix;
         DrawGrid(drawing, store.Document);
         foreach (ConductorV5 conductor in store.Document.Conductors)
         {
@@ -320,12 +285,12 @@ public sealed partial class WiringCanvas : UserControl
         if (selected)
         {
             PointV5[] waypoints = renderConductor.Waypoints;
-            float radius = (float)(6 / _zoom);
+            float radius = (float)(6 / _viewport.Zoom);
             for (int index = 0; index < waypoints.Length; index++)
             {
                 PointV5 waypoint = waypoints[index];
                 drawing.FillCircle((float)waypoint.X, (float)waypoint.Y, radius, Color.FromArgb(255, 251, 146, 60));
-                drawing.DrawCircle((float)waypoint.X, (float)waypoint.Y, radius + (float)(2 / _zoom), Color.FromArgb(255, 15, 23, 42), (float)(1.5 / _zoom));
+                drawing.DrawCircle((float)waypoint.X, (float)waypoint.Y, radius + (float)(2 / _viewport.Zoom), Color.FromArgb(255, 15, 23, 42), (float)(1.5 / _viewport.Zoom));
             }
         }
     }
@@ -481,6 +446,7 @@ public sealed partial class WiringCanvas : UserControl
             _isPanning = true;
             _panStartedWithRightButton = pointer.Properties.IsRightButtonPressed;
             _panMoved = false;
+            _panStartScreen = pointer.Position;
             NativeCanvas.CapturePointer(e.Pointer);
             e.Handled = pointer.Properties.IsMiddleButtonPressed;
             return;
@@ -567,13 +533,23 @@ public sealed partial class WiringCanvas : UserControl
 
         if (_isPanning)
         {
-            if (Distance(pointer.Position, _lastPointer) > 1)
+            if (!_panMoved)
             {
+                if (Distance(pointer.Position, _panStartScreen) <= 3)
+                {
+                    return;
+                }
+
                 _panMoved = true;
+                _viewport.Pan(
+                    pointer.Position.X - _panStartScreen.X,
+                    pointer.Position.Y - _panStartScreen.Y);
+            }
+            else
+            {
+                _viewport.Pan(pointer.Position.X - _lastPointer.X, pointer.Position.Y - _lastPointer.Y);
             }
 
-            _offsetX += pointer.Position.X - _lastPointer.X;
-            _offsetY += pointer.Position.Y - _lastPointer.Y;
             _lastPointer = pointer.Position;
             NativeCanvas.Invalidate();
             return;
@@ -655,11 +631,8 @@ public sealed partial class WiringCanvas : UserControl
     private void Canvas_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
         PointerPoint pointer = e.GetCurrentPoint(NativeCanvas);
-        PointV5 before = ScreenToWorld(pointer.Position);
         double factor = pointer.Properties.MouseWheelDelta > 0 ? 1.12 : 1 / 1.12;
-        _zoom = Math.Clamp(_zoom * factor, 0.25, 4);
-        _offsetX = pointer.Position.X - (before.X * _zoom);
-        _offsetY = pointer.Position.Y - (before.Y * _zoom);
+        _viewport.ZoomAt(pointer.Position, factor);
         UpdateZoomText();
         NativeCanvas.Invalidate();
         e.Handled = true;
@@ -670,9 +643,12 @@ public sealed partial class WiringCanvas : UserControl
         if (_reconnectConductorId is not null && _store is not null)
         {
             string conductorId = _reconnectConductorId;
-            _store.UpdateConductor(conductorId, conductor => _reconnectStartEndpoint
-                ? conductor with { Start = terminal }
-                : conductor with { End = terminal });
+            ConductorEditRequested?.Invoke(
+                this,
+                new ConductorEditRequest(
+                    _reconnectStartEndpoint ? ConductorEditKind.ReconnectStart : ConductorEditKind.ReconnectEnd,
+                    conductorId,
+                    Terminal: terminal));
             _reconnectConductorId = null;
             Select(new CanvasSelection(CanvasSelectionKind.Conductor, conductorId));
             UpdateWireHint();
@@ -812,7 +788,7 @@ public sealed partial class WiringCanvas : UserControl
             return false;
         }
 
-        double radius = 11 / _zoom;
+        double radius = 11 / _viewport.Zoom;
         for (int index = conductor.Waypoints.Length - 1; index >= 0; index--)
         {
             if (Distance(world, conductor.Waypoints[index]) > radius)
@@ -862,7 +838,12 @@ public sealed partial class WiringCanvas : UserControl
             PointV5[] edited = PreviewWaypointEdit(conductor).Waypoints;
             if (!edited.SequenceEqual(conductor.Waypoints))
             {
-                store.UpdateConductor(conductorId, item => item with { Waypoints = edited });
+                ConductorEditRequested?.Invoke(
+                    this,
+                    new ConductorEditRequest(
+                        ConductorEditKind.ReplaceWaypoints,
+                        conductorId,
+                        Waypoints: edited));
             }
         }
 
@@ -959,8 +940,14 @@ public sealed partial class WiringCanvas : UserControl
             {
                 ShowDeviceContextMenu(device, e.GetPosition(NativeCanvas));
                 e.Handled = true;
+                return;
             }
 
+            Select(CanvasSelection.Empty);
+            QuickInsertRequested?.Invoke(
+                this,
+                new CanvasQuickInsertRequest(_contextWorld, e.GetPosition(NativeCanvas)));
+            e.Handled = true;
             return;
         }
 
@@ -1055,7 +1042,9 @@ public sealed partial class WiringCanvas : UserControl
             && _selection.Kind == CanvasSelectionKind.Conductor
             && sender is MenuFlyoutItem { Tag: string color })
         {
-            _store.UpdateConductor(_selection.Id, conductor => WireRouteEditor.ChangeColor(conductor, color));
+            ConductorEditRequested?.Invoke(
+                this,
+                new ConductorEditRequest(ConductorEditKind.ChangeColor, _selection.Id, Color: color));
         }
     }
 
@@ -1064,10 +1053,14 @@ public sealed partial class WiringCanvas : UserControl
         if (_store is not null && _selection.Kind == CanvasSelectionKind.Conductor && _contextWorld is not null)
         {
             WorkshopDocumentV5 document = _store.Document;
-            _store.UpdateConductor(_selection.Id, conductor => WireRouteEditor.InsertWaypoint(
-                    conductor,
-                    GetWaypointInsertIndex(document, conductor, _contextWorld),
-                    SnapPoint(document, _contextWorld)));
+            ConductorV5 conductor = document.Conductors.First(item => item.Id == _selection.Id);
+            ConductorEditRequested?.Invoke(
+                this,
+                new ConductorEditRequest(
+                    ConductorEditKind.InsertWaypoint,
+                    _selection.Id,
+                    WaypointIndex: GetWaypointInsertIndex(document, conductor, _contextWorld),
+                    Waypoint: SnapPoint(document, _contextWorld)));
         }
     }
 
@@ -1075,7 +1068,9 @@ public sealed partial class WiringCanvas : UserControl
     {
         if (_store is not null && _selection.Kind == CanvasSelectionKind.Conductor)
         {
-            _store.UpdateConductor(_selection.Id, conductor => conductor with { RouteLocked = !conductor.RouteLocked });
+            ConductorEditRequested?.Invoke(
+                this,
+                new ConductorEditRequest(ConductorEditKind.ToggleRouteLock, _selection.Id));
         }
     }
 
@@ -1083,7 +1078,9 @@ public sealed partial class WiringCanvas : UserControl
     {
         if (_store is not null && _selection.Kind == CanvasSelectionKind.Conductor)
         {
-            _store.UpdateConductor(_selection.Id, WireRouteEditor.ClearWaypoints);
+            ConductorEditRequested?.Invoke(
+                this,
+                new ConductorEditRequest(ConductorEditKind.ClearWaypoints, _selection.Id));
         }
     }
 
@@ -1112,18 +1109,16 @@ public sealed partial class WiringCanvas : UserControl
         }
     }
 
-    private void UpdateZoomText() => ZoomText.Text = $"{_zoom:P0}";
+    private void UpdateZoomText() => ZoomText.Text = $"{_viewport.Zoom:P0}";
 
     private PointV5 ScreenToWorld(Point point)
     {
-        Matrix3x2.Invert(ViewMatrix, out Matrix3x2 inverse);
-        Vector2 world = Vector2.Transform(new Vector2((float)point.X, (float)point.Y), inverse);
-        return new PointV5(world.X, world.Y);
+        return _viewport.ScreenToWorld(point);
     }
 
     private TerminalRefV5? HitTerminal(WorkshopDocumentV5 document, PointV5 point)
     {
-        double radius = 13 / _zoom;
+        double radius = 13 / _viewport.Zoom;
         foreach (DeviceInstanceV5 device in document.Devices.Reverse())
         {
             if (!_catalog.TryGet(device.ProfileId, out DeviceProfileV5 profile))
@@ -1146,7 +1141,7 @@ public sealed partial class WiringCanvas : UserControl
 
     private ConductorV5? HitConductor(WorkshopDocumentV5 document, PointV5 point)
     {
-        double tolerance = 9 / _zoom;
+        double tolerance = 9 / _viewport.Zoom;
         foreach (ConductorV5 conductor in document.Conductors.Reverse())
         {
             PointV5[] route = GetRoutePoints(document, conductor);
