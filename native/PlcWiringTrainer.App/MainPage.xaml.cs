@@ -31,7 +31,8 @@ public sealed class PaletteItem
         string category,
         string evidenceLabel,
         string availabilityLabel,
-        bool canPlace)
+        bool canPlace,
+        bool isManualVerified)
     {
         ProfileId = profileId;
         DisplayName = displayName;
@@ -41,6 +42,7 @@ public sealed class PaletteItem
         AvailabilityLabel = availabilityLabel;
         CategoryAndAvailability = $"{category} · {availabilityLabel}";
         CanPlace = canPlace;
+        IsManualVerified = isManualVerified;
     }
 
     public string ProfileId { get; set; } = string.Empty;
@@ -58,6 +60,8 @@ public sealed class PaletteItem
     public string CategoryAndAvailability { get; set; } = string.Empty;
 
     public bool CanPlace { get; set; }
+
+    public bool IsManualVerified { get; set; }
 
     public Visibility EditVisibility { get; set; } = Visibility.Collapsed;
 
@@ -148,15 +152,21 @@ public sealed partial class MainPage : Page
                 profile.Category,
                 profile.ManualEvidence switch
                 {
-                    ManualEvidenceStatusV5.ExactProduct => "정확 품번 · ManualVerified",
-                    ManualEvidenceStatusV5.FamilyManual => "계열 매뉴얼 · 정확 품번 확인 필요",
-                    _ => "교육용 · 근거 미확정",
+                    ManualEvidenceStatusV5.ExactProduct => $"정확 품번 · {profile.Manufacturer} {profile.PartNumber}",
+                    ManualEvidenceStatusV5.FamilyManual => "계열 매뉴얼만 있음 · 전체 주문코드 필요",
+                    _ => "제조사·전체 품번 필요 · 연습용",
                 },
-                profile.Availability == PaletteAvailabilityV5.Ready ? "사용 가능" : "준비 중 · 배치/검증 잠금",
-                profile.Availability == PaletteAvailabilityV5.Ready));
+                profile.Availability == PaletteAvailabilityV5.Ready
+                    ? profile.ManualEvidence == ManualEvidenceStatusV5.ExactProduct
+                        ? "매뉴얼 검증 결선 가능"
+                        : "연습 결선만 · 사전결선 승인 불가"
+                    : "준비 중 · 배치/검증 잠금",
+                profile.Availability == PaletteAvailabilityV5.Ready,
+                profile.ManualEvidence == ManualEvidenceStatusV5.ExactProduct));
         }
 
         InitializeComponent();
+        PruneStaleHiddenPaletteIds();
         RefreshPalette();
         AttachStore(CreateExampleDocument());
     }
@@ -500,10 +510,29 @@ public sealed partial class MainPage : Page
         }
 
         int hiddenKnown = _paletteSource.Count(item => _hiddenPaletteIds.Contains(item.ProfileId));
-        int readyVisible = _paletteSource.Count(item => item.CanPlace && !_hiddenPaletteIds.Contains(item.ProfileId));
+        int verifiedVisible = _paletteSource.Count(item =>
+            item.CanPlace && item.IsManualVerified && !_hiddenPaletteIds.Contains(item.ProfileId));
+        int practiceVisible = _paletteSource.Count(item =>
+            item.CanPlace && !item.IsManualVerified && !_hiddenPaletteIds.Contains(item.ProfileId));
         int preparationVisible = _paletteSource.Count(item => !item.CanPlace && !_hiddenPaletteIds.Contains(item.ProfileId));
-        PaletteSummaryText.Text = $"사용 가능 {readyVisible}종 · 준비 중 {preparationVisible}종 · 숨김 {hiddenKnown}종";
+        PaletteSummaryText.Text = $"검증 결선 {verifiedVisible}종 · 연습 전용 {practiceVisible}종 · 준비 중 {preparationVisible}종 · 숨김 {hiddenKnown}종";
         RestoreHiddenButton.Visibility = hiddenKnown > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void PruneStaleHiddenPaletteIds()
+    {
+        var knownIds = new HashSet<string>(_paletteSource.Select(item => item.ProfileId), StringComparer.Ordinal);
+        string[] staleIds = _hiddenPaletteIds.Where(id => !knownIds.Contains(id)).ToArray();
+        if (staleIds.Length == 0)
+        {
+            return;
+        }
+
+        _hiddenPaletteIds.ExceptWith(staleIds);
+        if (!SavePalettePreferences())
+        {
+            _hiddenPaletteIds.UnionWith(staleIds);
+        }
     }
 
     private bool SavePalettePreferences()
@@ -823,10 +852,23 @@ public sealed partial class MainPage : Page
                 DeviceHeightBox.Value = device.Height;
                 DeviceRotationBox.Value = device.Rotation;
                 DeviceLockedBox.IsChecked = device.Locked;
-                DeviceProfileText.Text = $"{device.ProfileId} · version {device.ProfileVersion}";
-                DeviceEvidenceText.Text = device.EvidenceGrade == EvidenceGrade.Educational
-                    ? "근거 등급: 교육용 · 매뉴얼 검증 자산으로 표시하지 않음"
-                    : $"근거 등급: {device.EvidenceGrade}";
+                if (_catalog.TryGet(device.ProfileId, out DeviceProfileV5 profile))
+                {
+                    DeviceProfileText.Text = profile.ManualEvidence == ManualEvidenceStatusV5.ExactProduct
+                        ? $"{profile.Manufacturer} {profile.PartNumber} · profile v{device.ProfileVersion}"
+                        : $"{device.ProfileId} · profile v{device.ProfileVersion}";
+                    DeviceEvidenceText.Text = profile.ManualEvidence switch
+                    {
+                        ManualEvidenceStatusV5.ExactProduct => $"근거 등급: ManualVerified · 공식 문서 {profile.ManualReferences.Length}건 · 사전결선 검증 가능",
+                        ManualEvidenceStatusV5.FamilyManual => "근거 등급: 계열 매뉴얼 · 전체 주문코드가 없어 연습 결선만 가능",
+                        _ => "근거 등급: 품번 미확정 · 제조사와 전체 주문코드가 필요함",
+                    };
+                }
+                else
+                {
+                    DeviceProfileText.Text = $"{device.ProfileId} · profile v{device.ProfileVersion}";
+                    DeviceEvidenceText.Text = "전기 프로필을 찾을 수 없습니다.";
+                }
                 return;
             }
 

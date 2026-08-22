@@ -1,6 +1,6 @@
 # 장비 매뉴얼 PDF (이 폴더에 파일로 저장됨)
 
-위치: `plc-wiring-trainer\pdf\`
+위치: `plc-wiring-trainer\assets\source-evidence\manuals\`
 
 아래 파일들은 **링크로만 적어 둔 것이 아니라**, 이 폴더에 **실제 PDF 파일**로 받아 둔 것입니다.  
 탐색기에서 더블클릭하면 바로 열립니다.
@@ -38,7 +38,7 @@
 | `07_Schneider_EOCR_User_Manual.pdf` | EOCR 사용자 매뉴얼 |
 | `07_EOCR-3DE_FDE_Datasheet.pdf` | EOCR-3DE/FDE 데이터시트 |
 
-## 정확 품번 공식 근거 (`pdf/official`, 개발 전용)
+## 정확 품번 공식 근거 (`assets/source-evidence/manuals/official`, 개발 전용)
 
 | 파일명 | 정확 품번 | 확인 항목 |
 |--------|-----------|-----------|
@@ -46,11 +46,12 @@
 | `LS_XP_Communication_Manual_EN_V2.2.pdf` | `eXP2-0700D` 통신 근거 | XGT Panel↔XGB RS485 결선, 종단·실드 지침 |
 | `LS_eXP2_Series_Installation_Guide_V1.1.pdf` | `eXP2-07□□D` 참고 | 외형·패널 컷·전원 배선 보조자료. 정확 프로필 근거 해시에는 사용하지 않음 |
 | `LS_SV-iG5A_User_Manual_EN_V2.4.pdf` | `SV-iG5A` 계열 참고 | 제어 I/O 단자, 전력 단자, NPN/PNP S8 선택. 전체 주문코드 미확정으로 연습 전용 |
-| `Omron_MY_Series_J219-E1.pdf` | `MY2N-D2 DC24V` | 14(+)/13(-) 다이오드 코일, 9-1·12-4 b접, 9-5·12-8 a접, 코일·접점 정격 |
+| `LS_XBC_SU_User_Manual_EN_V2.2_202406.pdf` | `XBC-DN60SU` | PDF 135쪽 DI36/COM, 155쪽 NPN 싱크 DO24·COM0~7·24V/24G |
+| `LS_XBF_AD04A_AD08A_Installation_Guide_V4.6.pdf` | `XBF-AD04A`, `XBF-AD08A` | 채널별 ± 입력, 전압/전류 선택, 외부 DC24V, 결선 예 |
+| `LS_XBF_DV04A_DC04A_DC04B_Installation_Guide_V4.9.pdf` | `XBF-DV04A`, `XBF-DC04A` | 채널별 ± 출력, 전압/전류 범위, 외부 DC24V, 실드 배선 |
+| `LS_XBF_RD01A_RD04A_Installation_Guide_V4.4.pdf` | `XBF-RD04A` | PT100/JPT100 A/B/b 2·3·4선식과 DC24V 결선 |
+| `LS_XBF_TC04S_Installation_Guide_V4.6.pdf` | `XBF-TC04S` | K/J/T/R 열전대 채널 ±, 보상도선, DC24V 결선 |
 | `Schneider_EOCR_Digital_E_Instruction_2023.pdf` | `EOCR3DE-05DUH` | AC100–240V 제어전원, 95–96 b접, 97–98 a접, 07–08 경보 a접, fail-safe 동작 |
-| `Phoenix_UT-2.5_3044076.pdf` | `3044076` | 관통 연결, 1000V/24A, 도체·토크·치수 |
-| `Phoenix_UT-2.5-PE_3044092.pdf` | `3044092` | PE 관통 연결과 DIN 레일 보호결합, 도체·토크·치수 |
-| `Phoenix_UT-4-HESI-5x20_3046032.pdf` | `3046032` | 5×20 퓨즈형, 500V/6.3A, 퓨즈 링크 별도, 도체·토크·치수 |
 
 이 PDF들은 프로필 근거 해시 검증을 위한 개발 자료이며 Electron 출시 파일에는 포함하지 않습니다. 앱 리포트에는 문서 ID·쪽·SHA-256만 기록합니다.
 
@@ -60,7 +61,7 @@
 
 `XBL-C41A`는 5핀·RS485 브리지·20×90×60 mm 외형까지, `XBF-PD02A`는 500 mA·65 g 사양과 40핀·내부 회로까지 확인했습니다. PD02A의 정확 외형 치수, 두 장비의 승인된 화면 geometry와 전체 동작 모델은 아직 없으므로 검토 모드에서는 `profile-only`로 차단합니다. 매뉴얼 보유가 곧 통과 자격을 뜻하지 않습니다.
 
-팔레트 전체의 공식 문서 보유·품번 미확정 상태는 `docs/official-manual-inventory.md`에 기록합니다. 전체 품번이 없는 일반 장비에는 비슷한 제품의 매뉴얼을 임의 연결하지 않습니다.
+팔레트 전체의 공식 문서 보유·품번 미확정 상태는 `assets/source-evidence/official-manual-inventory.md`에 기록합니다. 전체 품번이 없는 일반 장비에는 비슷한 제품의 매뉴얼을 임의 연결하지 않습니다.
 
 ---
 

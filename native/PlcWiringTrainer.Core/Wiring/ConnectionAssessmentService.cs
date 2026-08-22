@@ -49,8 +49,8 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
             return Blocked("SAME_TERMINAL", "같은 단자를 서로 연결할 수 없습니다.", start, destination);
         }
 
-        if (!TryResolve(document, start, out TerminalDefinitionV5? left)
-            || !TryResolve(document, destination, out TerminalDefinitionV5? right))
+        if (!TryResolve(document, start, out TerminalDefinitionV5? left, out DeviceProfileV5? leftProfile)
+            || !TryResolve(document, destination, out TerminalDefinitionV5? right, out DeviceProfileV5? rightProfile))
         {
             return Blocked("UNKNOWN_TERMINAL", "장비 프로필에 없는 단자는 연결할 수 없습니다.", start, destination);
         }
@@ -92,6 +92,20 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
             return Risk(document, "DIRECT_SUPPLY_SHORT", "전원측과 귀로를 부하 없이 직접 연결하려고 합니다.", start, destination);
         }
 
+        if (leftProfile.ManualEvidence != ManualEvidenceStatusV5.ExactProduct
+            || rightProfile.ManualEvidence != ManualEvidenceStatusV5.ExactProduct)
+        {
+            const string message = "제조사와 전체 품번이 확정되지 않은 장비는 연습 결선만 가능하며 사전결선 승인을 받을 수 없습니다.";
+            return document.Mode == WorkshopMode.Prewire
+                ? Blocked("MANUAL_EVIDENCE_REQUIRED", message, start, destination)
+                : new ConnectionAssessmentV5(
+                    ConnectionDispositionV5.Warning,
+                    "MANUAL_EVIDENCE_REQUIRED",
+                    message,
+                    start,
+                    destination);
+        }
+
         return new ConnectionAssessmentV5(
             ConnectionDispositionV5.Allowed,
             "CONNECTION_ALLOWED",
@@ -120,10 +134,11 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
     private bool TryResolve(
         WorkshopDocumentV5 document,
         TerminalRefV5 reference,
-        out TerminalDefinitionV5 terminal)
+        out TerminalDefinitionV5 terminal,
+        out DeviceProfileV5 profile)
     {
         DeviceInstanceV5? device = document.Devices.FirstOrDefault(item => item.Id == reference.DeviceId);
-        if (device is not null && _catalog.TryGet(device.ProfileId, out DeviceProfileV5? profile))
+        if (device is not null && _catalog.TryGet(device.ProfileId, out profile!))
         {
             terminal = profile.Terminals.FirstOrDefault(item =>
                 item.Id == reference.TerminalId
@@ -132,6 +147,7 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
         }
 
         terminal = null!;
+        profile = null!;
         return false;
     }
 

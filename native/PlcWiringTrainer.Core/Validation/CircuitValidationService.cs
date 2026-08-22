@@ -104,14 +104,18 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                     "profile"));
             }
 
-            if (profile.EvidenceGrade == EvidenceGrade.Educational || device.EvidenceGrade == EvidenceGrade.Educational)
+            if (profile.ManualEvidence != ManualEvidenceStatusV5.ExactProduct
+                || device.EvidenceGrade == EvidenceGrade.Educational)
             {
+                bool blocking = document.Mode == WorkshopMode.Prewire;
                 issues.Add(Issue(
                     document,
-                    "EDUCATIONAL_PROFILE",
-                    ValidationSeverity.Information,
-                    false,
-                    $"'{device.Label}' 장비는 교육용 자산입니다. 매뉴얼 검증 자산으로 간주하지 않습니다.",
+                    blocking ? "MANUAL_EVIDENCE_REQUIRED" : "EDUCATIONAL_PROFILE",
+                    blocking ? ValidationSeverity.Error : ValidationSeverity.Information,
+                    blocking,
+                    blocking
+                        ? $"'{device.Label}' 장비는 제조사와 전체 품번 및 공식 매뉴얼 근거가 필요합니다. 사전결선 검증을 차단합니다."
+                        : $"'{device.Label}' 장비는 품번 미확정 연습용 자산입니다. 매뉴얼 검증 자산으로 간주하지 않습니다.",
                     [DeviceTarget(device)],
                     "evidence"));
             }

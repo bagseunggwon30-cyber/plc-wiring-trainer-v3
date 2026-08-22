@@ -6,7 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:PlcWiringTrainer.App"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="PLC Wiring Trainer 4.1"
+    Title="PLC Wiring Trainer 4.1.2"
     mc:Ignorable="d">
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -18,7 +18,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TitleBar x:Name="AppTitleBar" Title="PLC Wiring Trainer 4.1">
+        <TitleBar x:Name="AppTitleBar" Title="PLC Wiring Trainer 4.1.2">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="Assets/AppIcon.ico" />
             </TitleBar.IconSource>

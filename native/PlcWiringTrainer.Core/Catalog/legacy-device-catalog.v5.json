@@ -2,11 +2,11 @@
   "schemaVersion": 5,
   "sourceTag": "legacy-electron-final-2026-08-22",
   "measuredCounts": {
-    "classifiedDevices": 100,
-    "readyPaletteDevices": 68,
-    "readyPaletteTerminals": 657,
-    "readyPaletteUniqueImages": 64,
-    "manualVerifiedProfiles": 16
+    "classifiedDevices": 80,
+    "readyPaletteDevices": 48,
+    "readyPaletteTerminals": 482,
+    "readyPaletteUniqueImages": 46,
+    "manualVerifiedProfiles": 18
   },
   "entries": [
     {
@@ -703,124 +703,6 @@
       }
     },
     {
-      "legacyType": "COUNTER",
-      "profileId": "legacy:counter",
-      "category": "switch",
-      "displayName": "카운터 릴레이",
-      "description": "CT6 시리즈 · 디지털 표시 · DC24V",
-      "defaultWidth": 160,
-      "defaultHeight": 260,
-      "color": "#3a7090",
-      "icon": "counter",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/counter-codex.png",
-        "sourcePath": "assets/devices/codex/counter-codex.png",
-        "sha256": "0BE96C2991B36EECCD02C10367D1AB7E42798D31E0AEAD43729F313E4DCC77E3",
-        "imageBox": {
-          "x": 8,
-          "y": 5,
-          "w": 144,
-          "h": 250
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "V+",
-          "label": "+24V",
-          "aliases": [],
-          "x": 32.8,
-          "y": 34.8,
-          "side": "T",
-          "polarityCode": "DC+",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "V-",
-          "label": "0V",
-          "aliases": [],
-          "x": 60.6,
-          "y": 35.9,
-          "side": "T",
-          "polarityCode": "DC-",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "CP",
-          "label": "CP",
-          "aliases": [],
-          "x": 89.4,
-          "y": 36.9,
-          "side": "T",
-          "polarityCode": "DI",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "RST",
-          "label": "RST",
-          "aliases": [],
-          "x": 118.2,
-          "y": 34.8,
-          "side": "T",
-          "polarityCode": "DI",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "OUT-C",
-          "label": "OUT C",
-          "aliases": [],
-          "x": 40,
-          "y": 218.8,
-          "side": "B",
-          "polarityCode": "SW",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "OUT-NO",
-          "label": "OUT NO",
-          "aliases": [],
-          "x": 80,
-          "y": 219.9,
-          "side": "B",
-          "polarityCode": "SW",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "OUT-NC",
-          "label": "OUT NC",
-          "aliases": [],
-          "x": 119.2,
-          "y": 217.8,
-          "side": "B",
-          "polarityCode": "SW",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 8,
-          "right": 8,
-          "top": 10,
-          "bottom": 20
-        },
-        "centerOnRail": true
-      }
-    },
-    {
       "legacyType": "CYL-DA",
       "profileId": "legacy:cyl-da",
       "category": "actuator",
@@ -1160,90 +1042,6 @@
       }
     },
     {
-      "legacyType": "ENCODER",
-      "profileId": "legacy:encoder",
-      "category": "sensor",
-      "displayName": "인크리멘탈 엔코더",
-      "description": "A/B/Z 3상 + 전원 (5선식)",
-      "defaultWidth": 220,
-      "defaultHeight": 220,
-      "color": "#9b59b6",
-      "icon": "encoder",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/encoder-codex.png",
-        "sourcePath": "assets/devices/codex/encoder-codex.png",
-        "sha256": "28195BB0AD774E3781850A815D693FC3DC80D8450B1398CC25865DA8E9C38FC7",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 220,
-          "h": 220
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "V+",
-          "label": "+V",
-          "aliases": [],
-          "x": 195,
-          "y": 70,
-          "side": "R",
-          "polarityCode": "DC+"
-        },
-        {
-          "id": "V-",
-          "label": "0V",
-          "aliases": [],
-          "x": 195,
-          "y": 95,
-          "side": "R",
-          "polarityCode": "DC-"
-        },
-        {
-          "id": "A",
-          "label": "A",
-          "aliases": [],
-          "x": 195,
-          "y": 120,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "B",
-          "label": "B",
-          "aliases": [],
-          "x": 195,
-          "y": 145,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "Z",
-          "label": "Z",
-          "aliases": [],
-          "x": 195,
-          "y": 170,
-          "side": "R",
-          "polarityCode": "DI"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "free"
-        ],
-        "minClearance": {
-          "left": 5,
-          "right": 5,
-          "top": 5,
-          "bottom": 5
-        }
-      }
-    },
-    {
       "legacyType": "EOCR",
       "profileId": "legacy:eocr",
       "category": "switch",
@@ -1466,6 +1264,16 @@
       "color": "#334",
       "availability": "ready",
       "manualEvidence": "exact",
+      "manufacturer": "Schneider Electric",
+      "partNumber": "EOCR3DE-05DUH",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/Schneider_EOCR_Digital_E_Instruction_2023.pdf",
+          "sha256": "B7EFD3B57ACC65EA89656A202E1A30CE01718912FE7115FB2DBFC414507975F3",
+          "pages": "",
+          "sourceUrl": ""
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exact/eocr3de-05duh-imagen-v1.png",
         "sourcePath": "assets/devices/codex/exact/eocr3de-05duh-imagen-v1.png",
@@ -1793,6 +1601,16 @@
       "icon": "hmi",
       "availability": "ready",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "eXP2-0700D",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XGT_Panel_eXP2_HW_Manual_EN_V1.5.pdf",
+          "sha256": "7B24C37B791224FC7744413589C853A348065C0746ED9AEE258070F99A4EBBF9",
+          "pages": "",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/17216272742650/XGT%20Panel%20HW%20Manual_eXP2_eng_V1.5.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exp2-700-rear-codex.png",
         "sourcePath": "assets/devices/codex/exp2-700-rear-codex.png",
@@ -2070,135 +1888,6 @@
       }
     },
     {
-      "legacyType": "FLICKER",
-      "profileId": "legacy:flicker",
-      "category": "switch",
-      "displayName": "플리커 타이머",
-      "description": "점멸(Flicker) · DC24V · ON/OFF 반복",
-      "defaultWidth": 160,
-      "defaultHeight": 260,
-      "color": "#c05a90",
-      "icon": "flicker",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/flicker-codex.png",
-        "sourcePath": "assets/devices/codex/flicker-codex.png",
-        "sha256": "C77F5AC6842E00CD457D6653AE7C638D9852AF51B02FD8B0E4EDEB0C4A88E929",
-        "imageBox": {
-          "x": 8,
-          "y": 5,
-          "w": 144,
-          "h": 250
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "1",
-          "label": "1(C)",
-          "aliases": [],
-          "x": 32.8,
-          "y": 34.8,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "3",
-          "label": "3(NO)",
-          "aliases": [],
-          "x": 60.6,
-          "y": 35.9,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "4",
-          "label": "4(NC)",
-          "aliases": [],
-          "x": 89.4,
-          "y": 36.9,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "8",
-          "label": "8(C)",
-          "aliases": [],
-          "x": 118.2,
-          "y": 34.8,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "2",
-          "label": "2(+)",
-          "aliases": [],
-          "x": 33.8,
-          "y": 218.8,
-          "side": "B",
-          "polarityCode": "DC+",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "7",
-          "label": "7(-)",
-          "aliases": [],
-          "x": 61.6,
-          "y": 221,
-          "side": "B",
-          "polarityCode": "DC-",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "6",
-          "label": "6(NO)",
-          "aliases": [],
-          "x": 89.4,
-          "y": 219.9,
-          "side": "B",
-          "polarityCode": "SW",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "5",
-          "label": "5(NC)",
-          "aliases": [],
-          "x": 119.2,
-          "y": 217.8,
-          "side": "B",
-          "polarityCode": "SW",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 8,
-          "right": 8,
-          "top": 10,
-          "bottom": 20
-        },
-        "centerOnRail": true
-      }
-    },
-    {
       "legacyType": "FUSE",
       "profileId": "legacy:fuse",
       "category": "power",
@@ -2351,114 +2040,6 @@
           "right": 10,
           "top": 20,
           "bottom": 40
-        },
-        "centerOnRail": true
-      }
-    },
-    {
-      "legacyType": "GND-BAR",
-      "profileId": "legacy:gnd-bar",
-      "category": "wiring",
-      "displayName": "접지 부스바",
-      "description": "PE 공통",
-      "defaultWidth": 326,
-      "defaultHeight": 82,
-      "color": "#5a3",
-      "icon": "gnd",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/orthographic/gnd-bar-flat.png",
-        "sourcePath": "assets/devices/orthographic/gnd-bar-flat.png",
-        "sha256": "DCC679F7FECA12D85A4C2C0F570B3316EBDB04DD48F3921D2FE6FF7F8D09C763",
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "PE1",
-          "label": "1",
-          "aliases": [],
-          "x": 44,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        },
-        {
-          "id": "PE2",
-          "label": "2",
-          "aliases": [],
-          "x": 78,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        },
-        {
-          "id": "PE3",
-          "label": "3",
-          "aliases": [],
-          "x": 112,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        },
-        {
-          "id": "PE4",
-          "label": "4",
-          "aliases": [],
-          "x": 146,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        },
-        {
-          "id": "PE5",
-          "label": "5",
-          "aliases": [],
-          "x": 180,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        },
-        {
-          "id": "PE6",
-          "label": "6",
-          "aliases": [],
-          "x": 214,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        },
-        {
-          "id": "PE7",
-          "label": "7",
-          "aliases": [],
-          "x": 248,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        },
-        {
-          "id": "PE8",
-          "label": "8",
-          "aliases": [],
-          "x": 282,
-          "y": 38,
-          "side": "B",
-          "polarityCode": "PE"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din",
-          "terminal"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 4,
-          "right": 4,
-          "top": 10,
-          "bottom": 10
         },
         "centerOnRail": true
       }
@@ -3467,75 +3048,6 @@
       }
     },
     {
-      "legacyType": "LIMIT",
-      "profileId": "legacy:limit",
-      "category": "sensor",
-      "displayName": "리미트 스위치",
-      "description": "기계식 1a1b · 롤러 레버",
-      "defaultWidth": 120,
-      "defaultHeight": 120,
-      "color": "#888",
-      "icon": "limit",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/flat/limit-flat.png",
-        "sourcePath": "assets/devices/flat/limit-flat.png",
-        "sha256": "6B5CE5A936836F906E73651A40C027FF8767E2B8F5371A8CE68D60BCAB12B4C3",
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "1",
-          "label": "1 (C)",
-          "aliases": [],
-          "x": 0,
-          "y": 30,
-          "side": "L",
-          "polarityCode": "SW"
-        },
-        {
-          "id": "2",
-          "label": "2 (NC)",
-          "aliases": [],
-          "x": 0,
-          "y": 55,
-          "side": "L",
-          "polarityCode": "SW"
-        },
-        {
-          "id": "3",
-          "label": "3 (C)",
-          "aliases": [],
-          "x": 120,
-          "y": 30,
-          "side": "R",
-          "polarityCode": "SW"
-        },
-        {
-          "id": "4",
-          "label": "4 (NO)",
-          "aliases": [],
-          "x": 120,
-          "y": 55,
-          "side": "R",
-          "polarityCode": "SW"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "free"
-        ],
-        "minClearance": {
-          "left": 5,
-          "right": 5,
-          "top": 5,
-          "bottom": 5
-        }
-      }
-    },
-    {
       "legacyType": "LINEAR-RAIL",
       "profileId": "legacy:linear-rail",
       "category": "motion",
@@ -4156,6 +3668,16 @@
       "color": "#556",
       "availability": "ready",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "MC-22b / DC24 / 1a1b",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/08_LS_Metasol_MC_Contactor_Catalog.pdf",
+          "sha256": "BE22BB71FD62046ED15BAE2CC377F3991016C3FF032ADB7AD441F76417136662",
+          "pages": "",
+          "sourceUrl": "https://www.ls-electric.com/ko/download/"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exact/mc-22b-dc24-imagen-v2.png",
         "sourcePath": "assets/devices/codex/exact/mc-22b-dc24-imagen-v2.png",
@@ -4709,6 +4231,16 @@
       "icon": "smps",
       "availability": "ready",
       "manualEvidence": "exact",
+      "manufacturer": "MEAN WELL",
+      "partNumber": "MDR-100-24",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/01_MDR-100-24_MeanWell_SPEC.pdf",
+          "sha256": "9DE6ABE926DF1D33974544D82989964E828C079F7E8B8E0448AE7667ED16E896",
+          "pages": "",
+          "sourceUrl": "https://www.meanwell.com/"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/trimmed/mdr-100-trim.png",
         "sourcePath": "assets/devices/trimmed/mdr-100-trim.png",
@@ -6026,215 +5558,6 @@
       }
     },
     {
-      "legacyType": "MY2N",
-      "profileId": "omron:my2n-d2-dc24",
-      "electricalProfileId": "omron:my2n-d2-dc24",
-      "category": "switch",
-      "displayName": "MY2N-D2 · DC24V",
-      "description": "OMRON 미니파워 릴레이 2c · 다이오드 내장 · 공식 J219 검토",
-      "defaultWidth": 140,
-      "defaultHeight": 170,
-      "color": "#d35400",
-      "icon": "relay",
-      "availability": "ready",
-      "manualEvidence": "exact",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/flat/my2n-flat.png",
-        "sourcePath": "assets/devices/flat/my2n-flat.png",
-        "sha256": "4AA086A577E2846D71C980E1BA0FFC280430FF48763C1DF5F46E6873B59A8D76",
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "13",
-          "label": "13 (- / 0V)",
-          "aliases": [],
-          "x": 13,
-          "y": 170,
-          "side": "B",
-          "polarityCode": "DC-",
-          "domain": "dc",
-          "potential": "0V",
-          "role": "common",
-          "polarity": "return",
-          "ratedVoltage": {
-            "min": 0,
-            "max": 0,
-            "unit": "VDC"
-          },
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "14",
-          "label": "14 (+24V)",
-          "aliases": [],
-          "x": 100,
-          "y": 170,
-          "side": "B",
-          "polarityCode": "DC+",
-          "domain": "dc",
-          "potential": "+24V",
-          "role": "supply-input",
-          "polarity": "positive",
-          "ratedVoltage": {
-            "min": 24,
-            "max": 24,
-            "unit": "VDC"
-          },
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "9",
-          "label": "9 (COM1)",
-          "aliases": [],
-          "x": 0,
-          "y": 30,
-          "side": "L",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "common",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "pole-1",
-          "leadOutSide": "L",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "1",
-          "label": "1 (NC1)",
-          "aliases": [],
-          "x": 0,
-          "y": 55,
-          "side": "L",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "pole-1",
-          "leadOutSide": "L",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "5",
-          "label": "5 (NO1)",
-          "aliases": [],
-          "x": 0,
-          "y": 80,
-          "side": "L",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "pole-1",
-          "leadOutSide": "L",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "12",
-          "label": "12 (COM2)",
-          "aliases": [],
-          "x": 140,
-          "y": 30,
-          "side": "R",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "common",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "pole-2",
-          "leadOutSide": "R",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "4",
-          "label": "4 (NC2)",
-          "aliases": [],
-          "x": 140,
-          "y": 55,
-          "side": "R",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "pole-2",
-          "leadOutSide": "R",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "8",
-          "label": "8 (NO2)",
-          "aliases": [],
-          "x": 140,
-          "y": 80,
-          "side": "R",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "pole-2",
-          "leadOutSide": "R",
-          "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [
-        {
-          "from": "9",
-          "to": "1",
-          "kind": "dynamic-contact",
-          "stateKey": "pole-1",
-          "normallyClosed": true
-        },
-        {
-          "from": "9",
-          "to": "5",
-          "kind": "dynamic-contact",
-          "stateKey": "pole-1",
-          "normallyClosed": false
-        },
-        {
-          "from": "12",
-          "to": "4",
-          "kind": "dynamic-contact",
-          "stateKey": "pole-2",
-          "normallyClosed": true
-        },
-        {
-          "from": "12",
-          "to": "8",
-          "kind": "dynamic-contact",
-          "stateKey": "pole-2",
-          "normallyClosed": false
-        }
-      ],
-      "mount": {
-        "tags": [
-          "din",
-          "relay",
-          "socket"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 12,
-          "right": 12,
-          "top": 16,
-          "bottom": 24
-        },
-        "centerOnRail": true
-      }
-    },
-    {
       "legacyType": "PB-1C",
       "profileId": "legacy:pb-1c",
       "category": "switch",
@@ -6311,150 +5634,6 @@
         ],
         "preferredRailType": "DOOR_PANEL",
         "railOffsetY": -80,
-        "allowRotate": false,
-        "minClearance": {
-          "left": 8,
-          "right": 8,
-          "top": 8,
-          "bottom": 8
-        }
-      }
-    },
-    {
-      "legacyType": "PB-NC",
-      "profileId": "legacy:pb-nc",
-      "category": "switch",
-      "displayName": "푸시버튼 NC",
-      "description": "b접점만 (적색 정지 단접점)",
-      "defaultWidth": 160,
-      "defaultHeight": 190,
-      "color": "#d33",
-      "icon": "pb",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/bom/pushbutton-nc-red-imagen-v1.png",
-        "sourcePath": "assets/devices/codex/bom/pushbutton-nc-red-imagen-v1.png",
-        "sha256": "5BFB611566D474314FA56D02D5BE22F1FAF07B6766FEC538F1427F2683740A59",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 160,
-          "h": 160
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "21",
-          "label": "21",
-          "aliases": [],
-          "x": 59,
-          "y": 190,
-          "side": "B",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "contact"
-        },
-        {
-          "id": "22",
-          "label": "22",
-          "aliases": [],
-          "x": 101,
-          "y": 190,
-          "side": "B",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "contact"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "door"
-        ],
-        "preferredRailType": "DOOR_PANEL",
-        "railOffsetY": -95,
-        "allowRotate": false,
-        "minClearance": {
-          "left": 8,
-          "right": 8,
-          "top": 8,
-          "bottom": 8
-        }
-      }
-    },
-    {
-      "legacyType": "PB-NO",
-      "profileId": "legacy:pb-no",
-      "category": "switch",
-      "displayName": "푸시버튼 NO",
-      "description": "a접점만 (녹색 운전 단접점)",
-      "defaultWidth": 160,
-      "defaultHeight": 190,
-      "color": "#0a7",
-      "icon": "pb",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/bom/pushbutton-no-green-imagen-v1.png",
-        "sourcePath": "assets/devices/codex/bom/pushbutton-no-green-imagen-v1.png",
-        "sha256": "E335ADFBA0A0AA95D47057230562D00DDB9BE5933899C2E7B1A2E46BB3CFF826",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 160,
-          "h": 160
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "13",
-          "label": "13",
-          "aliases": [],
-          "x": 60,
-          "y": 190,
-          "side": "B",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "contact"
-        },
-        {
-          "id": "14",
-          "label": "14",
-          "aliases": [],
-          "x": 99,
-          "y": 190,
-          "side": "B",
-          "polarityCode": "SW",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "dry-contact",
-          "polarity": "nonpolar",
-          "commonType": "dry-contact",
-          "commonGroup": "contact"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "door"
-        ],
-        "preferredRailType": "DOOR_PANEL",
-        "railOffsetY": -95,
         "allowRotate": false,
         "minClearance": {
           "left": 8,
@@ -6793,80 +5972,6 @@
       }
     },
     {
-      "legacyType": "PRESSURE-TX-420",
-      "profileId": "legacy:pressure-tx-420",
-      "category": "sensor",
-      "displayName": "압력 트랜스미터 4~20mA",
-      "description": "DC24V · 0~10bar · 3선식 교육 모델",
-      "defaultWidth": 300,
-      "defaultHeight": 190,
-      "color": "#526678",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/gpt-v24/pressure-transmitter-gpt.png",
-        "sourcePath": "assets/devices/gpt-v24/pressure-transmitter-gpt.png",
-        "sha256": "34EFAA51675B94EA597B134F6FE6E26289D8080E8C85780D6DB89396884CF027",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 300,
-          "h": 190
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "PWR+",
-          "label": "+24V",
-          "aliases": [],
-          "x": 18,
-          "y": 120,
-          "side": "L",
-          "polarityCode": "DC+"
-        },
-        {
-          "id": "PWR-",
-          "label": "0V",
-          "aliases": [],
-          "x": 18,
-          "y": 158,
-          "side": "L",
-          "polarityCode": "DC-"
-        },
-        {
-          "id": "SIG+",
-          "label": "4~20mA +",
-          "aliases": [],
-          "x": 282,
-          "y": 120,
-          "side": "R",
-          "polarityCode": "AO"
-        },
-        {
-          "id": "SIG-",
-          "label": "4~20mA -",
-          "aliases": [],
-          "x": 282,
-          "y": 158,
-          "side": "R",
-          "polarityCode": "AO-COM"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "free"
-        ],
-        "minClearance": {
-          "left": 5,
-          "right": 5,
-          "top": 5,
-          "bottom": 5
-        }
-      }
-    },
-    {
       "legacyType": "PROX-NPN",
       "profileId": "prox-npn-v2",
       "electricalProfileId": "generic:prox-npn-3wire",
@@ -7176,66 +6281,6 @@
           "bottom": 24
         },
         "centerOnRail": true
-      }
-    },
-    {
-      "legacyType": "PT100",
-      "profileId": "legacy:pt100",
-      "category": "sensor",
-      "displayName": "PT100 RTD",
-      "description": "3선 측온저항",
-      "defaultWidth": 110,
-      "defaultHeight": 90,
-      "color": "#9b59b6",
-      "icon": "rtd",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/flat/pt100-flat.png",
-        "sourcePath": "assets/devices/flat/pt100-flat.png",
-        "sha256": "68E767C770034B18BAE51831068A8E8A059F6BFF90BC67B4273812B285D6A41B",
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "A",
-          "label": "A",
-          "aliases": [],
-          "x": 0,
-          "y": 25,
-          "side": "L",
-          "polarityCode": "AI"
-        },
-        {
-          "id": "B",
-          "label": "B",
-          "aliases": [],
-          "x": 0,
-          "y": 50,
-          "side": "L",
-          "polarityCode": "AI"
-        },
-        {
-          "id": "b",
-          "label": "b",
-          "aliases": [],
-          "x": 0,
-          "y": 75,
-          "side": "L",
-          "polarityCode": "AI"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "free"
-        ],
-        "minClearance": {
-          "left": 5,
-          "right": 5,
-          "top": 5,
-          "bottom": 5
-        }
       }
     },
     {
@@ -8364,62 +7409,6 @@
           "polarityCode": "COMM",
           "leadOutSide": "T",
           "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "free"
-        ],
-        "minClearance": {
-          "left": 5,
-          "right": 5,
-          "top": 5,
-          "bottom": 5
-        }
-      }
-    },
-    {
-      "legacyType": "SIGNAL-GEN-VI",
-      "profileId": "legacy:signal-gen-vi",
-      "category": "sensor",
-      "displayName": "V/I 신호 발생기",
-      "description": "0~10V · 0/4~20mA 교정 신호",
-      "defaultWidth": 270,
-      "defaultHeight": 210,
-      "color": "#2f3947",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/gpt-v24/signal-generator-gpt.png",
-        "sourcePath": "assets/devices/gpt-v24/signal-generator-gpt.png",
-        "sha256": "A32F8D9B048A8A49F436711063459B1DAF6A1567955E04A7FFFE4F3D53979769",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 270,
-          "h": 210
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "OUT+",
-          "label": "OUT +",
-          "aliases": [],
-          "x": 245,
-          "y": 145,
-          "side": "R",
-          "polarityCode": "AO"
-        },
-        {
-          "id": "OUT-",
-          "label": "OUT -",
-          "aliases": [],
-          "x": 245,
-          "y": 180,
-          "side": "R",
-          "polarityCode": "AO-COM"
         }
       ],
       "internalLinks": [],
@@ -11853,395 +10842,6 @@
       }
     },
     {
-      "legacyType": "TIMER",
-      "profileId": "legacy:timer",
-      "category": "switch",
-      "displayName": "타이머 릴레이",
-      "description": "AH3-N · 온딜레이 · DC24V",
-      "defaultWidth": 160,
-      "defaultHeight": 260,
-      "color": "#5a90c0",
-      "icon": "timer",
-      "availability": "ready",
-      "manualEvidence": "unresolved",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/timer-codex.png",
-        "sourcePath": "assets/devices/codex/timer-codex.png",
-        "sha256": "AA9DF63D08F58A40C0F82D22FB53FE27314826786DD32F0E4FB3608EAC6A9AEF",
-        "imageBox": {
-          "x": 8,
-          "y": 5,
-          "w": 144,
-          "h": 250
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "1",
-          "label": "1(C)",
-          "aliases": [],
-          "x": 32.8,
-          "y": 34.8,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "3",
-          "label": "3(NO)",
-          "aliases": [],
-          "x": 60.6,
-          "y": 35.9,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "4",
-          "label": "4(NC)",
-          "aliases": [],
-          "x": 89.4,
-          "y": 36.9,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "8",
-          "label": "8(C)",
-          "aliases": [],
-          "x": 118.2,
-          "y": 34.8,
-          "side": "T",
-          "polarityCode": "SW",
-          "leadOutSide": "T",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "2",
-          "label": "2(+)",
-          "aliases": [],
-          "x": 33.8,
-          "y": 218.8,
-          "side": "B",
-          "polarityCode": "DC+",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "7",
-          "label": "7(-)",
-          "aliases": [],
-          "x": 61.6,
-          "y": 221,
-          "side": "B",
-          "polarityCode": "DC-",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "6",
-          "label": "6(NO)",
-          "aliases": [],
-          "x": 89.4,
-          "y": 219.9,
-          "side": "B",
-          "polarityCode": "SW",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "5",
-          "label": "5(NC)",
-          "aliases": [],
-          "x": 119.2,
-          "y": 217.8,
-          "side": "B",
-          "polarityCode": "SW",
-          "leadOutSide": "B",
-          "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 12,
-          "right": 12,
-          "top": 16,
-          "bottom": 24
-        },
-        "centerOnRail": true
-      }
-    },
-    {
-      "legacyType": "UT-2.5",
-      "profileId": "phoenix-contact:ut-2.5-3044076",
-      "electricalProfileId": "phoenix-contact:ut-2.5-3044076",
-      "category": "wiring",
-      "displayName": "UT 2,5 · 3044076",
-      "description": "Phoenix Contact · 관통형 · 1000V/24A",
-      "defaultWidth": 180,
-      "defaultHeight": 120,
-      "color": "#777",
-      "availability": "ready",
-      "manualEvidence": "exact",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/exact/phoenix-ut25-3044076-imagen-v1.png",
-        "sourcePath": "assets/devices/codex/exact/phoenix-ut25-3044076-imagen-v1.png",
-        "sha256": "44F16BA81650F85DEEB90FBE08250C2B2C3702EF621135F61509B2B6617A2D3E",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 180,
-          "h": 120
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "1",
-          "label": "1",
-          "aliases": [],
-          "x": 70,
-          "y": 28,
-          "side": "L",
-          "polarityCode": "NEUTRAL",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "common",
-          "polarity": "none",
-          "commonType": "power-pass-through",
-          "channel": "through",
-          "maxConductors": 1,
-          "leadOutSide": "L",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "2",
-          "label": "1",
-          "aliases": [],
-          "x": 110,
-          "y": 28,
-          "side": "R",
-          "polarityCode": "NEUTRAL",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "common",
-          "polarity": "none",
-          "commonType": "power-pass-through",
-          "channel": "through",
-          "maxConductors": 1,
-          "leadOutSide": "R",
-          "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [
-        {
-          "from": "1",
-          "to": "2",
-          "kind": "conductive"
-        }
-      ],
-      "mount": {
-        "tags": [
-          "din",
-          "terminal"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 1,
-          "right": 1,
-          "top": 6,
-          "bottom": 6
-        },
-        "centerOnRail": true,
-        "terminalStrip": true,
-        "allowRepeat": true
-      }
-    },
-    {
-      "legacyType": "UT-2.5-PE",
-      "profileId": "phoenix-contact:ut-2.5-pe-3044092",
-      "electricalProfileId": "phoenix-contact:ut-2.5-pe-3044092",
-      "category": "wiring",
-      "displayName": "UT 2,5-PE · 3044092",
-      "description": "Phoenix Contact · PE 레일 결합형",
-      "defaultWidth": 180,
-      "defaultHeight": 120,
-      "color": "#5a3",
-      "availability": "ready",
-      "manualEvidence": "exact",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/exact/phoenix-ut25pe-3044092-imagen-v1.png",
-        "sourcePath": "assets/devices/codex/exact/phoenix-ut25pe-3044092-imagen-v1.png",
-        "sha256": "0E180BC0319957D437B0FD447821F0F51EE904F212BDEC9C2E5AACAE354BD9BA",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 180,
-          "h": 120
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "1",
-          "label": "PE 1",
-          "aliases": [],
-          "x": 70,
-          "y": 28,
-          "side": "L",
-          "polarityCode": "PE",
-          "domain": "pe",
-          "potential": "PE",
-          "role": "protective-earth",
-          "polarity": "protective-earth",
-          "channel": "PE",
-          "maxConductors": 1,
-          "leadOutSide": "L",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "2",
-          "label": "PE 1",
-          "aliases": [],
-          "x": 110,
-          "y": 28,
-          "side": "R",
-          "polarityCode": "PE",
-          "domain": "pe",
-          "potential": "PE",
-          "role": "protective-earth",
-          "polarity": "protective-earth",
-          "channel": "PE",
-          "maxConductors": 1,
-          "leadOutSide": "R",
-          "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [
-        {
-          "from": "1",
-          "to": "2",
-          "kind": "conductive"
-        }
-      ],
-      "mount": {
-        "tags": [
-          "din",
-          "terminal",
-          "pe"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 1,
-          "right": 1,
-          "top": 6,
-          "bottom": 6
-        },
-        "centerOnRail": true,
-        "terminalStrip": true,
-        "allowRepeat": true
-      }
-    },
-    {
-      "legacyType": "UT-4-HESI",
-      "profileId": "phoenix-contact:ut-4-hesi-3046032",
-      "electricalProfileId": "phoenix-contact:ut-4-hesi-3046032",
-      "category": "wiring",
-      "displayName": "UT 4-HESI · 3046032",
-      "description": "Phoenix Contact · 5×20 퓨즈형 · 500V/6.3A",
-      "defaultWidth": 180,
-      "defaultHeight": 120,
-      "color": "#222",
-      "availability": "ready",
-      "manualEvidence": "exact",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/codex/exact/phoenix-ut4-hesi-3046032-imagen-v1.png",
-        "sourcePath": "assets/devices/codex/exact/phoenix-ut4-hesi-3046032-imagen-v1.png",
-        "sha256": "729BF23702F944C480110E44F3504EFEE014604732B3BF53A72D6D5607BF7995",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 180,
-          "h": 120
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "1",
-          "label": "1",
-          "aliases": [],
-          "x": 70,
-          "y": 68,
-          "side": "L",
-          "polarityCode": "NEUTRAL",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "common",
-          "polarity": "none",
-          "commonType": "fused-power",
-          "channel": "fuse",
-          "maxConductors": 1,
-          "leadOutSide": "L",
-          "leadOutDistance": 18
-        },
-        {
-          "id": "2",
-          "label": "1",
-          "aliases": [],
-          "x": 110,
-          "y": 68,
-          "side": "R",
-          "polarityCode": "NEUTRAL",
-          "domain": "floating",
-          "potential": "floating",
-          "role": "common",
-          "polarity": "none",
-          "commonType": "fused-power",
-          "channel": "fuse",
-          "maxConductors": 1,
-          "leadOutSide": "R",
-          "leadOutDistance": 18
-        }
-      ],
-      "internalLinks": [
-        {
-          "from": "1",
-          "to": "2",
-          "kind": "dynamic-contact",
-          "stateKey": "fuse",
-          "normallyClosed": true
-        }
-      ],
-      "mount": {
-        "tags": [
-          "din",
-          "terminal",
-          "fused"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 1,
-          "right": 1,
-          "top": 6,
-          "bottom": 6
-        },
-        "centerOnRail": true,
-        "terminalStrip": true,
-        "allowRepeat": true
-      }
-    },
-    {
       "legacyType": "XBC-DN32H",
       "profileId": "ls-electric:xbc-dn32h",
       "electricalProfileId": "ls-electric:xbc-dn32h",
@@ -12254,6 +10854,16 @@
       "icon": "plc",
       "availability": "ready",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBC-DN32H",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf",
+          "sha256": "4C1BBB7C60CC2DC80221B67CFE7AD11CA360C9DB12B7F1B36171CF12C8BF18AA",
+          "pages": "28,34,43-44,96",
+          "sourceUrl": "https://sol.ls-electric.com/kr/ko/dlcenter"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/manual/xbc-dn32h-ppt-open-front-transparent-v2.png",
         "sourcePath": "assets/devices/manual/xbc-dn32h-ppt-open-front-transparent-v2.png",
@@ -13309,6 +11919,16 @@
       "icon": "plc",
       "availability": "preparation",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBC-DN32UP",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/10_LS_XBC_U_User_Manual_EN.pdf",
+          "sha256": "2928E058FD1027F936CCFD5EA949F422C90118B6FCA4CE423FF71B03B9D494D0",
+          "pages": "",
+          "sourceUrl": "https://sol.ls-electric.com/kr/ko/dlcenter"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exact/xbc-dn-dp32up-imagen-v1.png",
         "sourcePath": "assets/devices/codex/exact/xbc-dn-dp32up-imagen-v1.png",
@@ -15675,6 +14295,16 @@
       "icon": "plc",
       "availability": "preparation",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBC-DN60SU",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XBC_SU_User_Manual_EN_V2.2_202406.pdf",
+          "sha256": "5F404565F4C2DC2BAD885831D1AED4A69F1F6F80611042D583EB824848BD782E",
+          "pages": "135,155",
+          "sourceUrl": "https://ssq.ls-electric.com/uploads/document/17181681762370/XBC-SU_T24_Manual_V2.2_202406_EN.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exact/xbc-dn60su-imagen-v1.png",
         "sourcePath": "assets/devices/codex/exact/xbc-dn60su-imagen-v1.png",
@@ -17481,6 +16111,16 @@
       "icon": "plc",
       "availability": "preparation",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBC-DP32UP",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/10_LS_XBC_U_User_Manual_EN.pdf",
+          "sha256": "2928E058FD1027F936CCFD5EA949F422C90118B6FCA4CE423FF71B03B9D494D0",
+          "pages": "",
+          "sourceUrl": "https://sol.ls-electric.com/kr/ko/dlcenter"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exact/xbc-dn-dp32up-imagen-v1.png",
         "sourcePath": "assets/devices/codex/exact/xbc-dn-dp32up-imagen-v1.png",
@@ -19852,6 +18492,16 @@
       "icon": "plc",
       "availability": "ready",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBC-DR32H",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/02_LS_XGB_Hardware_XBC-DR32H_Manual_EN.pdf",
+          "sha256": "4C1BBB7C60CC2DC80221B67CFE7AD11CA360C9DB12B7F1B36171CF12C8BF18AA",
+          "pages": "32-33,43-44,46",
+          "sourceUrl": "https://sol.ls-electric.com/kr/ko/dlcenter"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/manual/xbc-dr32h-ppt-open-front-transparent.png",
         "sourcePath": "assets/devices/manual/xbc-dr32h-ppt-open-front-transparent.png",
@@ -20806,1199 +19456,6 @@
       }
     },
     {
-      "legacyType": "XBE-DC32A",
-      "profileId": "legacy:xbe-dc32a",
-      "category": "plc",
-      "displayName": "XBE-DC32A",
-      "description": "DC24V 입력 32점 · Source/Sink · 40핀",
-      "defaultWidth": 420,
-      "defaultHeight": 260,
-      "color": "#274d72",
-      "availability": "ready",
-      "manualEvidence": "family",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/gpt-expansion/xgb-main-expansion-gpt.png",
-        "sourcePath": "assets/devices/gpt-expansion/xgb-main-expansion-gpt.png",
-        "sha256": "4CBAADEDFFF5550C8013BBCA23BF073A9270A1972F819D82C0C027D73926CB97",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 420,
-          "h": 260
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "I00",
-          "label": "00",
-          "aliases": [],
-          "x": 18,
-          "y": 28,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I10",
-          "label": "10",
-          "aliases": [],
-          "x": 402,
-          "y": 28,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I01",
-          "label": "01",
-          "aliases": [],
-          "x": 18,
-          "y": 40.1,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I11",
-          "label": "11",
-          "aliases": [],
-          "x": 402,
-          "y": 40.1,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I02",
-          "label": "02",
-          "aliases": [],
-          "x": 18,
-          "y": 52.2,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I12",
-          "label": "12",
-          "aliases": [],
-          "x": 402,
-          "y": 52.2,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I03",
-          "label": "03",
-          "aliases": [],
-          "x": 18,
-          "y": 64.3,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I13",
-          "label": "13",
-          "aliases": [],
-          "x": 402,
-          "y": 64.3,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I04",
-          "label": "04",
-          "aliases": [],
-          "x": 18,
-          "y": 76.4,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I14",
-          "label": "14",
-          "aliases": [],
-          "x": 402,
-          "y": 76.4,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I05",
-          "label": "05",
-          "aliases": [],
-          "x": 18,
-          "y": 88.5,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I15",
-          "label": "15",
-          "aliases": [],
-          "x": 402,
-          "y": 88.5,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I06",
-          "label": "06",
-          "aliases": [],
-          "x": 18,
-          "y": 100.6,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I16",
-          "label": "16",
-          "aliases": [],
-          "x": 402,
-          "y": 100.6,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I07",
-          "label": "07",
-          "aliases": [],
-          "x": 18,
-          "y": 112.7,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I17",
-          "label": "17",
-          "aliases": [],
-          "x": 402,
-          "y": 112.7,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I08",
-          "label": "08",
-          "aliases": [],
-          "x": 18,
-          "y": 124.8,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I18",
-          "label": "18",
-          "aliases": [],
-          "x": 402,
-          "y": 124.8,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I09",
-          "label": "09",
-          "aliases": [],
-          "x": 18,
-          "y": 136.9,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I19",
-          "label": "19",
-          "aliases": [],
-          "x": 402,
-          "y": 136.9,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I0A",
-          "label": "0A",
-          "aliases": [],
-          "x": 18,
-          "y": 149,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I1A",
-          "label": "1A",
-          "aliases": [],
-          "x": 402,
-          "y": 149,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I0B",
-          "label": "0B",
-          "aliases": [],
-          "x": 18,
-          "y": 161.1,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I1B",
-          "label": "1B",
-          "aliases": [],
-          "x": 402,
-          "y": 161.1,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I0C",
-          "label": "0C",
-          "aliases": [],
-          "x": 18,
-          "y": 173.2,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I1C",
-          "label": "1C",
-          "aliases": [],
-          "x": 402,
-          "y": 173.2,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I0D",
-          "label": "0D",
-          "aliases": [],
-          "x": 18,
-          "y": 185.3,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I1D",
-          "label": "1D",
-          "aliases": [],
-          "x": 402,
-          "y": 185.3,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I0E",
-          "label": "0E",
-          "aliases": [],
-          "x": 18,
-          "y": 197.4,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I1E",
-          "label": "1E",
-          "aliases": [],
-          "x": 402,
-          "y": 197.4,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I0F",
-          "label": "0F",
-          "aliases": [],
-          "x": 18,
-          "y": 209.5,
-          "side": "L",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I1F",
-          "label": "1F",
-          "aliases": [],
-          "x": 402,
-          "y": 209.5,
-          "side": "R",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "COM-B1",
-          "label": "COM",
-          "aliases": [],
-          "x": 18,
-          "y": 226,
-          "side": "L",
-          "polarityCode": "IO-COM"
-        },
-        {
-          "id": "COM-B2",
-          "label": "COM",
-          "aliases": [],
-          "x": 18,
-          "y": 242,
-          "side": "L",
-          "polarityCode": "IO-COM"
-        },
-        {
-          "id": "COM-A1",
-          "label": "COM",
-          "aliases": [],
-          "x": 402,
-          "y": 226,
-          "side": "R",
-          "polarityCode": "IO-COM"
-        },
-        {
-          "id": "COM-A2",
-          "label": "COM",
-          "aliases": [],
-          "x": 402,
-          "y": 242,
-          "side": "R",
-          "polarityCode": "IO-COM"
-        }
-      ],
-      "internalLinks": [
-        {
-          "from": "COM-A1",
-          "to": "COM-A2",
-          "kind": "conductive"
-        },
-        {
-          "from": "COM-A1",
-          "to": "COM-B1",
-          "kind": "conductive"
-        },
-        {
-          "from": "COM-A1",
-          "to": "COM-B2",
-          "kind": "conductive"
-        }
-      ],
-      "mount": {
-        "tags": [
-          "din",
-          "plc"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 20,
-          "right": 20,
-          "top": 40,
-          "bottom": 60
-        },
-        "centerOnRail": true
-      }
-    },
-    {
-      "legacyType": "XBE-DR16A",
-      "profileId": "legacy:xbe-dr16a",
-      "category": "plc",
-      "displayName": "XBE-DR16A",
-      "description": "DC24V 입력 8점 + 릴레이 출력 8점",
-      "defaultWidth": 320,
-      "defaultHeight": 300,
-      "color": "#274d72",
-      "availability": "ready",
-      "manualEvidence": "family",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/gpt-expansion/xgb-relay-io-gpt.png",
-        "sourcePath": "assets/devices/gpt-expansion/xgb-relay-io-gpt.png",
-        "sha256": "A8F32ED3AA81DF01AF9FBBEE8EB1BD0C9AB60EBE125D1EE6AA72E704BA0A79AF",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 320,
-          "h": 300
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "I0",
-          "label": "IN 0",
-          "aliases": [],
-          "x": 20,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I1",
-          "label": "IN 1",
-          "aliases": [],
-          "x": 55,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I2",
-          "label": "IN 2",
-          "aliases": [],
-          "x": 90,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I3",
-          "label": "IN 3",
-          "aliases": [],
-          "x": 125,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I4",
-          "label": "IN 4",
-          "aliases": [],
-          "x": 160,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I5",
-          "label": "IN 5",
-          "aliases": [],
-          "x": 195,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I6",
-          "label": "IN 6",
-          "aliases": [],
-          "x": 230,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "I7",
-          "label": "IN 7",
-          "aliases": [],
-          "x": 265,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DI"
-        },
-        {
-          "id": "IN_COM",
-          "label": "IN COM",
-          "aliases": [],
-          "x": 300,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "IO-COM"
-        },
-        {
-          "id": "Q0",
-          "label": "OUT 0",
-          "aliases": [],
-          "x": 20,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q1",
-          "label": "OUT 1",
-          "aliases": [],
-          "x": 55,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q2",
-          "label": "OUT 2",
-          "aliases": [],
-          "x": 90,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q3",
-          "label": "OUT 3",
-          "aliases": [],
-          "x": 125,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q4",
-          "label": "OUT 4",
-          "aliases": [],
-          "x": 160,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q5",
-          "label": "OUT 5",
-          "aliases": [],
-          "x": 195,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q6",
-          "label": "OUT 6",
-          "aliases": [],
-          "x": 230,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q7",
-          "label": "OUT 7",
-          "aliases": [],
-          "x": 265,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "OUT_COM",
-          "label": "OUT COM",
-          "aliases": [],
-          "x": 300,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "SW"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din",
-          "plc"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 20,
-          "right": 20,
-          "top": 40,
-          "bottom": 60
-        },
-        "centerOnRail": true
-      }
-    },
-    {
-      "legacyType": "XBE-RY16A",
-      "profileId": "legacy:xbe-ry16a",
-      "category": "plc",
-      "displayName": "XBE-RY16A",
-      "description": "릴레이 출력 16점 · 8점/COM × 2",
-      "defaultWidth": 320,
-      "defaultHeight": 300,
-      "color": "#274d72",
-      "availability": "ready",
-      "manualEvidence": "family",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/gpt-expansion/xgb-relay-io-gpt.png",
-        "sourcePath": "assets/devices/gpt-expansion/xgb-relay-io-gpt.png",
-        "sha256": "A8F32ED3AA81DF01AF9FBBEE8EB1BD0C9AB60EBE125D1EE6AA72E704BA0A79AF",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 320,
-          "h": 300
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "Q0",
-          "label": "0",
-          "aliases": [],
-          "x": 20,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q1",
-          "label": "1",
-          "aliases": [],
-          "x": 55,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q2",
-          "label": "2",
-          "aliases": [],
-          "x": 90,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q3",
-          "label": "3",
-          "aliases": [],
-          "x": 125,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q4",
-          "label": "4",
-          "aliases": [],
-          "x": 160,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q5",
-          "label": "5",
-          "aliases": [],
-          "x": 195,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q6",
-          "label": "6",
-          "aliases": [],
-          "x": 230,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q7",
-          "label": "7",
-          "aliases": [],
-          "x": 265,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "COM0",
-          "label": "COM",
-          "aliases": [],
-          "x": 300,
-          "y": 32,
-          "side": "T",
-          "polarityCode": "SW"
-        },
-        {
-          "id": "Q8",
-          "label": "8",
-          "aliases": [],
-          "x": 20,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q9",
-          "label": "9",
-          "aliases": [],
-          "x": 55,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QA",
-          "label": "A",
-          "aliases": [],
-          "x": 90,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QB",
-          "label": "B",
-          "aliases": [],
-          "x": 125,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QC",
-          "label": "C",
-          "aliases": [],
-          "x": 160,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QD",
-          "label": "D",
-          "aliases": [],
-          "x": 195,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QE",
-          "label": "E",
-          "aliases": [],
-          "x": 230,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QF",
-          "label": "F",
-          "aliases": [],
-          "x": 265,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "COM1",
-          "label": "COM",
-          "aliases": [],
-          "x": 300,
-          "y": 268,
-          "side": "B",
-          "polarityCode": "SW"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din",
-          "plc"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 20,
-          "right": 20,
-          "top": 40,
-          "bottom": 60
-        },
-        "centerOnRail": true
-      }
-    },
-    {
-      "legacyType": "XBE-TN16A",
-      "profileId": "legacy:xbe-tn16a",
-      "category": "plc",
-      "displayName": "XBE-TN16A",
-      "description": "트랜지스터 출력 16점 · Sink",
-      "defaultWidth": 250,
-      "defaultHeight": 360,
-      "color": "#274d72",
-      "availability": "ready",
-      "manualEvidence": "family",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/gpt-expansion/xgb-digital-io-gpt.png",
-        "sourcePath": "assets/devices/gpt-expansion/xgb-digital-io-gpt.png",
-        "sha256": "398880C240DCE8535C72DAC6E14DAB249A42A2A6F9167AAFCBFFE26519371DC3",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 250,
-          "h": 360
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "Q0",
-          "label": "0",
-          "aliases": [],
-          "x": 18,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q1",
-          "label": "1",
-          "aliases": [],
-          "x": 48.6,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q2",
-          "label": "2",
-          "aliases": [],
-          "x": 79.1,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q3",
-          "label": "3",
-          "aliases": [],
-          "x": 109.7,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q4",
-          "label": "4",
-          "aliases": [],
-          "x": 140.3,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q5",
-          "label": "5",
-          "aliases": [],
-          "x": 170.9,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q6",
-          "label": "6",
-          "aliases": [],
-          "x": 201.4,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q7",
-          "label": "7",
-          "aliases": [],
-          "x": 232,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q8",
-          "label": "8",
-          "aliases": [],
-          "x": 14,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q9",
-          "label": "9",
-          "aliases": [],
-          "x": 38.7,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QA",
-          "label": "A",
-          "aliases": [],
-          "x": 63.3,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QB",
-          "label": "B",
-          "aliases": [],
-          "x": 88,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QC",
-          "label": "C",
-          "aliases": [],
-          "x": 112.7,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QD",
-          "label": "D",
-          "aliases": [],
-          "x": 137.3,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QE",
-          "label": "E",
-          "aliases": [],
-          "x": 162,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QF",
-          "label": "F",
-          "aliases": [],
-          "x": 186.7,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "PWR24",
-          "label": "DC12/24V",
-          "aliases": [],
-          "x": 211.3,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DC+"
-        },
-        {
-          "id": "COM",
-          "label": "COM/0V",
-          "aliases": [],
-          "x": 236,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DC-"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din",
-          "plc"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 20,
-          "right": 20,
-          "top": 40,
-          "bottom": 60
-        },
-        "centerOnRail": true
-      }
-    },
-    {
-      "legacyType": "XBE-TP16A",
-      "profileId": "legacy:xbe-tp16a",
-      "category": "plc",
-      "displayName": "XBE-TP16A",
-      "description": "트랜지스터 출력 16점 · Source",
-      "defaultWidth": 250,
-      "defaultHeight": 360,
-      "color": "#274d72",
-      "availability": "ready",
-      "manualEvidence": "family",
-      "artwork": {
-        "assetPath": "Assets/Devices/Legacy/gpt-expansion/xgb-digital-io-gpt.png",
-        "sourcePath": "assets/devices/gpt-expansion/xgb-digital-io-gpt.png",
-        "sha256": "398880C240DCE8535C72DAC6E14DAB249A42A2A6F9167AAFCBFFE26519371DC3",
-        "imageBox": {
-          "x": 0,
-          "y": 0,
-          "w": 250,
-          "h": 360
-        },
-        "imageHasLabels": false
-      },
-      "terminals": [
-        {
-          "id": "Q0",
-          "label": "0",
-          "aliases": [],
-          "x": 18,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q1",
-          "label": "1",
-          "aliases": [],
-          "x": 48.6,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q2",
-          "label": "2",
-          "aliases": [],
-          "x": 79.1,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q3",
-          "label": "3",
-          "aliases": [],
-          "x": 109.7,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q4",
-          "label": "4",
-          "aliases": [],
-          "x": 140.3,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q5",
-          "label": "5",
-          "aliases": [],
-          "x": 170.9,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q6",
-          "label": "6",
-          "aliases": [],
-          "x": 201.4,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q7",
-          "label": "7",
-          "aliases": [],
-          "x": 232,
-          "y": 30,
-          "side": "T",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q8",
-          "label": "8",
-          "aliases": [],
-          "x": 14,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "Q9",
-          "label": "9",
-          "aliases": [],
-          "x": 38.7,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QA",
-          "label": "A",
-          "aliases": [],
-          "x": 63.3,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QB",
-          "label": "B",
-          "aliases": [],
-          "x": 88,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QC",
-          "label": "C",
-          "aliases": [],
-          "x": 112.7,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QD",
-          "label": "D",
-          "aliases": [],
-          "x": 137.3,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QE",
-          "label": "E",
-          "aliases": [],
-          "x": 162,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "QF",
-          "label": "F",
-          "aliases": [],
-          "x": 186.7,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DO"
-        },
-        {
-          "id": "COM+",
-          "label": "COM/+24V",
-          "aliases": [],
-          "x": 211.3,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DC+"
-        },
-        {
-          "id": "0V",
-          "label": "0V",
-          "aliases": [],
-          "x": 236,
-          "y": 330,
-          "side": "B",
-          "polarityCode": "DC-"
-        }
-      ],
-      "internalLinks": [],
-      "mount": {
-        "tags": [
-          "din",
-          "plc"
-        ],
-        "preferredRailType": "DIN35",
-        "minClearance": {
-          "left": 20,
-          "right": 20,
-          "top": 40,
-          "bottom": 60
-        },
-        "centerOnRail": true
-      }
-    },
-    {
       "legacyType": "XBF-AD04A",
       "profileId": "legacy:xbf-ad04a",
       "category": "plc",
@@ -22008,7 +19465,17 @@
       "defaultHeight": 520,
       "color": "#e7e8ea",
       "availability": "ready",
-      "manualEvidence": "family",
+      "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-AD04A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XBF_AD04A_AD08A_Installation_Guide_V4.6.pdf",
+          "sha256": "FB725723CDB7A80CBA5E6F1C20D65EC882E2A8F4B37E03FDA2D4B41564CE5C4F",
+          "pages": "1-2",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/17198780538670/_XGB-7_%20XBF_AD04A_AD04D_AD08A_Installation%20Guide_V4.6.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/gpt/xbf-ad04a-gpt.png",
         "sourcePath": "assets/devices/gpt/xbf-ad04a-gpt.png",
@@ -22139,7 +19606,17 @@
       "defaultHeight": 580,
       "color": "#e7e8ea",
       "availability": "ready",
-      "manualEvidence": "family",
+      "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-AD08A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XBF_AD04A_AD08A_Installation_Guide_V4.6.pdf",
+          "sha256": "FB725723CDB7A80CBA5E6F1C20D65EC882E2A8F4B37E03FDA2D4B41564CE5C4F",
+          "pages": "1-2",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/17198780538670/_XGB-7_%20XBF_AD04A_AD04D_AD08A_Installation%20Guide_V4.6.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/gpt/xbf-ad08a-gpt.png",
         "sourcePath": "assets/devices/gpt/xbf-ad08a-gpt.png",
@@ -22345,6 +19822,16 @@
       "icon": "analog",
       "availability": "ready",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-AH04A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/03_LS_XBF-AH04A_Installation_Guide.pdf",
+          "sha256": "36ABFD5C521E01DCB35D4032C230D4B486B4A3D447C4E8E40417D3A908E8F2E8",
+          "pages": "",
+          "sourceUrl": "https://sol.ls-electric.com/kr/ko/dlcenter"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/xbf-ah04a-codex.png",
         "sourcePath": "assets/devices/codex/xbf-ah04a-codex.png",
@@ -22572,7 +20059,17 @@
       "defaultHeight": 520,
       "color": "#e7e8ea",
       "availability": "ready",
-      "manualEvidence": "family",
+      "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-DC04A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XBF_DV04A_DC04A_DC04B_Installation_Guide_V4.9.pdf",
+          "sha256": "E2B08A823052E0B5D91C83AE1C9AC2EE38262DE6C4C73FED3C7541DB9BB30334",
+          "pages": "1-2",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/17198775944430/_XGB-10_%20XBF_DV04A_DC04A_DC04B_Installation%20Guide_V4.9.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/gpt/xbf-dc04a-gpt.png",
         "sourcePath": "assets/devices/gpt/xbf-dc04a-gpt.png",
@@ -22703,7 +20200,17 @@
       "defaultHeight": 520,
       "color": "#e7e8ea",
       "availability": "ready",
-      "manualEvidence": "family",
+      "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-DV04A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XBF_DV04A_DC04A_DC04B_Installation_Guide_V4.9.pdf",
+          "sha256": "E2B08A823052E0B5D91C83AE1C9AC2EE38262DE6C4C73FED3C7541DB9BB30334",
+          "pages": "1-2",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/17198775944430/_XGB-10_%20XBF_DV04A_DC04A_DC04B_Installation%20Guide_V4.9.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/gpt/xbf-dv04a-gpt.png",
         "sourcePath": "assets/devices/gpt/xbf-dv04a-gpt.png",
@@ -22836,6 +20343,16 @@
       "color": "#e5e7eb",
       "availability": "preparation",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-PD02A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/08_LS_XBF-PD02A_Positioning_Manual_KR.pdf",
+          "sha256": "AEEDDA2002AB616A5A02B25224B3AA462A128375AF1C41392502386FA44ED3F7",
+          "pages": "26,29-30",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/17201637428330/Installation%20guide_XBF_PD02A_10310001005_V4.5.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exact/xbf-pd02a-imagen-v1.png",
         "sourcePath": "assets/devices/codex/exact/xbf-pd02a-imagen-v1.png",
@@ -23518,7 +21035,17 @@
       "defaultHeight": 520,
       "color": "#e7e8ea",
       "availability": "ready",
-      "manualEvidence": "family",
+      "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-RD04A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XBF_RD01A_RD04A_Installation_Guide_V4.4.pdf",
+          "sha256": "58BD72771B4C9CD3B4B802BB29AEB7A2488F188B092ABE9FC15AC347A345BC01",
+          "pages": "1-2",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/16765240770030/_XGB-15_%20XBF-RD01A_RD04A_Installation%20Guide_V4.4.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/gpt/xbf-rd04a-gpt.png",
         "sourcePath": "assets/devices/gpt/xbf-rd04a-gpt.png",
@@ -23694,7 +21221,17 @@
       "defaultHeight": 520,
       "color": "#e7e8ea",
       "availability": "ready",
-      "manualEvidence": "family",
+      "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBF-TC04S",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/official/LS_XBF_TC04S_Installation_Guide_V4.6.pdf",
+          "sha256": "2ED5039CEDBB545934718E5B42ED2CCCB256095EF4D896F90FAB8D07AC4B66E5",
+          "pages": "1-2",
+          "sourceUrl": "https://sol.ls-electric.com/uploads/document/17198777409800/_XGB-17_%20XBF_TC04S_Installation%20Guide_V4.6.pdf"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/gpt/xbf-tc04s-gpt.png",
         "sourcePath": "assets/devices/gpt/xbf-tc04s-gpt.png",
@@ -23836,6 +21373,16 @@
       "color": "#e5e7eb",
       "availability": "preparation",
       "manualEvidence": "exact",
+      "manufacturer": "LS ELECTRIC",
+      "partNumber": "XBL-C41A",
+      "manualReferences": [
+        {
+          "documentPath": "assets/source-evidence/manuals/09_LS_XGB_Cnet_XBL-C41A_Manual_KR.pdf",
+          "sha256": "D0D9A6C360004550A4936EBA34B8165DE6445E4812E532A41BC71886682D7F16",
+          "pages": "195-196,217",
+          "sourceUrl": "https://sol.ls-electric.com/kr/ko/dlcenter"
+        }
+      ],
       "artwork": {
         "assetPath": "Assets/Devices/Legacy/codex/exact/xbl-c41a-imagen-v1.png",
         "sourcePath": "assets/devices/codex/exact/xbl-c41a-imagen-v1.png",

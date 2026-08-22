@@ -57,6 +57,25 @@ public sealed class ConnectionAssessmentTests
         Assert.Equal("PE_DOMAIN_MISMATCH", result.Code);
     }
 
+    [Fact]
+    public void SafeElectricalTerminalsStillRequireExactManualEvidenceInPrewire()
+    {
+        var service = new ConnectionAssessmentService(DeviceProfileCatalog.CreateDefault());
+        WorkshopDocumentV5 document = TestDocuments.Empty() with
+        {
+            Mode = WorkshopMode.Prewire,
+            Devices = [Device("left", 20), Device("right", 220)],
+        };
+
+        ConnectionAssessmentV5 result = service.Assess(
+            DocumentHasher.WithContentHash(document),
+            new TerminalRefV5("left", "+24V"),
+            new TerminalRefV5("right", "+24V"));
+
+        Assert.Equal(ConnectionDispositionV5.Blocked, result.Disposition);
+        Assert.Equal("MANUAL_EVIDENCE_REQUIRED", result.Code);
+    }
+
     private static DeviceInstanceV5 Device(string id, double x)
         => new(
             id, "dc-supply-24v", 1, EvidenceGrade.Educational, id,

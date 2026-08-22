@@ -71,6 +71,21 @@ public sealed class CircuitValidationTests
         Assert.Contains(result.Issues, issue => issue.Code == "EDUCATIONAL_PROFILE" && !issue.Blocking);
     }
 
+    [Fact]
+    public async Task PrewireBlocksADeviceWithoutAnExactOrderCodeAndOfficialManual()
+    {
+        var service = new CircuitValidationService(DeviceProfileCatalog.CreateDefault());
+        WorkshopDocumentV5 document = TestDocuments.WithLamp() with { Mode = WorkshopMode.Prewire };
+        document = DocumentHasher.WithContentHash(document);
+
+        ValidationResultV5 result = await service.ValidateAsync(document);
+
+        Assert.Contains(result.Issues, issue =>
+            issue.Code == "MANUAL_EVIDENCE_REQUIRED"
+            && issue.Blocking
+            && issue.Severity == ValidationSeverity.Error);
+    }
+
     private static DeviceInstanceV5 Device(DeviceProfileCatalog catalog, string id, string profileId)
     {
         Assert.True(catalog.TryGet(profileId, out DeviceProfileV5 profile));

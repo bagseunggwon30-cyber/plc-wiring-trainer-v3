@@ -116,6 +116,7 @@
                         </Grid>
                         <TextBlock
                             x:Name="PaletteSummaryText"
+                            AutomationProperties.AutomationId="PaletteSummaryText"
                             Opacity="0.65"
                             Text="장비 목록을 불러오는 중"
                             TextWrapping="Wrap" />

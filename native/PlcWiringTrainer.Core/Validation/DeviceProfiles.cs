@@ -40,6 +40,12 @@ public sealed record DeviceArtworkV5(
     RectV5? ImageBox,
     bool ImageHasLabels);
 
+public sealed record ManualReferenceV5(
+    string DocumentPath,
+    string Sha256,
+    string Pages,
+    string SourceUrl);
+
 public sealed record DeviceCatalogEntryV5(
     string LegacyType,
     string ProfileId,
@@ -83,6 +89,12 @@ public sealed record DeviceProfileV5(
     public PaletteAvailabilityV5 Availability { get; init; } = PaletteAvailabilityV5.Ready;
 
     public ManualEvidenceStatusV5 ManualEvidence { get; init; }
+
+    public string Manufacturer { get; init; } = string.Empty;
+
+    public string PartNumber { get; init; } = string.Empty;
+
+    public ManualReferenceV5[] ManualReferences { get; init; } = [];
 
     public required DeviceArtworkV5 Artwork { get; init; }
 
@@ -319,6 +331,15 @@ internal static class LegacyCatalogReader
             DefaultHeight = entry.DefaultHeight,
             Availability = availability,
             ManualEvidence = manualEvidence,
+            Manufacturer = entry.Manufacturer,
+            PartNumber = entry.PartNumber,
+            ManualReferences = entry.ManualReferences
+                .Select(reference => new ManualReferenceV5(
+                    reference.DocumentPath,
+                    reference.Sha256,
+                    reference.Pages,
+                    reference.SourceUrl))
+                .ToArray(),
             Artwork = artwork,
             InternalLinks = entry.InternalLinks.Select(ToInternalLink).ToArray(),
         };
@@ -339,7 +360,7 @@ internal static class LegacyCatalogReader
     private static TerminalDefinitionV5 ToTerminal(string legacyType, LegacyTerminal terminal)
     {
         TerminalOutputMode outputMode = ParseOutputMode(terminal.OutputMode);
-        return new TerminalDefinitionV5(
+        var definition = new TerminalDefinitionV5(
             terminal.Id,
             terminal.Label,
             ParseDomain(terminal.Domain),
@@ -366,6 +387,70 @@ internal static class LegacyCatalogReader
             HitRadius = terminal.HitRadius.GetValueOrDefault(12),
             LeadOutSide = terminal.LeadOutSide ?? terminal.Side ?? "auto",
             LeadOutDistance = terminal.LeadOutDistance.GetValueOrDefault(18),
+        };
+        return ApplyExactLsModuleSemantics(legacyType, definition);
+    }
+
+    private static TerminalDefinitionV5 ApplyExactLsModuleSemantics(
+        string legacyType,
+        TerminalDefinitionV5 terminal)
+    {
+        bool analogInput = legacyType is "XBF-AD04A" or "XBF-AD08A" or "XBF-RD04A" or "XBF-TC04S";
+        bool analogOutput = legacyType is "XBF-DV04A" or "XBF-DC04A";
+        if (!analogInput && !analogOutput)
+        {
+            return terminal;
+        }
+
+        if (terminal.Id == "+24V")
+        {
+            return terminal with
+            {
+                Domain = TerminalDomain.DcPower,
+                Polarity = TerminalPolarity.Positive,
+                Role = TerminalRole.SupplyPositive,
+                Potential = TerminalPotential.Positive24V,
+            };
+        }
+
+        if (terminal.Id == "0V")
+        {
+            return terminal with
+            {
+                Domain = TerminalDomain.DcPower,
+                Polarity = TerminalPolarity.Negative,
+                Role = TerminalRole.SupplyReturn,
+                Potential = TerminalPotential.ZeroVolt,
+            };
+        }
+
+        if (terminal.Id == "PE")
+        {
+            return terminal with
+            {
+                Domain = TerminalDomain.ProtectiveEarth,
+                Polarity = TerminalPolarity.ProtectiveEarth,
+                Role = TerminalRole.ProtectiveEarth,
+                Potential = TerminalPotential.ProtectiveEarth,
+            };
+        }
+
+        if (!terminal.Id.StartsWith("CH", StringComparison.Ordinal) || terminal.Id.Length < 4)
+        {
+            return terminal with { Domain = TerminalDomain.Floating };
+        }
+
+        bool positive = terminal.Id.EndsWith('+')
+            || (legacyType == "XBF-RD04A" && terminal.Id.EndsWith('A'));
+        return terminal with
+        {
+            Domain = analogInput ? TerminalDomain.AnalogInput : TerminalDomain.AnalogOutput,
+            Polarity = positive ? TerminalPolarity.Positive : TerminalPolarity.Negative,
+            Role = analogInput
+                ? positive ? TerminalRole.AnalogInputPositive : TerminalRole.AnalogInputNegative
+                : TerminalRole.Passive,
+            Potential = TerminalPotential.Signal,
+            Channel = terminal.Id[..3],
         };
     }
 
@@ -546,9 +631,20 @@ internal sealed class LegacyCatalogEntry
     public double DefaultHeight { get; set; }
     public required string Availability { get; set; }
     public required string ManualEvidence { get; set; }
+    public string Manufacturer { get; set; } = string.Empty;
+    public string PartNumber { get; set; } = string.Empty;
+    public LegacyManualReference[] ManualReferences { get; set; } = [];
     public required LegacyArtwork Artwork { get; set; }
     public required LegacyTerminal[] Terminals { get; set; }
     public required LegacyInternalLink[] InternalLinks { get; set; }
+}
+
+internal sealed class LegacyManualReference
+{
+    public required string DocumentPath { get; set; }
+    public required string Sha256 { get; set; }
+    public string Pages { get; set; } = string.Empty;
+    public string SourceUrl { get; set; } = string.Empty;
 }
 
 internal sealed class LegacyArtwork

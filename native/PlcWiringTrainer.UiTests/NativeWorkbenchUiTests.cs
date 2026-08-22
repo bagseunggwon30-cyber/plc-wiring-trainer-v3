@@ -13,9 +13,12 @@ public sealed class NativeWorkbenchUiTests
     {
         using var session = NativeAppSession.Start();
 
-        Assert.Equal("PLC Wiring Trainer 4.1", session.Window.Title);
+        Assert.Equal("PLC Wiring Trainer 4.1.2", session.Window.Title);
         Assert.NotNull(session.FindByAutomationId("DevicePalette"));
         Assert.NotNull(session.FindByAutomationId("PaletteSearchBox"));
+        Assert.Equal(
+            "검증 결선 13종 · 연습 전용 35종 · 준비 중 5종 · 숨김 0종",
+            session.FindByAutomationId("PaletteSummaryText").Name);
         Assert.NotNull(session.FindByAutomationId("WiringCanvas"));
         Assert.NotNull(session.FindByAutomationId("InspectorTabs"));
         Assert.NotNull(session.FindByAutomationId("SaveDocumentButton"));
