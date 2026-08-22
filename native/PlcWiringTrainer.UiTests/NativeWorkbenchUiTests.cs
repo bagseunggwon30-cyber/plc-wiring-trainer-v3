@@ -46,6 +46,22 @@ public sealed class NativeWorkbenchUiTests
         Assert.Equal("W-ERR-01", label.Text);
     }
 
+    [Fact]
+    public void PaletteEditHidesAndRestoresADeviceWithoutDeletingItsAsset()
+    {
+        using var session = NativeAppSession.Start();
+        TextBox search = session.FindByAutomationId("PaletteSearchBox").AsTextBox();
+        search.Text = "LED 표시등 녹";
+
+        session.FindByAutomationId("PaletteEditButton").AsToggleButton().Toggle();
+        AutomationElement hide = session.WaitForAutomationId("PaletteHideButton");
+        hide.AsButton().Invoke();
+
+        Assert.False(session.ExistsByAutomationId("PaletteHideButton"));
+        session.WaitForAutomationId("RestoreHiddenPaletteButton").AsButton().Invoke();
+        Assert.NotNull(session.WaitForAutomationId("PaletteHideButton"));
+    }
+
     private static bool WaitUntil(Func<bool> condition, TimeSpan timeout)
     {
         DateTime deadline = DateTime.UtcNow + timeout;
@@ -71,11 +87,17 @@ internal sealed class NativeAppSession : IDisposable
 {
     private readonly Application _application;
     private readonly UIA3Automation _automation;
+    private readonly string _settingsDirectory;
 
-    private NativeAppSession(Application application, UIA3Automation automation, Window window)
+    private NativeAppSession(
+        Application application,
+        UIA3Automation automation,
+        Window window,
+        string settingsDirectory)
     {
         _application = application;
         _automation = automation;
+        _settingsDirectory = settingsDirectory;
         Window = window;
     }
 
@@ -86,7 +108,28 @@ internal sealed class NativeAppSession : IDisposable
     public static NativeAppSession Start()
     {
         string executable = FindExecutable();
-        Application application = Application.Launch(executable);
+        string settingsDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"plcw-native-ui-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(settingsDirectory);
+        string settingsPath = Path.Combine(settingsDirectory, "palette.json");
+        string? previousSettingsPath = Environment.GetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH");
+        Environment.SetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH", settingsPath);
+        Application application;
+        try
+        {
+            application = Application.Launch(executable);
+        }
+        catch
+        {
+            Directory.Delete(settingsDirectory, recursive: true);
+            throw;
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH", previousSettingsPath);
+        }
+
         var automation = new UIA3Automation();
         DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
         Window? window;
@@ -95,7 +138,7 @@ internal sealed class NativeAppSession : IDisposable
             window = application.GetMainWindow(automation);
             if (window is not null)
             {
-                return new NativeAppSession(application, automation, window);
+                return new NativeAppSession(application, automation, window, settingsDirectory);
             }
 
             Thread.Sleep(200);
@@ -104,6 +147,7 @@ internal sealed class NativeAppSession : IDisposable
 
         automation.Dispose();
         application.Dispose();
+        Directory.Delete(settingsDirectory, recursive: true);
         throw new InvalidOperationException("네이티브 앱의 주 창을 찾지 못했습니다.");
     }
 
@@ -129,6 +173,9 @@ internal sealed class NativeAppSession : IDisposable
 
         throw new InvalidOperationException($"AutomationId를 찾지 못했습니다: {automationId}");
     }
+
+    public bool ExistsByAutomationId(string automationId)
+        => Window.FindFirstDescendant(condition => condition.ByAutomationId(automationId)) is not null;
 
     public AutomationElement WaitForName(string name, TimeSpan? timeout = null)
     {
@@ -218,6 +265,10 @@ internal sealed class NativeAppSession : IDisposable
         {
             _automation.Dispose();
             _application.Dispose();
+            if (Directory.Exists(_settingsDirectory))
+            {
+                Directory.Delete(_settingsDirectory, recursive: true);
+            }
         }
     }
 

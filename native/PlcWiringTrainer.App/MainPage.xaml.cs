@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Media;
 using PlcWiringTrainer.App.Controls;
 using PlcWiringTrainer.Core.Documents;
 using PlcWiringTrainer.Core.Navigation;
+using PlcWiringTrainer.Core.Palette;
 using PlcWiringTrainer.Core.Reports;
 using PlcWiringTrainer.Core.Validation;
 using PlcWiringTrainer.Core.Wiring;
@@ -38,6 +39,7 @@ public sealed class PaletteItem
         Category = category;
         EvidenceLabel = evidenceLabel;
         AvailabilityLabel = availabilityLabel;
+        CategoryAndAvailability = $"{category} · {availabilityLabel}";
         CanPlace = canPlace;
     }
 
@@ -53,7 +55,13 @@ public sealed class PaletteItem
 
     public string AvailabilityLabel { get; set; } = string.Empty;
 
+    public string CategoryAndAvailability { get; set; } = string.Empty;
+
     public bool CanPlace { get; set; }
+
+    public Visibility EditVisibility { get; set; } = Visibility.Collapsed;
+
+    public string HideAutomationName => $"{DisplayName} 팔레트에서 숨기기";
 }
 
 public sealed class ValidationIssueItem
@@ -96,7 +104,9 @@ public sealed partial class MainPage : Page
     private readonly DeviceProfileCatalog _catalog = DeviceProfileCatalog.CreateDefault();
     private readonly IConnectionAssessmentService _connectionAssessment;
     private readonly IReportExporter _reportExporter;
+    private readonly PalettePreferencesStore _palettePreferencesStore;
     private readonly WorkshopDocumentRepository _repository;
+    private readonly HashSet<string> _hiddenPaletteIds;
     private readonly List<PaletteItem> _paletteSource = [];
     private WorkbenchStore? _store;
     private CanvasSelection _selection = CanvasSelection.Empty;
@@ -104,6 +114,8 @@ public sealed partial class MainPage : Page
     private string? _currentPath;
     private int _lastAutosaveRevision;
     private bool _refreshingInspector;
+    private bool _refreshingValidationItems;
+    private bool _paletteEditMode;
 
     public MainPage()
     {
@@ -116,10 +128,17 @@ public sealed partial class MainPage : Page
             Path.Combine(appData, "Import Backups"),
             Path.Combine(appData, "Quarantine"));
         _repository = new WorkshopDocumentRepository(migrator, Path.Combine(appData, "Autosave"));
+        string paletteSettingsPath = Environment.GetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH")
+            ?? Path.Combine(appData, "palette-preferences.v1.json");
+        _palettePreferencesStore = new PalettePreferencesStore(paletteSettingsPath);
+        _hiddenPaletteIds = new HashSet<string>(
+            _palettePreferencesStore.Load().HiddenProfileIds,
+            StringComparer.Ordinal);
 
         foreach (DeviceProfileV5 profile in _catalog.Profiles
             .Where(profile => profile.Availability is PaletteAvailabilityV5.Ready or PaletteAvailabilityV5.Preparation)
-            .OrderBy(profile => profile.Category, StringComparer.Ordinal)
+            .OrderBy(profile => CategoryOrder(profile.Category))
+            .ThenBy(profile => profile.Category, StringComparer.Ordinal)
             .ThenBy(profile => profile.DisplayName, StringComparer.Ordinal))
         {
             _paletteSource.Add(new PaletteItem(
@@ -151,6 +170,7 @@ public sealed partial class MainPage : Page
     private void Page_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshFromStore();
+        WiringCanvas.ResetView();
         StatusText.Text = "단자를 두 번 눌러 직교 전선을 만들 수 있습니다. 가운데/오른쪽 버튼으로 이동, 휠로 확대합니다.";
     }
 
@@ -273,6 +293,11 @@ public sealed partial class MainPage : Page
 
     private void PaletteList_ItemClick(object sender, ItemClickEventArgs e)
     {
+        if (_paletteEditMode)
+        {
+            return;
+        }
+
         if (e.ClickedItem is not PaletteItem item || !_catalog.TryGet(item.ProfileId, out DeviceProfileV5 profile))
         {
             return;
@@ -340,16 +365,17 @@ public sealed partial class MainPage : Page
     private void PlaceDevice(DeviceProfileV5 profile, double x, double y)
     {
         string id = $"device-{Guid.NewGuid():N}";
-        double width = Math.Max(40, profile.DefaultWidth);
-        double height = Math.Max(40, profile.DefaultHeight);
+        (double width, double height) = GetInitialDeviceSize(profile);
+        double boundedX = Math.Clamp(x, 0, Math.Max(0, Store.Document.Panel.Width - width));
+        double boundedY = Math.Clamp(y, 0, Math.Max(0, Store.Document.Panel.Height - height));
         Store.AddDevice(new DeviceInstanceV5(
             id,
             profile.Id,
             profile.Version,
             profile.EvidenceGrade,
             profile.DisplayName,
-            x,
-            y,
+            boundedX,
+            boundedY,
             0,
             width,
             height,
@@ -401,10 +427,64 @@ public sealed partial class MainPage : Page
 
     private void PaletteSearchBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshPalette();
 
+    private void PaletteEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        _paletteEditMode = PaletteEditButton.IsChecked == true;
+        RefreshPalette();
+        StatusText.Text = _paletteEditMode
+            ? "팔레트 편집 중 · 휴지통을 누르면 해당 장비가 목록에서 숨겨집니다."
+            : "팔레트 편집을 마쳤습니다.";
+    }
+
+    private void PaletteHideButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: PaletteItem item })
+        {
+            return;
+        }
+
+        if (!_hiddenPaletteIds.Add(item.ProfileId))
+        {
+            return;
+        }
+
+        if (!SavePalettePreferences())
+        {
+            _hiddenPaletteIds.Remove(item.ProfileId);
+            RefreshPalette();
+            return;
+        }
+
+        RefreshPalette();
+        StatusText.Text = $"{item.DisplayName}을(를) 팔레트에서 숨겼습니다. 배치된 장비와 원본 자산은 유지됩니다.";
+    }
+
+    private void RestoreHiddenButton_Click(object sender, RoutedEventArgs e)
+    {
+        int restored = _hiddenPaletteIds.Count;
+        string[] previousHiddenIds = [.. _hiddenPaletteIds];
+        _hiddenPaletteIds.Clear();
+        if (!SavePalettePreferences())
+        {
+            _hiddenPaletteIds.UnionWith(previousHiddenIds);
+            RefreshPalette();
+            return;
+        }
+
+        RefreshPalette();
+        StatusText.Text = $"숨긴 장비 {restored}종을 팔레트에 다시 표시했습니다.";
+    }
+
     private void RefreshPalette()
     {
         string query = PaletteSearchBox?.Text.Trim() ?? string.Empty;
-        IEnumerable<PaletteItem> items = _paletteSource;
+        foreach (PaletteItem item in _paletteSource)
+        {
+            item.EditVisibility = _paletteEditMode ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        IEnumerable<PaletteItem> items = _paletteSource
+            .Where(item => !_hiddenPaletteIds.Contains(item.ProfileId));
         if (!string.IsNullOrWhiteSpace(query))
         {
             items = items.Where(item =>
@@ -418,11 +498,45 @@ public sealed partial class MainPage : Page
         {
             PaletteItems.Add(item);
         }
+
+        int hiddenKnown = _paletteSource.Count(item => _hiddenPaletteIds.Contains(item.ProfileId));
+        int readyVisible = _paletteSource.Count(item => item.CanPlace && !_hiddenPaletteIds.Contains(item.ProfileId));
+        int preparationVisible = _paletteSource.Count(item => !item.CanPlace && !_hiddenPaletteIds.Contains(item.ProfileId));
+        PaletteSummaryText.Text = $"사용 가능 {readyVisible}종 · 준비 중 {preparationVisible}종 · 숨김 {hiddenKnown}종";
+        RestoreHiddenButton.Visibility = hiddenKnown > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private bool SavePalettePreferences()
+    {
+        try
+        {
+            _palettePreferencesStore.Save(new PalettePreferencesV1([.. _hiddenPaletteIds]));
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"팔레트 설정 저장 실패: {exception.Message}";
+            return false;
+        }
+    }
+
+    private static int CategoryOrder(string category)
+        => category.ToLowerInvariant() switch
+        {
+            "power" => 0,
+            "plc" => 1,
+            "hmi" => 2,
+            "motion" => 3,
+            "switch" => 4,
+            "sensor" => 5,
+            "actuator" => 6,
+            "wiring" => 7,
+            _ => 8,
+        };
 
     private void PaletteList_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
-        if (e.Items.FirstOrDefault() is not PaletteItem { CanPlace: true } item)
+        if (_paletteEditMode || e.Items.FirstOrDefault() is not PaletteItem { CanPlace: true } item)
         {
             e.Cancel = true;
             return;
@@ -439,8 +553,41 @@ public sealed partial class MainPage : Page
         if (_catalog.TryGet(drop.ProfileId, out DeviceProfileV5 profile)
             && profile.Availability == PaletteAvailabilityV5.Ready)
         {
-            PlaceDevice(profile, drop.X - (profile.DefaultWidth / 2), drop.Y - (profile.DefaultHeight / 2));
+            (double width, double height) = GetInitialDeviceSize(profile);
+            PlaceDevice(profile, drop.X - (width / 2), drop.Y - (height / 2));
         }
+    }
+
+    private void WiringCanvas_DeviceDuplicateRequested(object? sender, string deviceId)
+    {
+        DeviceInstanceV5? source = Store.Document.Devices.FirstOrDefault(device => device.Id == deviceId);
+        if (source is null)
+        {
+            return;
+        }
+
+        Store.AddDevice(source with
+        {
+            Id = $"device-{Guid.NewGuid():N}",
+            Label = $"{source.Label} 복사",
+            X = Snap(source.X + 20),
+            Y = Snap(source.Y + 20),
+            Locked = false,
+        });
+        StatusText.Text = $"{source.Label}을(를) 복제했습니다.";
+    }
+
+    private void WiringCanvas_DeviceRotateRequested(object? sender, string deviceId)
+    {
+        Store.UpdateDevice(deviceId, device => device with { Rotation = (device.Rotation + 90) % 360 });
+        StatusText.Text = "장비를 오른쪽으로 90° 회전했습니다.";
+    }
+
+    private void WiringCanvas_DeviceLockToggleRequested(object? sender, string deviceId)
+    {
+        Store.UpdateDevice(deviceId, device => device with { Locked = !device.Locked });
+        DeviceInstanceV5 device = Store.Document.Devices.Single(item => item.Id == deviceId);
+        StatusText.Text = device.Locked ? "장비 위치를 잠갔습니다." : "장비 위치 잠금을 해제했습니다.";
     }
 
     private void WiringCanvas_SelectionDeleteRequested(object? sender, CanvasSelection selection)
@@ -478,6 +625,11 @@ public sealed partial class MainPage : Page
 
     private void ValidationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_refreshingValidationItems)
+        {
+            return;
+        }
+
         if (e.AddedItems.FirstOrDefault() is ValidationIssueItem item)
         {
             NavigateToValidationIssue(item);
@@ -613,16 +765,24 @@ public sealed partial class MainPage : Page
             _ => $"PASS · 현재 문서와 일치 · rev {Store.ValidationResult?.Revision}",
         };
 
-        ValidationItems.Clear();
-        if (Store.ValidationResult is null)
+        _refreshingValidationItems = true;
+        try
         {
-            ValidationSummaryText.Text = "검증 대기";
-            return;
-        }
+            ValidationItems.Clear();
+            if (Store.ValidationResult is null)
+            {
+                ValidationSummaryText.Text = "검증 대기";
+                return;
+            }
 
-        foreach (ValidationIssueV5 issue in Store.ValidationResult.Issues)
+            foreach (ValidationIssueV5 issue in Store.ValidationResult.Issues)
+            {
+                ValidationItems.Add(new ValidationIssueItem(issue));
+            }
+        }
+        finally
         {
-            ValidationItems.Add(new ValidationIssueItem(issue));
+            _refreshingValidationItems = false;
         }
 
         int blocking = Store.ValidationResult.Issues.Count(issue => issue.Blocking);
@@ -807,51 +967,76 @@ public sealed partial class MainPage : Page
         return DocumentHasher.WithContentHash(document);
     }
 
-    private static WorkshopDocumentV5 CreateExampleDocument()
+    private WorkshopDocumentV5 CreateExampleDocument()
     {
-        DeviceInstanceV5 supply = Device("supply", "dc-supply-24v", 1, "DC 24 V 전원", 80, 270);
-        DeviceInstanceV5 sensor = Device("sensor-npn", "prox-npn-v2", 2, "NPN 근접 센서", 330, 120);
-        DeviceInstanceV5 plc = Device("plc-input", "plc-input-24v", 1, "PLC DC 입력", 650, 120);
-        DeviceInstanceV5 lamp = Device("lamp-green", "lamp-green-v1", 1, "녹색 표시등", 650, 360);
+        DeviceInstanceV5 supply = Device("supply", "mean-well:mdr-100-24", "MDR-100-24", 120, 430);
+        DeviceInstanceV5 sensor = Device("sensor-npn", "prox-npn-v2", "NPN 근접 센서", 430, 170);
+        DeviceInstanceV5 plc = Device("plc-input", "ls-electric:xbc-dn32h", "XBC-DN32H", 760, 120);
         WorkshopDocumentV5 document = CreateEmptyDocument() with
         {
             DocumentId = "starter-panel",
             Name = "NPN 결선 점검 예제",
-            Devices = [supply, sensor, plc, lamp],
+            Devices = [supply, sensor, plc],
             Conductors =
             [
-                Wire("sensor-plus", "W001", "supply", "+24V", "sensor-npn", "BN", "#EF4444"),
-                Wire("sensor-zero", "W002", "supply", "0V", "sensor-npn", "BU", "#3B82F6"),
-                Wire("sensor-signal", "W003", "sensor-npn", "BK", "plc-input", "I0", "#111827"),
+                Wire("sensor-plus", "W001", "supply", "V+1", "sensor-npn", "BN", "#EF4444"),
+                Wire("sensor-zero", "W002", "supply", "V-1", "sensor-npn", "BU", "#3B82F6"),
+                Wire("sensor-signal", "W003", "sensor-npn", "BK", "plc-input", "P00", "#111827"),
                 // NPN sinking 입력은 COM이 +24V여야 하므로 이 예제에는 의도적으로 찾을 수 있는 오류를 둡니다.
-                Wire("plc-common-wrong", "W004", "plc-input", "COM", "supply", "0V", "#3B82F6"),
-                Wire("lamp-plus", "W005", "supply", "+24V", "lamp-green", "A1", "#EF4444"),
-                Wire("lamp-zero", "W006", "lamp-green", "A2", "supply", "0V", "#3B82F6"),
+                Wire("plc-common-wrong", "W004", "plc-input", "COMI", "supply", "V-2", "#3B82F6"),
             ],
         };
         return DocumentHasher.WithContentHash(document);
     }
 
-    private static DeviceInstanceV5 Device(
+    private DeviceInstanceV5 Device(
         string id,
         string profileId,
-        int profileVersion,
         string label,
         double x,
         double y)
-        => new(
+    {
+        if (!_catalog.TryGet(profileId, out DeviceProfileV5 profile))
+        {
+            throw new InvalidOperationException($"예제 장비 프로필을 찾지 못했습니다: {profileId}");
+        }
+
+        (double width, double height) = GetInitialDeviceSize(profile);
+        return new(
             id,
             profileId,
-            profileVersion,
-            EvidenceGrade.Educational,
+            profile.Version,
+            profile.EvidenceGrade,
             label,
             x,
             y,
             0,
-            150,
-            100,
+            width,
+            height,
             false,
-            new Dictionary<string, string>());
+            new Dictionary<string, string>())
+        {
+            CatalogEntryId = profile.LegacyType,
+        };
+    }
+
+    private static (double Width, double Height) GetInitialDeviceSize(DeviceProfileV5 profile)
+    {
+        double maxDimension = profile.Category.ToLowerInvariant() switch
+        {
+            "plc" => 360,
+            "hmi" => 340,
+            "motion" => 300,
+            "power" => 240,
+            "wiring" => 260,
+            "sensor" or "switch" or "actuator" => 220,
+            _ => 240,
+        };
+        double sourceWidth = Math.Max(40, profile.DefaultWidth);
+        double sourceHeight = Math.Max(40, profile.DefaultHeight);
+        double scale = Math.Min(1, maxDimension / Math.Max(sourceWidth, sourceHeight));
+        return (Math.Max(40, sourceWidth * scale), Math.Max(40, sourceHeight * scale));
+    }
 
     private static ConductorV5 Wire(
         string id,

@@ -59,8 +59,15 @@ public sealed class WorkbenchStore : IAsyncDisposable
             throw new KeyNotFoundException($"장비를 찾을 수 없습니다: {deviceId}");
         }
 
+        DeviceInstanceV5 original = Document.Devices[index];
+        DeviceInstanceV5 updated = update(original);
+        if (updated == original)
+        {
+            return;
+        }
+
         DeviceInstanceV5[] devices = [.. Document.Devices];
-        devices[index] = update(devices[index]);
+        devices[index] = updated;
         Commit(Document with { Devices = devices });
     }
 
@@ -75,8 +82,15 @@ public sealed class WorkbenchStore : IAsyncDisposable
             throw new KeyNotFoundException($"전선을 찾을 수 없습니다: {conductorId}");
         }
 
+        ConductorV5 original = Document.Conductors[index];
+        ConductorV5 updated = update(original);
+        if (updated == original)
+        {
+            return;
+        }
+
         ConductorV5[] conductors = [.. Document.Conductors];
-        conductors[index] = update(conductors[index]);
+        conductors[index] = updated;
         Commit(Document with { Conductors = conductors });
     }
 

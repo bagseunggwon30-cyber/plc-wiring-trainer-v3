@@ -466,7 +466,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
     private static void ValidateSensor(
         WorkshopDocumentV5 document,
         DeviceInstanceV5 sensor,
-        IReadOnlyDictionary<string, DeviceProfileV5> profiles,
+        Dictionary<string, DeviceProfileV5> profiles,
         TerminalRefV5? positive,
         TerminalRefV5? dcReturn,
         DisjointSet connected,
@@ -515,7 +515,14 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             return;
         }
 
-        TerminalRefV5? common = FindTerminalForDevice(profiles, plcInput.DeviceId, TerminalRole.PlcInputCommon);
+        string? commonGroup = profiles[plcInput.DeviceId].Terminals
+            .FirstOrDefault(terminal => terminal.Id == plcInput.TerminalId)
+            ?.CommonGroup;
+        TerminalRefV5? common = FindTerminalForDevice(
+            profiles,
+            plcInput.DeviceId,
+            TerminalRole.PlcInputCommon,
+            commonGroup);
         TerminalRefV5? expected = isNpn ? positive : dcReturn;
         if (common is null || !IsConnected(connected, common, expected))
         {
@@ -637,14 +644,20 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
     private static TerminalRefV5? FindTerminalForDevice(
         IReadOnlyDictionary<string, DeviceProfileV5> profiles,
         string deviceId,
-        TerminalRole role)
+        TerminalRole role,
+        string? commonGroup = null)
     {
         if (!profiles.TryGetValue(deviceId, out DeviceProfileV5? profile))
         {
             return null;
         }
 
-        TerminalDefinitionV5? terminal = profile.Terminals.FirstOrDefault(item => item.Role == role);
+        TerminalDefinitionV5? terminal = !string.IsNullOrWhiteSpace(commonGroup)
+            ? profile.Terminals.FirstOrDefault(item => item.Role == role
+                && (string.Equals(item.Id, commonGroup, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(item.CommonGroup, commonGroup, StringComparison.OrdinalIgnoreCase)))
+            : null;
+        terminal ??= profile.Terminals.FirstOrDefault(item => item.Role == role);
         return terminal is null ? null : new TerminalRefV5(deviceId, terminal.Id);
     }
 
@@ -657,10 +670,18 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
     {
         foreach (DeviceInstanceV5 device in document.Devices)
         {
-            TerminalRefV5? terminal = FindTerminalForDevice(profiles, device.Id, role);
-            if (terminal is not null && connected.AreConnected(netMember, terminal.Key))
+            if (!profiles.TryGetValue(device.Id, out DeviceProfileV5? profile))
             {
-                return terminal;
+                continue;
+            }
+
+            foreach (TerminalDefinitionV5 definition in profile.Terminals.Where(item => item.Role == role))
+            {
+                var terminal = new TerminalRefV5(device.Id, definition.Id);
+                if (connected.AreConnected(netMember, terminal.Key))
+                {
+                    return terminal;
+                }
             }
         }
 

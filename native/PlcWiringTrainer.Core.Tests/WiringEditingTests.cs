@@ -116,6 +116,50 @@ public sealed class WiringEditingTests
         Assert.Equal(original.Conductors.Select(conductor => conductor.Id), store.Document.Conductors.Select(conductor => conductor.Id));
     }
 
+    [Fact]
+    public async Task SelectingWithoutMovingDoesNotConsumeARevision()
+    {
+        WorkshopDocumentV5 original = TestDocuments.WithLamp();
+        await using var store = new WorkbenchStore(
+            original,
+            new CircuitValidationService(DeviceProfileCatalog.CreateDefault()),
+            TimeSpan.Zero);
+
+        store.UpdateDevice("lamp-1", device => device with { X = device.X, Y = device.Y });
+        store.UpdateConductor("lamp-positive", conductor => conductor with { RouteLocked = conductor.RouteLocked });
+
+        Assert.Equal(original.Revision, store.Document.Revision);
+        Assert.False(store.CanUndo);
+    }
+
+    [Fact]
+    public void CompletedWireRouteCanInsertMoveRecolorAndClearWaypoints()
+    {
+        ConductorV5 wire = TestDocuments.WithLamp().Conductors[0];
+
+        wire = WireRouteEditor.InsertWaypoint(wire, 0, new PointV5(40, 60));
+        wire = WireRouteEditor.MoveWaypoint(wire, 0, new PointV5(80, 90));
+        wire = WireRouteEditor.ChangeColor(wire, "#2563EB");
+
+        Assert.Equal([new PointV5(80, 90)], wire.Waypoints);
+        Assert.Equal("#2563EB", wire.Color);
+        Assert.Empty(WireRouteEditor.ClearWaypoints(wire).Waypoints);
+    }
+
+    [Fact]
+    public void LockedWireRouteRejectsWaypointChanges()
+    {
+        ConductorV5 wire = TestDocuments.WithLamp().Conductors[0] with
+        {
+            Waypoints = [new PointV5(40, 60)],
+            RouteLocked = true,
+        };
+
+        Assert.Same(wire, WireRouteEditor.InsertWaypoint(wire, 1, new PointV5(80, 90)));
+        Assert.Same(wire, WireRouteEditor.MoveWaypoint(wire, 0, new PointV5(90, 100)));
+        Assert.Same(wire, WireRouteEditor.ClearWaypoints(wire));
+    }
+
     private static bool SegmentCrossesInterior(PointV5 start, PointV5 end, RectV5 bounds)
     {
         if (start.X == end.X)

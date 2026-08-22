@@ -27,6 +27,7 @@ tmp/
 .worktrees/
 SystemSetting/
 /assets/devices/
+/native/PlcWiringTrainer.App/Assets/Devices/Legacy/manual/xbc-dn32h-ppt-open-front-transparent.png
 /assets/manual-backed/
 
 # 로컬 QA 캡처와 설계 시안은 런타임 소스가 아닙니다.

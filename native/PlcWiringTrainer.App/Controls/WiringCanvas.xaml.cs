@@ -60,7 +60,17 @@ public sealed partial class WiringCanvas : UserControl
     private PointV5? _dragStartWorld;
     private PointV5? _dragDeviceOrigin;
     private PointV5? _dragPreview;
+    private Point _dragStartScreen;
+    private bool _dragDeviceMoved;
+    private string? _dragWaypointConductorId;
+    private int _dragWaypointIndex = -1;
+    private bool _dragWaypointCreated;
+    private PointV5[]? _dragWaypointOriginals;
+    private PointV5? _dragWaypointPreview;
     private bool _isPanning;
+    private bool _panStartedWithRightButton;
+    private bool _panMoved;
+    private bool _suppressNextRightTap;
     private Point _lastPointer;
     private double _zoom = 1;
     private double _offsetX = 40;
@@ -87,6 +97,7 @@ public sealed partial class WiringCanvas : UserControl
             _wireDraft.Cancel();
             _wirePointerWorld = null;
             _reconnectConductorId = null;
+            CancelWaypointDrag();
             UpdateWireHint();
             NativeCanvas.Invalidate();
         }
@@ -104,13 +115,47 @@ public sealed partial class WiringCanvas : UserControl
 
     public event EventHandler<CanvasSelection>? SelectionDeleteRequested;
 
+    public event EventHandler<string>? DeviceDuplicateRequested;
+
+    public event EventHandler<string>? DeviceRotateRequested;
+
+    public event EventHandler<string>? DeviceLockToggleRequested;
+
     public void Refresh() => NativeCanvas.Invalidate();
 
     public void ResetView()
     {
-        _zoom = 1;
-        _offsetX = 40;
-        _offsetY = 40;
+        double width = Math.Max(1, NativeCanvas.ActualWidth);
+        double height = Math.Max(1, NativeCanvas.ActualHeight);
+        if (_store is null || width <= 1 || height <= 1)
+        {
+            _zoom = 1;
+            _offsetX = 40;
+            _offsetY = 40;
+        }
+        else
+        {
+            DeviceInstanceV5[] devices = _store.Document.Devices;
+            double contentLeft = devices.Length == 0 ? 0 : devices.Min(device => device.X);
+            double contentTop = devices.Length == 0 ? 0 : devices.Min(device => device.Y);
+            double contentRight = devices.Length == 0
+                ? _store.Document.Panel.Width
+                : devices.Max(device => device.X + device.Width);
+            double contentBottom = devices.Length == 0
+                ? _store.Document.Panel.Height
+                : devices.Max(device => device.Y + device.Height);
+            double contentWidth = Math.Max(1, contentRight - contentLeft);
+            double contentHeight = Math.Max(1, contentBottom - contentTop);
+            _zoom = Math.Clamp(
+                Math.Min((width - 96) / contentWidth, (height - 96) / contentHeight),
+                0.25,
+                1.5);
+            double centerX = contentLeft + (contentWidth / 2);
+            double centerY = contentTop + (contentHeight / 2);
+            _offsetX = (width / 2) - (centerX * _zoom);
+            _offsetY = (height / 2) - (centerY * _zoom);
+        }
+
         UpdateZoomText();
         NativeCanvas.Invalidate();
     }
@@ -245,7 +290,8 @@ public sealed partial class WiringCanvas : UserControl
 
     private void DrawConductor(CanvasDrawingSession drawing, WorkshopDocumentV5 document, ConductorV5 conductor)
     {
-        PointV5[] points = GetRoutePoints(document, conductor);
+        ConductorV5 renderConductor = PreviewWaypointEdit(conductor);
+        PointV5[] points = GetRoutePoints(document, renderConductor);
         if (points.Length < 2)
         {
             return;
@@ -270,6 +316,33 @@ public sealed partial class WiringCanvas : UserControl
 
         PointV5 labelPoint = points[points.Length / 2];
         drawing.DrawText(conductor.Label, (float)labelPoint.X + 5, (float)labelPoint.Y - 20, Color.FromArgb(255, 226, 232, 240));
+
+        if (selected)
+        {
+            PointV5[] waypoints = renderConductor.Waypoints;
+            float radius = (float)(6 / _zoom);
+            for (int index = 0; index < waypoints.Length; index++)
+            {
+                PointV5 waypoint = waypoints[index];
+                drawing.FillCircle((float)waypoint.X, (float)waypoint.Y, radius, Color.FromArgb(255, 251, 146, 60));
+                drawing.DrawCircle((float)waypoint.X, (float)waypoint.Y, radius + (float)(2 / _zoom), Color.FromArgb(255, 15, 23, 42), (float)(1.5 / _zoom));
+            }
+        }
+    }
+
+    private ConductorV5 PreviewWaypointEdit(ConductorV5 conductor)
+    {
+        if (_dragWaypointConductorId != conductor.Id
+            || _dragWaypointOriginals is null
+            || _dragWaypointPreview is null)
+        {
+            return conductor;
+        }
+
+        ConductorV5 original = conductor with { Waypoints = _dragWaypointOriginals };
+        return _dragWaypointCreated
+            ? WireRouteEditor.InsertWaypoint(original, _dragWaypointIndex, _dragWaypointPreview)
+            : WireRouteEditor.MoveWaypoint(original, _dragWaypointIndex, _dragWaypointPreview);
     }
 
     private void DrawDevice(CanvasDrawingSession drawing, DeviceInstanceV5 device)
@@ -292,13 +365,24 @@ public sealed partial class WiringCanvas : UserControl
             bool selected = _selection.Kind == CanvasSelectionKind.Device && _selection.Id == device.Id;
             Color fill = Color.FromArgb(255, 30, 41, 59);
             Color outline = selected ? Color.FromArgb(255, 56, 189, 248) : Color.FromArgb(255, 148, 163, 184);
-            drawing.FillRoundedRectangle(new Rect(x, y, device.Width, device.Height), 7, 7, fill);
-            DrawDeviceAsset(drawing, profile?.Id ?? device.ProfileId, x, y, device.Width, device.Height);
-            drawing.DrawRoundedRectangle(new Rect(x, y, device.Width, device.Height), 7, 7, outline, selected ? 3 : 1.5f);
-
             var titleFormat = new CanvasTextFormat { FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
-            drawing.FillRectangle(new Rect(x + 1, y + 1, Math.Max(1, device.Width - 2), 27), Color.FromArgb(205, 15, 23, 42));
-            drawing.DrawText(device.Label, new Rect(x + 10, y + 5, Math.Max(20, device.Width - 20), 22), Color.FromArgb(255, 248, 250, 252), titleFormat);
+            bool hasAsset = DrawDeviceAsset(drawing, profile?.Id ?? device.ProfileId, x, y, device.Width, device.Height);
+            if (hasAsset)
+            {
+                if (selected)
+                {
+                    drawing.DrawRoundedRectangle(new Rect(x - 4, y - 4, device.Width + 8, device.Height + 8), 7, 7, outline, 3);
+                }
+
+                drawing.DrawText(device.Label, (float)x + 1, (float)y - 21, Color.FromArgb(230, 2, 6, 23), titleFormat);
+                drawing.DrawText(device.Label, (float)x, (float)y - 22, Color.FromArgb(255, 248, 250, 252), titleFormat);
+            }
+            else
+            {
+                drawing.FillRoundedRectangle(new Rect(x, y, device.Width, device.Height), 7, 7, fill);
+                drawing.DrawRoundedRectangle(new Rect(x, y, device.Width, device.Height), 7, 7, outline, selected ? 3 : 1.5f);
+                drawing.DrawText(device.Label, new Rect(x + 10, y + 5, Math.Max(20, device.Width - 20), 22), Color.FromArgb(255, 248, 250, 252), titleFormat);
+            }
 
             if (profile is not null)
             {
@@ -325,7 +409,7 @@ public sealed partial class WiringCanvas : UserControl
         }
     }
 
-    private void DrawDeviceAsset(
+    private bool DrawDeviceAsset(
         CanvasDrawingSession drawing,
         string profileId,
         double x,
@@ -333,24 +417,29 @@ public sealed partial class WiringCanvas : UserControl
         double width,
         double height)
     {
-        double imageX = x + 8;
-        double imageY = y + 30;
-        double imageWidth = Math.Max(1, width - 16);
-        double imageHeight = Math.Max(1, height - 38);
+        double imageX = x + 3;
+        double imageY = y + 3;
+        double imageWidth = Math.Max(1, width - 6);
+        double imageHeight = Math.Max(1, height - 6);
         if (_deviceBitmaps.TryGetValue(profileId, out CanvasBitmap? bitmap))
         {
             drawing.DrawImage(
                 bitmap,
                 new Rect(imageX, imageY, imageWidth, imageHeight),
                 bitmap.Bounds);
+            return true;
         }
-        else if (_deviceSvgDocuments.TryGetValue(profileId, out CanvasSvgDocument? svgDocument))
+
+        if (_deviceSvgDocuments.TryGetValue(profileId, out CanvasSvgDocument? svgDocument))
         {
             drawing.DrawSvg(
                 svgDocument,
                 new Size(imageWidth, imageHeight),
                 new Vector2((float)imageX, (float)imageY));
+            return true;
         }
+
+        return false;
     }
 
     private void WiringCanvas_Unloaded(object sender, RoutedEventArgs e)
@@ -385,12 +474,15 @@ public sealed partial class WiringCanvas : UserControl
         }
 
         PointerPoint pointer = e.GetCurrentPoint(NativeCanvas);
+        Focus(FocusState.Pointer);
         _lastPointer = pointer.Position;
-        if (pointer.Properties.IsMiddleButtonPressed)
+        if (pointer.Properties.IsMiddleButtonPressed || pointer.Properties.IsRightButtonPressed)
         {
             _isPanning = true;
+            _panStartedWithRightButton = pointer.Properties.IsRightButtonPressed;
+            _panMoved = false;
             NativeCanvas.CapturePointer(e.Pointer);
-            e.Handled = true;
+            e.Handled = pointer.Properties.IsMiddleButtonPressed;
             return;
         }
 
@@ -409,9 +501,24 @@ public sealed partial class WiringCanvas : UserControl
             return;
         }
 
+        if (TryBeginExistingWaypointDrag(store.Document, world, e.Pointer))
+        {
+            e.Handled = true;
+            return;
+        }
+
         ConductorV5? conductor = HitConductor(store.Document, world);
         if (conductor is not null)
         {
+            if (_selection.Kind == CanvasSelectionKind.Conductor
+                && _selection.Id == conductor.Id
+                && !conductor.RouteLocked)
+            {
+                BeginNewWaypointDrag(store.Document, conductor, world, e.Pointer);
+                e.Handled = true;
+                return;
+            }
+
             Select(new CanvasSelection(CanvasSelectionKind.Conductor, conductor.Id));
             e.Handled = true;
             return;
@@ -427,6 +534,8 @@ public sealed partial class WiringCanvas : UserControl
                 _dragStartWorld = world;
                 _dragDeviceOrigin = new PointV5(device.X, device.Y);
                 _dragPreview = _dragDeviceOrigin;
+                _dragStartScreen = pointer.Position;
+                _dragDeviceMoved = false;
                 NativeCanvas.CapturePointer(e.Pointer);
             }
 
@@ -458,6 +567,11 @@ public sealed partial class WiringCanvas : UserControl
 
         if (_isPanning)
         {
+            if (Distance(pointer.Position, _lastPointer) > 1)
+            {
+                _panMoved = true;
+            }
+
             _offsetX += pointer.Position.X - _lastPointer.X;
             _offsetY += pointer.Position.Y - _lastPointer.Y;
             _lastPointer = pointer.Position;
@@ -467,10 +581,23 @@ public sealed partial class WiringCanvas : UserControl
 
         if (_dragDeviceId is not null && _dragStartWorld is not null && _dragDeviceOrigin is not null)
         {
+            if (!_dragDeviceMoved && Distance(pointer.Position, _dragStartScreen) <= 3)
+            {
+                return;
+            }
+
+            _dragDeviceMoved = true;
             PointV5 world = ScreenToWorld(pointer.Position);
             _dragPreview = new PointV5(
                 _dragDeviceOrigin.X + world.X - _dragStartWorld.X,
                 _dragDeviceOrigin.Y + world.Y - _dragStartWorld.Y);
+            NativeCanvas.Invalidate();
+            return;
+        }
+
+        if (_dragWaypointConductorId is not null && _store is not null)
+        {
+            _dragWaypointPreview = SnapPoint(_store.Document, ScreenToWorld(pointer.Position));
             NativeCanvas.Invalidate();
         }
     }
@@ -481,16 +608,30 @@ public sealed partial class WiringCanvas : UserControl
         if (_isPanning)
         {
             _isPanning = false;
+            _suppressNextRightTap = _panStartedWithRightButton && _panMoved;
+            _panStartedWithRightButton = false;
             NativeCanvas.ReleasePointerCapture(e.Pointer);
         }
 
         if (_dragDeviceId is not null && _dragPreview is not null)
         {
-            DeviceMoveRequested?.Invoke(this, (_dragDeviceId, _dragPreview.X, _dragPreview.Y));
+            if (_dragDeviceMoved)
+            {
+                DeviceMoveRequested?.Invoke(this, (_dragDeviceId, _dragPreview.X, _dragPreview.Y));
+            }
+
             _dragDeviceId = null;
             _dragStartWorld = null;
             _dragDeviceOrigin = null;
             _dragPreview = null;
+            _dragDeviceMoved = false;
+            NativeCanvas.ReleasePointerCapture(e.Pointer);
+            NativeCanvas.Invalidate();
+        }
+
+        if (_dragWaypointConductorId is not null && store is not null)
+        {
+            CommitWaypointDrag(store);
             NativeCanvas.ReleasePointerCapture(e.Pointer);
             NativeCanvas.Invalidate();
         }
@@ -540,7 +681,7 @@ public sealed partial class WiringCanvas : UserControl
 
         if (_wireDraft.Current is null)
         {
-            _wireDraft.Begin(terminal, dragInitiated: true);
+            _wireDraft.Begin(terminal, dragInitiated: false);
             _wireDragActive = true;
             NativeCanvas.CapturePointer(pointer);
         }
@@ -548,6 +689,8 @@ public sealed partial class WiringCanvas : UserControl
         {
             _wireDraft.Cancel();
             _wirePointerWorld = null;
+            _wireDragActive = false;
+            NativeCanvas.ReleasePointerCaptures();
         }
         else
         {
@@ -569,6 +712,8 @@ public sealed partial class WiringCanvas : UserControl
         WireCreationRequested?.Invoke(this, (draft.Start, end, draft.Waypoints));
         _wireDraft.Cancel();
         _wirePointerWorld = null;
+        _wireDragActive = false;
+        NativeCanvas.ReleasePointerCaptures();
     }
 
     private void Select(CanvasSelection selection)
@@ -596,12 +741,14 @@ public sealed partial class WiringCanvas : UserControl
 
     private void WiringCanvas_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == VirtualKey.Escape && (_wireDraft.Current is not null || _reconnectConductorId is not null))
+        if (e.Key == VirtualKey.Escape
+            && (_wireDraft.Current is not null || _reconnectConductorId is not null || _dragWaypointConductorId is not null))
         {
             _wireDraft.Cancel();
             _wirePointerWorld = null;
             _reconnectConductorId = null;
             _wireDragActive = false;
+            CancelWaypointDrag();
             NativeCanvas.ReleasePointerCaptures();
             UpdateWireHint();
             NativeCanvas.Invalidate();
@@ -652,8 +799,152 @@ public sealed partial class WiringCanvas : UserControl
         e.Handled = true;
     }
 
+    private bool TryBeginExistingWaypointDrag(WorkshopDocumentV5 document, PointV5 world, Pointer pointer)
+    {
+        if (_selection.Kind != CanvasSelectionKind.Conductor)
+        {
+            return false;
+        }
+
+        ConductorV5? conductor = document.Conductors.FirstOrDefault(item => item.Id == _selection.Id);
+        if (conductor is null || conductor.RouteLocked)
+        {
+            return false;
+        }
+
+        double radius = 11 / _zoom;
+        for (int index = conductor.Waypoints.Length - 1; index >= 0; index--)
+        {
+            if (Distance(world, conductor.Waypoints[index]) > radius)
+            {
+                continue;
+            }
+
+            _dragWaypointConductorId = conductor.Id;
+            _dragWaypointIndex = index;
+            _dragWaypointCreated = false;
+            _dragWaypointOriginals = [.. conductor.Waypoints];
+            _dragWaypointPreview = conductor.Waypoints[index];
+            NativeCanvas.CapturePointer(pointer);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void BeginNewWaypointDrag(
+        WorkshopDocumentV5 document,
+        ConductorV5 conductor,
+        PointV5 world,
+        Pointer pointer)
+    {
+        PointV5 snapped = SnapPoint(document, world);
+        _dragWaypointConductorId = conductor.Id;
+        _dragWaypointIndex = GetWaypointInsertIndex(document, conductor, snapped);
+        _dragWaypointCreated = true;
+        _dragWaypointOriginals = [.. conductor.Waypoints];
+        _dragWaypointPreview = snapped;
+        NativeCanvas.CapturePointer(pointer);
+        NativeCanvas.Invalidate();
+    }
+
+    private void CommitWaypointDrag(WorkbenchStore store)
+    {
+        string? conductorId = _dragWaypointConductorId;
+        if (conductorId is null)
+        {
+            return;
+        }
+
+        ConductorV5? conductor = store.Document.Conductors.FirstOrDefault(item => item.Id == conductorId);
+        if (conductor is not null && !conductor.RouteLocked)
+        {
+            PointV5[] edited = PreviewWaypointEdit(conductor).Waypoints;
+            if (!edited.SequenceEqual(conductor.Waypoints))
+            {
+                store.UpdateConductor(conductorId, item => item with { Waypoints = edited });
+            }
+        }
+
+        CancelWaypointDrag();
+    }
+
+    private void CancelWaypointDrag()
+    {
+        _dragWaypointConductorId = null;
+        _dragWaypointIndex = -1;
+        _dragWaypointCreated = false;
+        _dragWaypointOriginals = null;
+        _dragWaypointPreview = null;
+    }
+
+    private int GetWaypointInsertIndex(WorkshopDocumentV5 document, ConductorV5 conductor, PointV5 point)
+    {
+        PointV5[] route = GetRoutePoints(document, conductor);
+        double pointOffset = RouteOffset(route, point);
+        for (int index = 0; index < conductor.Waypoints.Length; index++)
+        {
+            if (RouteOffset(route, conductor.Waypoints[index]) > pointOffset)
+            {
+                return index;
+            }
+        }
+
+        return conductor.Waypoints.Length;
+    }
+
+    private static double RouteOffset(PointV5[] route, PointV5 point)
+    {
+        double bestDistance = double.MaxValue;
+        double bestOffset = 0;
+        double traversed = 0;
+        for (int index = 0; index < route.Length - 1; index++)
+        {
+            PointV5 start = route[index];
+            PointV5 end = route[index + 1];
+            double dx = end.X - start.X;
+            double dy = end.Y - start.Y;
+            double lengthSquared = (dx * dx) + (dy * dy);
+            double amount = lengthSquared == 0
+                ? 0
+                : Math.Clamp((((point.X - start.X) * dx) + ((point.Y - start.Y) * dy)) / lengthSquared, 0, 1);
+            var closest = new PointV5(start.X + (dx * amount), start.Y + (dy * amount));
+            double distance = Distance(point, closest);
+            double segmentLength = Math.Sqrt(lengthSquared);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestOffset = traversed + (segmentLength * amount);
+            }
+
+            traversed += segmentLength;
+        }
+
+        return bestOffset;
+    }
+
+    private static PointV5 SnapPoint(WorkshopDocumentV5 document, PointV5 point)
+    {
+        if (!document.Settings.SnapToGrid)
+        {
+            return point;
+        }
+
+        double grid = Math.Max(1, document.Settings.GridSize);
+        return new PointV5(
+            Math.Round(point.X / grid) * grid,
+            Math.Round(point.Y / grid) * grid);
+    }
+
     private void Canvas_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
+        if (_suppressNextRightTap)
+        {
+            _suppressNextRightTap = false;
+            e.Handled = true;
+            return;
+        }
+
         if (_store is null)
         {
             return;
@@ -663,14 +954,41 @@ public sealed partial class WiringCanvas : UserControl
         ConductorV5? conductor = HitConductor(_store.Document, _contextWorld);
         if (conductor is null)
         {
+            DeviceInstanceV5? device = HitDevice(_store.Document, _contextWorld);
+            if (device is not null)
+            {
+                ShowDeviceContextMenu(device, e.GetPosition(NativeCanvas));
+                e.Handled = true;
+            }
+
             return;
         }
 
         Select(new CanvasSelection(CanvasSelectionKind.Conductor, conductor.Id));
         var flyout = new MenuFlyout();
-        flyout.Items.Add(MenuItem("현재 위치에 경로점 추가", AddWaypoint_Click));
+        var colorMenu = new MenuFlyoutSubItem { Text = "선 색상" };
+        foreach ((string label, string color) in new[]
+        {
+            ("갈색", "#8B4513"),
+            ("검정", "#111111"),
+            ("회색", "#6B7280"),
+            ("초록", "#15803D"),
+            ("노랑", "#FACC15"),
+            ("빨강", "#DC2626"),
+            ("파랑", "#2563EB"),
+            ("주황", "#F97316"),
+        })
+        {
+            var colorItem = new MenuFlyoutItem { Text = label, Tag = color };
+            colorItem.Click += WireColor_Click;
+            colorMenu.Items.Add(colorItem);
+        }
+
+        flyout.Items.Add(colorMenu);
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(MenuItem("현재 위치에 경로점 추가", AddWaypoint_Click, !conductor.RouteLocked));
         flyout.Items.Add(MenuItem(conductor.RouteLocked ? "경로 잠금 해제" : "경로 잠금", ToggleRouteLock_Click));
-        flyout.Items.Add(MenuItem("경로점 초기화", ResetRoute_Click));
+        flyout.Items.Add(MenuItem("경로점 초기화", ResetRoute_Click, !conductor.RouteLocked && conductor.Waypoints.Length > 0));
         flyout.Items.Add(new MenuFlyoutSeparator());
         flyout.Items.Add(MenuItem("시작 단자 재연결", ReconnectStart_Click));
         flyout.Items.Add(MenuItem("끝 단자 재연결", ReconnectEnd_Click));
@@ -680,21 +998,76 @@ public sealed partial class WiringCanvas : UserControl
         e.Handled = true;
     }
 
-    private static MenuFlyoutItem MenuItem(string text, RoutedEventHandler click)
+    private void ShowDeviceContextMenu(DeviceInstanceV5 device, Point position)
     {
-        var item = new MenuFlyoutItem { Text = text };
+        Select(new CanvasSelection(CanvasSelectionKind.Device, device.Id, device.Id));
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(MenuItem("복제", DuplicateDevice_Click));
+        flyout.Items.Add(MenuItem("오른쪽으로 90° 회전", RotateDevice_Click));
+        flyout.Items.Add(MenuItem(device.Locked ? "잠금 해제" : "위치 잠금", ToggleDeviceLock_Click));
+        flyout.Items.Add(new MenuFlyoutSeparator());
+        flyout.Items.Add(MenuItem("장비 삭제", DeleteSelectedDevice_Click));
+        flyout.ShowAt(NativeCanvas, new FlyoutShowOptions { Position = position });
+    }
+
+    private void DuplicateDevice_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.Kind == CanvasSelectionKind.Device)
+        {
+            DeviceDuplicateRequested?.Invoke(this, _selection.Id);
+        }
+    }
+
+    private void RotateDevice_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.Kind == CanvasSelectionKind.Device)
+        {
+            DeviceRotateRequested?.Invoke(this, _selection.Id);
+        }
+    }
+
+    private void ToggleDeviceLock_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.Kind == CanvasSelectionKind.Device)
+        {
+            DeviceLockToggleRequested?.Invoke(this, _selection.Id);
+        }
+    }
+
+    private void DeleteSelectedDevice_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selection.Kind == CanvasSelectionKind.Device)
+        {
+            SelectionDeleteRequested?.Invoke(this, _selection);
+        }
+    }
+
+    private static MenuFlyoutItem MenuItem(string text, RoutedEventHandler click, bool enabled = true)
+    {
+        var item = new MenuFlyoutItem { Text = text, IsEnabled = enabled };
         item.Click += click;
         return item;
+    }
+
+    private void WireColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_store is not null
+            && _selection.Kind == CanvasSelectionKind.Conductor
+            && sender is MenuFlyoutItem { Tag: string color })
+        {
+            _store.UpdateConductor(_selection.Id, conductor => WireRouteEditor.ChangeColor(conductor, color));
+        }
     }
 
     private void AddWaypoint_Click(object sender, RoutedEventArgs e)
     {
         if (_store is not null && _selection.Kind == CanvasSelectionKind.Conductor && _contextWorld is not null)
         {
-            _store.UpdateConductor(_selection.Id, conductor => conductor with
-            {
-                Waypoints = [.. conductor.Waypoints, _contextWorld],
-            });
+            WorkshopDocumentV5 document = _store.Document;
+            _store.UpdateConductor(_selection.Id, conductor => WireRouteEditor.InsertWaypoint(
+                    conductor,
+                    GetWaypointInsertIndex(document, conductor, _contextWorld),
+                    SnapPoint(document, _contextWorld)));
         }
     }
 
@@ -710,7 +1083,7 @@ public sealed partial class WiringCanvas : UserControl
     {
         if (_store is not null && _selection.Kind == CanvasSelectionKind.Conductor)
         {
-            _store.UpdateConductor(_selection.Id, conductor => conductor with { Waypoints = [], RouteLocked = false });
+            _store.UpdateConductor(_selection.Id, WireRouteEditor.ClearWaypoints);
         }
     }
 
@@ -945,6 +1318,9 @@ public sealed partial class WiringCanvas : UserControl
     private static Vector2 ToVector(PointV5 point) => new((float)point.X, (float)point.Y);
 
     private static double Distance(PointV5 left, PointV5 right)
+        => Math.Sqrt(Math.Pow(left.X - right.X, 2) + Math.Pow(left.Y - right.Y, 2));
+
+    private static double Distance(Point left, Point right)
         => Math.Sqrt(Math.Pow(left.X - right.X, 2) + Math.Pow(left.Y - right.Y, 2));
 
     private static double DistanceToSegment(PointV5 point, PointV5 start, PointV5 end)

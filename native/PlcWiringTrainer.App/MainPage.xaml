@@ -100,11 +100,32 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <StackPanel Margin="16,14,16,10" Spacing="4">
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="장비 팔레트" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="장비 팔레트" />
+                            <ToggleButton
+                                x:Name="PaletteEditButton"
+                                Grid.Column="1"
+                                AutomationProperties.AutomationId="PaletteEditButton"
+                                Click="PaletteEditButton_Click"
+                                Content="편집"
+                                ToolTipService.ToolTip="팔레트에서 필요 없는 장비를 숨깁니다" />
+                        </Grid>
                         <TextBlock
+                            x:Name="PaletteSummaryText"
                             Opacity="0.65"
-                            Text="68종 사용 가능 · 5종 단자 보정 준비 중"
+                            Text="장비 목록을 불러오는 중"
                             TextWrapping="Wrap" />
+                        <Button
+                            x:Name="RestoreHiddenButton"
+                            HorizontalAlignment="Left"
+                            AutomationProperties.AutomationId="RestoreHiddenPaletteButton"
+                            Click="RestoreHiddenButton_Click"
+                            Content="숨긴 장비 모두 복원"
+                            Visibility="Collapsed" />
                         <TextBox
                             x:Name="PaletteSearchBox"
                             Margin="0,8,0,0"
@@ -124,23 +145,32 @@
                         SelectionMode="None">
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="local:PaletteItem">
-                                <Grid MinHeight="82" Padding="8" ColumnSpacing="12">
+                                <Grid MinHeight="72" Padding="6" ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="74" />
+                                        <ColumnDefinition Width="62" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Background="#FFF8FAFC" CornerRadius="6">
-                                        <Image
-                                            Margin="6"
-                                            Source="{x:Bind AssetUri}"
-                                            Stretch="Uniform" />
-                                    </Border>
+                                    <Image
+                                        Width="58"
+                                        Height="58"
+                                        Source="{x:Bind AssetUri}"
+                                        Stretch="Uniform" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
                                         <TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayName}" TextWrapping="Wrap" />
-                                        <TextBlock FontSize="11" Opacity="0.62" Text="{x:Bind Category}" />
+                                        <TextBlock FontSize="11" Opacity="0.62" Text="{x:Bind CategoryAndAvailability}" TextWrapping="Wrap" />
                                         <TextBlock FontSize="11" Foreground="#F59E0B" Text="{x:Bind EvidenceLabel}" TextWrapping="Wrap" />
-                                        <TextBlock FontSize="11" Opacity="0.72" Text="{x:Bind AvailabilityLabel}" TextWrapping="Wrap" />
                                     </StackPanel>
+                                    <Button
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="PaletteHideButton"
+                                        AutomationProperties.Name="{x:Bind HideAutomationName}"
+                                        Click="PaletteHideButton_Click"
+                                        ToolTipService.ToolTip="팔레트에서 숨기기"
+                                        Visibility="{x:Bind EditVisibility}">
+                                        <SymbolIcon Symbol="Delete" />
+                                    </Button>
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>
@@ -154,8 +184,11 @@
                 BorderThickness="0,1,1,0">
                 <controls:WiringCanvas
                     x:Name="WiringCanvas"
+                    DeviceDuplicateRequested="WiringCanvas_DeviceDuplicateRequested"
                     DeviceDropRequested="WiringCanvas_DeviceDropRequested"
+                    DeviceLockToggleRequested="WiringCanvas_DeviceLockToggleRequested"
                     DeviceMoveRequested="WiringCanvas_DeviceMoveRequested"
+                    DeviceRotateRequested="WiringCanvas_DeviceRotateRequested"
                     SelectionChanged="WiringCanvas_SelectionChanged"
                     SelectionDeleteRequested="WiringCanvas_SelectionDeleteRequested"
                     WireCreationRequested="WiringCanvas_WireCreationRequested" />

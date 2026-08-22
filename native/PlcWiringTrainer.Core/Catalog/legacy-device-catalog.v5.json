@@ -12255,9 +12255,9 @@
       "availability": "ready",
       "manualEvidence": "exact",
       "artwork": {
-        "assetPath": "Assets/Devices/Legacy/manual/xbc-dn32h-ppt-open-front-clean.png",
-        "sourcePath": "assets/devices/manual/xbc-dn32h-ppt-open-front-clean.png",
-        "sha256": "5E14FFB3F74D5DA95731A14D6A5A94ACC127521E8FDEBEB7BEEC22C6708B25AC",
+        "assetPath": "Assets/Devices/Legacy/manual/xbc-dn32h-ppt-open-front-transparent-v2.png",
+        "sourcePath": "assets/devices/manual/xbc-dn32h-ppt-open-front-transparent-v2.png",
+        "sha256": "8DF01B1533867C141DA329D2EBDA68F9194771EAF9D7A3A8EAE61D520F9D7F0B",
         "imageBox": {
           "x": 0,
           "y": 0,
