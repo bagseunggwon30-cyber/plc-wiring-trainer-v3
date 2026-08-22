@@ -508,6 +508,8 @@ internal static class LegacyCatalogReader
         {
             ("source", "+24V") => TerminalRole.DcSourcePositive,
             ("source", "0V") => TerminalRole.DcSourceReturn,
+            ("source", "L1" or "L2" or "L3") => TerminalRole.AcSourceLine,
+            ("source", "N") => TerminalRole.AcSourceNeutral,
             ("supply-input", "+24V") => TerminalRole.SupplyPositive,
             ("supply-input", "0V") => TerminalRole.SupplyReturn,
             ("protective-earth", _) => TerminalRole.ProtectiveEarth,

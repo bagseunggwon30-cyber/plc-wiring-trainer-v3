@@ -7,6 +7,8 @@ internal static class ValidationIssueCodes
 
     public const string AC_LINE_TO_PE = nameof(AC_LINE_TO_PE);
 
+    public const string AC_PHASE_SHORT = nameof(AC_PHASE_SHORT);
+
     public const string AC_LOAD_WIRING = nameof(AC_LOAD_WIRING);
 
     public const string ANALOG_SCALING_INCOMPLETE = nameof(ANALOG_SCALING_INCOMPLETE);
@@ -20,6 +22,10 @@ internal static class ValidationIssueCodes
     public const string DEVICE_OUTSIDE_PANEL = nameof(DEVICE_OUTSIDE_PANEL);
 
     public const string DUPLICATE_CABLE_CORE = nameof(DUPLICATE_CABLE_CORE);
+
+    public const string DUPLICATE_CONNECTION = nameof(DUPLICATE_CONNECTION);
+
+    public const string DUPLICATE_DOCUMENT_ID = nameof(DUPLICATE_DOCUMENT_ID);
 
     public const string DUPLICATE_WIRE_NUMBER = nameof(DUPLICATE_WIRE_NUMBER);
 
@@ -71,6 +77,7 @@ internal static class ValidationIssueCodes
     [
         AC_LINE_NEUTRAL_SHORT,
         AC_LINE_TO_PE,
+        AC_PHASE_SHORT,
         AC_LOAD_WIRING,
         ANALOG_SCALING_INCOMPLETE,
         CABLE_MEMBERSHIP_MISMATCH,
@@ -78,6 +85,8 @@ internal static class ValidationIssueCodes
         DC_SHORT_CIRCUIT,
         DEVICE_OUTSIDE_PANEL,
         DUPLICATE_CABLE_CORE,
+        DUPLICATE_CONNECTION,
+        DUPLICATE_DOCUMENT_ID,
         DUPLICATE_WIRE_NUMBER,
         EDUCATIONAL_PROFILE,
         INVALID_CONDUCTOR_GAUGE,

@@ -167,7 +167,7 @@ public sealed class WiringEditingTests
     }
 
     [Fact]
-    public void LockedRouteKeepsEveryStoredInteriorPointWhenEndpointsMove()
+    public void LockedRouteRejectsAStoredInteriorPathThatCrossesAnObstacle()
     {
         var planner = new OrthogonalRoutePlanner();
         PointV5[] lockedInterior =
@@ -187,9 +187,7 @@ public sealed class WiringEditingTests
 
         PointV5[] route = planner.Plan(request);
 
-        Assert.All(lockedInterior, point => Assert.Contains(point, route));
-        Assert.All(route.Zip(route.Skip(1)), pair =>
-            Assert.True(pair.First.X == pair.Second.X || pair.First.Y == pair.Second.Y));
+        Assert.Empty(route);
     }
 
     [Fact]

@@ -289,6 +289,39 @@ public sealed class MigrationTests
         Assert.Equal(new TerminalRefV5("supply", "V+1"), conductor.Start);
         Assert.Equal(new TerminalRefV5("lamp", "A1"), conductor.End);
         Assert.Single(conductor.Waypoints);
+        Assert.Equal("W101", conductor.WireNumber);
+        Assert.Equal("field", conductor.CableAssemblyId);
+        Assert.Equal("1", conductor.Core);
+        Assert.Equal("0.75㎟", conductor.Gauge);
+        Assert.Equal(420, conductor.LengthMm);
+        Assert.Equal("E7508", conductor.FerruleFrom);
+        Assert.Equal("E7508", conductor.FerruleTo);
+        CableAssemblyV5 cable = Assert.Single(document.CableAssemblies);
+        Assert.Equal("field", cable.Id);
+        Assert.Equal(["c1"], cable.ConductorIds);
+    }
+
+    [Fact]
+    public async Task NativeV5WithMismatchedContentHashIsQuarantined()
+    {
+        string root = TestDirectory.Create();
+        string source = Path.Combine(root, "bad-hash.plcw");
+        WorkshopDocumentV5 document = TestDocuments.WithLamp();
+        string json = WorkshopDocumentSerializer.Serialize(document with
+        {
+            ContentHash = new string('a', 64),
+        });
+        await File.WriteAllTextAsync(source, json);
+        var migrator = new WorkshopDocumentMigrator(
+            Path.Combine(root, "backups"),
+            Path.Combine(root, "quarantine"));
+
+        MigrationResult result = await migrator.MigrateAsync(source);
+
+        Assert.Equal(MigrationStatus.Quarantined, result.Status);
+        Assert.Null(result.Document);
+        Assert.Contains("해시", result.Error, StringComparison.Ordinal);
+        Assert.True(File.Exists(result.QuarantinePath));
     }
 
     [Fact]

@@ -208,6 +208,18 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
         {
             for (int rightIndex = leftIndex + 1; rightIndex < resolved.Count; rightIndex++)
             {
+                if (HasExistingDirectConnection(
+                    document,
+                    resolved[leftIndex].Reference,
+                    resolved[rightIndex].Reference))
+                {
+                    return Blocked(
+                        "DUPLICATE_CONNECTION",
+                        "두 단자는 기존 전선이나 점퍼로 이미 직접 연결되어 있습니다.",
+                        bridge.Terminals[leftIndex],
+                        bridge.Terminals[rightIndex]);
+                }
+
                 ConnectionAssessmentV5 pair = AssessElectricalPolicy(
                     document,
                     resolved[leftIndex],
@@ -233,6 +245,33 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
             "단자 계약상 점퍼로 연결할 수 있습니다.",
             bridge.Terminals[0],
             bridge.Terminals[^1]);
+    }
+
+    private bool HasExistingDirectConnection(
+        WorkshopDocumentV5 document,
+        TerminalRefV5 left,
+        TerminalRefV5 right)
+    {
+        if (document.Conductors.Any(conductor =>
+            (_resolver.IsSame(document, conductor.Start, left)
+                && _resolver.IsSame(document, conductor.End, right))
+            || (_resolver.IsSame(document, conductor.Start, right)
+                && _resolver.IsSame(document, conductor.End, left))))
+        {
+            return true;
+        }
+
+        foreach (TerminalBridgeV5 bridge in document.TerminalBridges)
+        {
+            bool hasLeft = bridge.Terminals.Any(terminal => _resolver.IsSame(document, terminal, left));
+            bool hasRight = bridge.Terminals.Any(terminal => _resolver.IsSame(document, terminal, right));
+            if (hasLeft && hasRight)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int RiskPriority(ConnectionAssessmentV5 assessment)
@@ -330,10 +369,14 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
             return Risk(document, "AC_DC_DOMAIN_MISMATCH", "AC 단자와 DC 단자를 직접 연결하려고 합니다.", start, destination);
         }
 
-        if ((left.Terminal.Potential == TerminalPotential.Positive24V && right.Terminal.Potential == TerminalPotential.ZeroVolt)
+        TerminalPotential leftPotential = left.Terminal.Potential;
+        TerminalPotential rightPotential = right.Terminal.Potential;
+        bool acSupplyShort = IsAcPhase(leftPotential) && rightPotential == TerminalPotential.Neutral
+            || IsAcPhase(rightPotential) && leftPotential == TerminalPotential.Neutral
+            || IsAcPhase(leftPotential) && IsAcPhase(rightPotential) && leftPotential != rightPotential;
+        if ((leftPotential == TerminalPotential.Positive24V && rightPotential == TerminalPotential.ZeroVolt)
             || (left.Terminal.Potential == TerminalPotential.ZeroVolt && right.Terminal.Potential == TerminalPotential.Positive24V)
-            || (left.Terminal.Potential == TerminalPotential.Line1 && right.Terminal.Potential == TerminalPotential.Neutral)
-            || (left.Terminal.Potential == TerminalPotential.Neutral && right.Terminal.Potential == TerminalPotential.Line1))
+            || acSupplyShort)
         {
             return Risk(document, "DIRECT_SUPPLY_SHORT", "전원측과 귀로를 부하 없이 직접 연결하려고 합니다.", start, destination);
         }
@@ -354,6 +397,9 @@ public sealed class ConnectionAssessmentService : IConnectionAssessmentService
             start,
             destination);
     }
+
+    private static bool IsAcPhase(TerminalPotential potential)
+        => potential is TerminalPotential.Line1 or TerminalPotential.Line2 or TerminalPotential.Line3;
 
     private static ConnectionAssessmentV5 Risk(
         WorkshopDocumentV5 document,

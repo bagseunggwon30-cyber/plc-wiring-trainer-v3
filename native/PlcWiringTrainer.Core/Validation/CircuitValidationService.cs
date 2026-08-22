@@ -1,4 +1,5 @@
 using PlcWiringTrainer.Core.Documents;
+using PlcWiringTrainer.Core.Wiring;
 
 namespace PlcWiringTrainer.Core.Validation;
 
@@ -6,11 +7,13 @@ namespace PlcWiringTrainer.Core.Validation;
 public sealed class CircuitValidationService : IValidationService, ICircuitService
 {
     private readonly DeviceProfileCatalog _catalog;
+    private readonly TerminalResolver _terminalResolver;
 
     /// <summary>CircuitValidationService 작업을 수행합니다.</summary>
     public CircuitValidationService(DeviceProfileCatalog catalog)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _terminalResolver = new TerminalResolver(catalog);
     }
 
     /// <summary>ValidateAsync 작업을 수행합니다.</summary>
@@ -20,9 +23,13 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
     {
         ArgumentNullException.ThrowIfNull(document);
         cancellationToken.ThrowIfCancellationRequested();
+        document = CanonicalizeTerminalReferences(document);
 
         var issues = new List<ValidationIssueV5>();
-        var devices = document.Devices.ToDictionary(device => device.Id, StringComparer.Ordinal);
+        AddDuplicateIdIssues(document, issues);
+        var devices = document.Devices
+            .GroupBy(device => device.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var profiles = new Dictionary<string, DeviceProfileV5>(StringComparer.Ordinal);
         var validTerminals = new HashSet<string>(StringComparer.Ordinal);
         var terminalDefinitions = new Dictionary<string, TerminalDefinitionV5>(StringComparer.Ordinal);
@@ -56,7 +63,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 "source-system"));
         }
 
-        foreach (DeviceInstanceV5 device in document.Devices)
+        foreach (DeviceInstanceV5 device in devices.Values)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!_catalog.TryGet(device.ProfileId, out DeviceProfileV5 profile))
@@ -184,6 +191,8 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             }
         }
 
+        AddDuplicateConnectionIssues(document, issues);
+
         foreach (IGrouping<string, ConductorV5> group in document.Conductors
             .Where(conductor => !string.IsNullOrWhiteSpace(conductor.WireNumber))
             .GroupBy(conductor => conductor.WireNumber, StringComparer.OrdinalIgnoreCase)
@@ -233,8 +242,12 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 "physical-cable"));
         }
 
-        var conductorsById = document.Conductors.ToDictionary(conductor => conductor.Id, StringComparer.Ordinal);
-        var cablesById = document.CableAssemblies.ToDictionary(cable => cable.Id, StringComparer.Ordinal);
+        var conductorsById = document.Conductors
+            .GroupBy(conductor => conductor.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var cablesById = document.CableAssemblies
+            .GroupBy(cable => cable.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         foreach (CableAssemblyV5 cable in document.CableAssemblies)
         {
             foreach (string conductorId in cable.ConductorIds.Where(id => !conductorsById.ContainsKey(id)))
@@ -370,9 +383,12 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             }
         }
 
-        TerminalRefV5? positive = FindFirstTerminal(document, profiles, TerminalRole.DcSourcePositive);
-        TerminalRefV5? dcReturn = FindFirstTerminal(document, profiles, TerminalRole.DcSourceReturn);
-        if (positive is not null && dcReturn is not null && connected.AreConnected(positive.Key, dcReturn.Key))
+        TerminalRefV5[] positives = FindTerminals(document, profiles, TerminalRole.DcSourcePositive);
+        TerminalRefV5[] dcReturns = FindTerminals(document, profiles, TerminalRole.DcSourceReturn);
+        TerminalRefV5? positive = positives.FirstOrDefault();
+        TerminalRefV5? dcReturn = dcReturns.FirstOrDefault();
+        (TerminalRefV5 Left, TerminalRefV5 Right)? dcShort = FindConnectedPair(positives, dcReturns, connected);
+        if (dcShort is not null)
         {
             issues.Add(Issue(
                 document,
@@ -380,14 +396,18 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 ValidationSeverity.Error,
                 true,
                 "+24V와 0V가 같은 결선망에 연결되어 있습니다.",
-                TargetsForNet(document, connected, positive.Key),
+                TargetsForNet(document, connected, dcShort.Value.Left.Key),
                 "dc-power"));
         }
 
-        TerminalRefV5? acLine = FindFirstTerminal(document, profiles, TerminalRole.AcSourceLine);
-        TerminalRefV5? acNeutral = FindFirstTerminal(document, profiles, TerminalRole.AcSourceNeutral);
-        TerminalRefV5? protectiveEarth = FindFirstTerminal(document, profiles, TerminalRole.ProtectiveEarth);
-        if (acLine is not null && acNeutral is not null && connected.AreConnected(acLine.Key, acNeutral.Key))
+        TerminalRefV5[] acLines = FindTerminals(document, profiles, TerminalRole.AcSourceLine);
+        TerminalRefV5[] acNeutrals = FindTerminals(document, profiles, TerminalRole.AcSourceNeutral);
+        TerminalRefV5[] protectiveEarths = FindTerminals(document, profiles, TerminalRole.ProtectiveEarth);
+        TerminalRefV5? acLine = acLines.FirstOrDefault();
+        TerminalRefV5? acNeutral = acNeutrals.FirstOrDefault();
+        TerminalRefV5? protectiveEarth = protectiveEarths.FirstOrDefault();
+        (TerminalRefV5 Left, TerminalRefV5 Right)? lineNeutralShort = FindConnectedPair(acLines, acNeutrals, connected);
+        if (lineNeutralShort is not null)
         {
             issues.Add(Issue(
                 document,
@@ -395,11 +415,12 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 ValidationSeverity.Error,
                 true,
                 "AC 전원의 L과 N이 같은 결선망에 연결되어 있습니다.",
-                TargetsForNet(document, connected, acLine.Key),
+                TargetsForNet(document, connected, lineNeutralShort.Value.Left.Key),
                 "ac-power"));
         }
 
-        if (acLine is not null && protectiveEarth is not null && connected.AreConnected(acLine.Key, protectiveEarth.Key))
+        (TerminalRefV5 Left, TerminalRefV5 Right)? lineEarthShort = FindConnectedPair(acLines, protectiveEarths, connected);
+        if (lineEarthShort is not null)
         {
             issues.Add(Issue(
                 document,
@@ -407,8 +428,21 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 ValidationSeverity.Error,
                 true,
                 "AC L이 보호 접지(PE)에 연결되어 있습니다.",
-                TargetsForNet(document, connected, acLine.Key),
+                TargetsForNet(document, connected, lineEarthShort.Value.Left.Key),
                 "protective-earth"));
+        }
+
+        (TerminalRefV5 Left, TerminalRefV5 Right)? phaseShort = FindConnectedPhasePair(acLines, profiles, connected);
+        if (phaseShort is not null)
+        {
+            issues.Add(Issue(
+                document,
+                ValidationIssueCodes.AC_PHASE_SHORT,
+                ValidationSeverity.Error,
+                true,
+                "서로 다른 AC 상이 같은 결선망에 연결되어 있습니다.",
+                TargetsForNet(document, connected, phaseShort.Value.Left.Key),
+                "ac-power"));
         }
 
         var energized = new List<string>();
@@ -451,10 +485,9 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             TerminalStates = terminalStates,
             ConductionGroups = groups,
-            ConductorCurrents = document.Conductors.ToDictionary(
-                conductor => conductor.Id,
-                _ => (double?)null,
-                StringComparer.Ordinal),
+            ConductorCurrents = document.Conductors
+                .GroupBy(conductor => conductor.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, _ => (double?)null, StringComparer.Ordinal),
             ContactStates = document.Scenarios.FirstOrDefault()?.ContactStates.ToDictionary(StringComparer.Ordinal)
                 ?? new Dictionary<string, bool>(StringComparer.Ordinal),
             Paths = groups.Select((group, index) => new CircuitPathV5(
@@ -474,6 +507,138 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             [.. issues.OrderBy(issue => issue.Severity).ThenByDescending(issue => issue.Blocking).ThenBy(issue => issue.Code)],
             simulation);
         return Task.FromResult(result);
+    }
+
+    private WorkshopDocumentV5 CanonicalizeTerminalReferences(WorkshopDocumentV5 document)
+    {
+        TerminalRefV5 Canonical(TerminalRefV5 reference)
+            => _terminalResolver.TryResolve(document, reference, out ResolvedTerminal? resolved)
+                ? resolved.Reference
+                : reference;
+
+        return document with
+        {
+            Conductors = document.Conductors
+                .Select(conductor => conductor with
+                {
+                    Start = Canonical(conductor.Start),
+                    End = Canonical(conductor.End),
+                })
+                .ToArray(),
+            TerminalBridges = document.TerminalBridges
+                .Select(bridge => bridge with
+                {
+                    Terminals = bridge.Terminals.Select(Canonical).ToArray(),
+                })
+                .ToArray(),
+        };
+    }
+
+    private static void AddDuplicateIdIssues(WorkshopDocumentV5 document, List<ValidationIssueV5> issues)
+    {
+        foreach (IGrouping<string, DeviceInstanceV5> group in document.Devices
+            .GroupBy(device => device.Id, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1))
+        {
+            issues.Add(Issue(
+                document,
+                ValidationIssueCodes.DUPLICATE_DOCUMENT_ID,
+                ValidationSeverity.Error,
+                true,
+                $"장비 ID '{group.Key}'이(가) 중복되었습니다.",
+                [DeviceTarget(group.First())],
+                "document-identity"));
+        }
+
+        foreach (IGrouping<string, ConductorV5> group in document.Conductors
+            .GroupBy(conductor => conductor.Id, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1))
+        {
+            issues.Add(Issue(
+                document,
+                ValidationIssueCodes.DUPLICATE_DOCUMENT_ID,
+                ValidationSeverity.Error,
+                true,
+                $"전선 ID '{group.Key}'이(가) 중복되었습니다.",
+                [ConductorTarget(group.First())],
+                "document-identity"));
+        }
+
+        foreach (IGrouping<string, CableAssemblyV5> group in document.CableAssemblies
+            .GroupBy(cable => cable.Id, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1))
+        {
+            issues.Add(Issue(
+                document,
+                ValidationIssueCodes.DUPLICATE_DOCUMENT_ID,
+                ValidationSeverity.Error,
+                true,
+                $"케이블 ID '{group.Key}'이(가) 중복되었습니다.",
+                [],
+                "document-identity"));
+        }
+    }
+
+    private static void AddDuplicateConnectionIssues(
+        WorkshopDocumentV5 document,
+        List<ValidationIssueV5> issues)
+    {
+        var edges = new Dictionary<string, List<ValidationTargetV5>>(StringComparer.Ordinal);
+
+        static string PairKey(TerminalRefV5 left, TerminalRefV5 right)
+            => string.CompareOrdinal(left.Key, right.Key) <= 0
+                ? $"{left.Key}\u001f{right.Key}"
+                : $"{right.Key}\u001f{left.Key}";
+
+        void AddEdge(TerminalRefV5 left, TerminalRefV5 right, IEnumerable<ValidationTargetV5> targets)
+        {
+            string key = PairKey(left, right);
+            if (!edges.TryGetValue(key, out List<ValidationTargetV5>? edgeTargets))
+            {
+                edgeTargets = [];
+                edges[key] = edgeTargets;
+            }
+
+            edgeTargets.AddRange(targets);
+        }
+
+        foreach (ConductorV5 conductor in document.Conductors)
+        {
+            AddEdge(conductor.Start, conductor.End, [ConductorTarget(conductor)]);
+        }
+
+        foreach (TerminalBridgeV5 bridge in document.TerminalBridges)
+        {
+            for (int leftIndex = 0; leftIndex < bridge.Terminals.Length - 1; leftIndex++)
+            {
+                for (int rightIndex = leftIndex + 1; rightIndex < bridge.Terminals.Length; rightIndex++)
+                {
+                    TerminalRefV5 left = bridge.Terminals[leftIndex];
+                    TerminalRefV5 right = bridge.Terminals[rightIndex];
+                    AddEdge(
+                        left,
+                        right,
+                        [
+                            new ValidationTargetV5(ValidationTargetKind.Terminal, left.Key, left.DeviceId, left.TerminalId),
+                            new ValidationTargetV5(ValidationTargetKind.Terminal, right.Key, right.DeviceId, right.TerminalId),
+                        ]);
+                }
+            }
+        }
+
+        foreach ((string pair, List<ValidationTargetV5> targets) in edges.Where(entry => entry.Value.Count > 2
+            || entry.Value.Count == 2 && entry.Value.All(target => target.Kind == ValidationTargetKind.Conductor)))
+        {
+            string displayPair = pair.Replace("\u001f", " ↔ ", StringComparison.Ordinal);
+            issues.Add(Issue(
+                document,
+                ValidationIssueCodes.DUPLICATE_CONNECTION,
+                ValidationSeverity.Error,
+                true,
+                $"단자 쌍 '{displayPair}'이(가) 전선 또는 점퍼로 중복 연결되었습니다.",
+                targets.Distinct().ToArray(),
+                "topology"));
+        }
     }
 
     /// <summary>SolveAsync 작업을 수행합니다.</summary>
@@ -678,10 +843,18 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             : FindTerminalForDevice(profiles, inputPositive.DeviceId, TerminalRole.AnalogInputNegative);
 
         // 2선식 루프는 +24V → TX+ → TX- → AI+ → AI- → 0V의 직렬 극성을 보존해야 합니다.
+        string sourceNet = connected.GroupId(transmitterPositive.Key);
+        string signalNet = connected.GroupId(transmitterNegative.Key);
+        string returnNet = inputNegative is null ? string.Empty : connected.GroupId(inputNegative.Key);
+        bool serialNetsAreDistinct = new[] { sourceNet, signalNet, returnNet }
+            .Where(net => !string.IsNullOrWhiteSpace(net))
+            .Distinct(StringComparer.Ordinal)
+            .Count() == 3;
         bool topologyIsValid = IsConnected(connected, transmitterPositive, positive)
             && inputPositive is not null
             && inputNegative is not null
-            && IsConnected(connected, inputNegative, dcReturn);
+            && IsConnected(connected, inputNegative, dcReturn)
+            && serialNetsAreDistinct;
         if (!topologyIsValid)
         {
             issues.Add(Issue(
@@ -724,6 +897,68 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
 
         return null;
     }
+
+    private static TerminalRefV5[] FindTerminals(
+        WorkshopDocumentV5 document,
+        Dictionary<string, DeviceProfileV5> profiles,
+        TerminalRole role)
+        => document.Devices
+            .Where(device => profiles.ContainsKey(device.Id))
+            .SelectMany(device => profiles[device.Id].Terminals
+                .Where(terminal => terminal.Role == role)
+                .Select(terminal => new TerminalRefV5(device.Id, terminal.Id)))
+            .Distinct()
+            .ToArray();
+
+    private static (TerminalRefV5 Left, TerminalRefV5 Right)? FindConnectedPair(
+        TerminalRefV5[] leftTerminals,
+        TerminalRefV5[] rightTerminals,
+        DisjointSet connected)
+    {
+        foreach (TerminalRefV5 left in leftTerminals)
+        {
+            foreach (TerminalRefV5 right in rightTerminals)
+            {
+                if (connected.AreConnected(left.Key, right.Key))
+                {
+                    return (left, right);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static (TerminalRefV5 Left, TerminalRefV5 Right)? FindConnectedPhasePair(
+        TerminalRefV5[] phaseTerminals,
+        Dictionary<string, DeviceProfileV5> profiles,
+        DisjointSet connected)
+    {
+        for (int leftIndex = 0; leftIndex < phaseTerminals.Length - 1; leftIndex++)
+        {
+            for (int rightIndex = leftIndex + 1; rightIndex < phaseTerminals.Length; rightIndex++)
+            {
+                TerminalRefV5 left = phaseTerminals[leftIndex];
+                TerminalRefV5 right = phaseTerminals[rightIndex];
+                TerminalPotential leftPotential = TerminalPotentialFor(profiles, left);
+                TerminalPotential rightPotential = TerminalPotentialFor(profiles, right);
+                if (leftPotential != rightPotential && connected.AreConnected(left.Key, right.Key))
+                {
+                    return (left, right);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static TerminalPotential TerminalPotentialFor(
+        Dictionary<string, DeviceProfileV5> profiles,
+        TerminalRefV5 terminal)
+        => profiles.TryGetValue(terminal.DeviceId, out DeviceProfileV5? profile)
+            ? profile.Terminals.FirstOrDefault(item => item.Id == terminal.TerminalId)?.Potential
+                ?? TerminalPotential.None
+            : TerminalPotential.None;
 
     private static TerminalRefV5? FindTerminalForDevice(
         IReadOnlyDictionary<string, DeviceProfileV5> profiles,

@@ -130,6 +130,82 @@ public sealed class ConnectionAssessmentTests
     }
 
     [Fact]
+    public void BridgeRejectsAPairAlreadyJoinedByAConductorOrAnotherBridge()
+    {
+        var service = new ConnectionAssessmentService(DeviceProfileCatalog.CreateDefault());
+        TerminalRefV5 left = new("left", "+24V");
+        TerminalRefV5 right = new("right", "+24V");
+        WorkshopDocumentV5 document = TestDocuments.Empty() with
+        {
+            Devices = [Device("left", 20), Device("right", 220)],
+            Conductors =
+            [
+                new ConductorV5("joined", left, right, [], "W1", "#EF4444", 0.75, false)
+                {
+                    WireNumber = "W1",
+                },
+            ],
+        };
+
+        ConnectionAssessmentV5 conductorDuplicate = service.AssessBridge(
+            document,
+            new TerminalBridgeV5("bridge-1", [left, right], "#EF4444"));
+        WorkshopDocumentV5 bridgeDocument = document with
+        {
+            Conductors = [],
+            TerminalBridges = [new TerminalBridgeV5("existing", [left, right], "#EF4444")],
+        };
+        ConnectionAssessmentV5 bridgeDuplicate = service.AssessBridge(
+            bridgeDocument,
+            new TerminalBridgeV5("bridge-2", [left, right], "#EF4444"));
+
+        Assert.Equal("DUPLICATE_CONNECTION", conductorDuplicate.Code);
+        Assert.Equal(ConnectionDispositionV5.Blocked, conductorDuplicate.Disposition);
+        Assert.Equal("DUPLICATE_CONNECTION", bridgeDuplicate.Code);
+        Assert.Equal(ConnectionDispositionV5.Blocked, bridgeDuplicate.Disposition);
+    }
+
+    [Fact]
+    public void PreflightBlocksEveryDirectAcPhaseCombination()
+    {
+        DeviceProfileCatalog catalog = DeviceProfileCatalog.CreateDefault();
+        Assert.True(catalog.TryGet("boundary:ac-supply", out DeviceProfileV5 profile));
+        var source = new DeviceInstanceV5(
+            "three-phase",
+            profile.Id,
+            profile.Version,
+            EvidenceGrade.Educational,
+            "3상 전원",
+            20,
+            20,
+            0,
+            220,
+            220,
+            false,
+            []);
+        WorkshopDocumentV5 document = TestDocuments.Empty() with
+        {
+            Mode = WorkshopMode.Prewire,
+            Devices = [source],
+        };
+        var service = new ConnectionAssessmentService(catalog);
+
+        ConnectionAssessmentV5 phaseToPhase = service.Assess(
+            document,
+            new TerminalRefV5(source.Id, "L2"),
+            new TerminalRefV5(source.Id, "L3"));
+        ConnectionAssessmentV5 phaseToNeutral = service.Assess(
+            document,
+            new TerminalRefV5(source.Id, "L3"),
+            new TerminalRefV5(source.Id, "N"));
+
+        Assert.Equal("DIRECT_SUPPLY_SHORT", phaseToPhase.Code);
+        Assert.Equal(ConnectionDispositionV5.Blocked, phaseToPhase.Disposition);
+        Assert.Equal("DIRECT_SUPPLY_SHORT", phaseToNeutral.Code);
+        Assert.Equal(ConnectionDispositionV5.Blocked, phaseToNeutral.Disposition);
+    }
+
+    [Fact]
     public void ConductorAssessmentChecksTerminalGaugeRange()
     {
         DeviceProfileV5 profile = LimitedGaugeProfile();

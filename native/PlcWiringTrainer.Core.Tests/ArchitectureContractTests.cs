@@ -11,6 +11,7 @@ public sealed class ArchitectureContractTests
     [
         "AC_LINE_NEUTRAL_SHORT",
         "AC_LINE_TO_PE",
+        "AC_PHASE_SHORT",
         "AC_LOAD_WIRING",
         "ANALOG_SCALING_INCOMPLETE",
         "CABLE_MEMBERSHIP_MISMATCH",
@@ -18,6 +19,8 @@ public sealed class ArchitectureContractTests
         "DC_SHORT_CIRCUIT",
         "DEVICE_OUTSIDE_PANEL",
         "DUPLICATE_CABLE_CORE",
+        "DUPLICATE_CONNECTION",
+        "DUPLICATE_DOCUMENT_ID",
         "DUPLICATE_WIRE_NUMBER",
         "EDUCATIONAL_PROFILE",
         "INVALID_CONDUCTOR_GAUGE",
@@ -79,6 +82,6 @@ public sealed class ArchitectureContractTests
         Assert.Equal(
             ExpectedValidationIssueCodes,
             ValidationIssueCodes.All);
-        Assert.Equal(32, ValidationIssueCodes.All.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(35, ValidationIssueCodes.All.Distinct(StringComparer.Ordinal).Count());
     }
 }

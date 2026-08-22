@@ -40,8 +40,19 @@ public sealed class OrthogonalRoutePlanner : IRoutePlanner
     public PointV5[] Plan(RouteRequestV5 request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        RectV5[] activeObstacles = request.RouteLocked ? [] : request.Obstacles;
-        PointV5[][] existingRoutes = request.RouteLocked ? [] : request.ExistingRoutes;
+        if (request.RouteLocked)
+        {
+            PointV5[] locked = RemoveAdjacentDuplicates(
+                [request.Start, request.StartLeadOut, .. request.ManualWaypoints, request.EndLeadOut, request.End]);
+            return locked.Zip(locked.Skip(1)).All(pair =>
+                (pair.First.X == pair.Second.X || pair.First.Y == pair.Second.Y)
+                && !CrossesAny(pair.First, pair.Second, request.Obstacles))
+                    ? locked
+                    : [];
+        }
+
+        RectV5[] activeObstacles = request.Obstacles;
+        PointV5[][] existingRoutes = request.ExistingRoutes;
         var route = new List<PointV5> { request.Start };
         Append(route, request.StartLeadOut);
         foreach (PointV5 anchor in request.ManualWaypoints.Append(request.EndLeadOut))
@@ -328,5 +339,16 @@ public sealed class OrthogonalRoutePlanner : IRoutePlanner
         {
             points.Add(point);
         }
+    }
+
+    private static PointV5[] RemoveAdjacentDuplicates(PointV5[] points)
+    {
+        var result = new List<PointV5>(points.Length);
+        foreach (PointV5 point in points)
+        {
+            Append(result, point);
+        }
+
+        return [.. result];
     }
 }

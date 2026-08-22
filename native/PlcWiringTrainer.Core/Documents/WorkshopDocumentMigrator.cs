@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PlcWiringTrainer.Core.Validation;
+using PlcWiringTrainer.Core.Wiring;
 
 namespace PlcWiringTrainer.Core.Documents;
 
@@ -95,28 +96,8 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
             ["BOUNDARY-RS485"] = "boundary:communication-peer",
         };
 
-    private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> LegacyTerminalAliases =
-        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["EXP2-700"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["V+"] = "DC24V",
-                ["V-"] = "DC0V",
-                ["T+"] = "COM1-6",
-                ["485+"] = "COM1-6",
-                ["RS485+"] = "COM1-6",
-                ["T-"] = "COM1-1",
-                ["485-"] = "COM1-1",
-                ["RS485-"] = "COM1-1",
-                ["RXD"] = "COM2-2",
-                ["TXD"] = "COM2-3",
-                ["SG"] = "COM2-5",
-                ["COM3-RDB"] = "COM3-RX-",
-                ["COM3-RDA"] = "COM3-RX+",
-                ["COM3-SDB"] = "COM3-TX-",
-                ["COM3-SDA"] = "COM3-TX+",
-            },
-        };
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> LegacyTerminalAliases =
+        TerminalAliasRegistry.ByLegacyType;
 
     private readonly string _backupDirectory;
     private readonly string _quarantineDirectory;
@@ -147,8 +128,7 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
             WorkshopFormat format = DetectFormat(root);
             if (format == WorkshopFormat.NativeV5)
             {
-                WorkshopDocumentV5 current = WorkshopDocumentSerializer.Deserialize(raw, verifyHash: false);
-                current = DocumentHasher.WithContentHash(current);
+                WorkshopDocumentV5 current = WorkshopDocumentSerializer.Deserialize(raw, verifyHash: true);
                 return new MigrationResult(MigrationStatus.AlreadyV5, current, backupPath, string.Empty, string.Empty);
             }
 
@@ -262,6 +242,8 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
             _ => ReadEndpointConductors(root, "wires", legacyTypesByDevice),
         };
         TerminalBridgeV5[] terminalBridges = ReadTerminalBridges(root, legacyTypesByDevice);
+        CableAssemblyV5[] cableAssemblies = ReadCableAssemblies(root, conductors);
+        TerminalAssemblyV5[] terminalAssemblies = ReadTerminalAssemblies(root);
 
         Dictionary<string, JsonElement> extensions = ReadExtensionObject(root);
         extensions["legacy"] = JsonSerializer.SerializeToElement(new Dictionary<string, object?>
@@ -281,6 +263,8 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
             Devices = devices,
             Conductors = conductors,
             TerminalBridges = terminalBridges,
+            CableAssemblies = cableAssemblies,
+            TerminalAssemblies = terminalAssemblies,
             Panel = ReadPanel(root),
             Viewport = ReadViewport(root),
             Settings = ReadSettings(root),
@@ -470,7 +454,19 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
                 metadata[id] = new LegacyConductorMetadata(
                     ReadString(conductor, "wireNumber") ?? id,
                     NormalizeColor(ReadString(conductor, "color")),
-                    ReadDouble(conductor, "crossSectionMm2") ?? ParseGauge(ReadString(conductor, "gauge")) ?? 0.75);
+                    ReadDouble(conductor, "crossSectionMm2") ?? ParseGauge(ReadString(conductor, "gauge")) ?? 0.75,
+                    ReadString(conductor, "cableAssemblyId"),
+                    ReadString(conductor, "core"),
+                    ReadString(conductor, "gauge"),
+                    ReadString(conductor, "awg"),
+                    ReadDouble(conductor, "lengthMm"),
+                    ReadString(conductor, "pairId"),
+                    ReadBoolean(conductor, "shielded") ?? false,
+                    ReadBoolean(conductor, "drain") ?? false,
+                    ReadString(conductor, "ferruleFrom"),
+                    ReadString(conductor, "ferruleTo"),
+                    ReadString(conductor, "lugFrom"),
+                    ReadString(conductor, "lugTo"));
             }
         }
 
@@ -501,7 +497,22 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
                 details.WireNumber,
                 details.Color,
                 details.GaugeMm2,
-                false));
+                false)
+            {
+                WireNumber = details.WireNumber,
+                CableAssemblyId = details.CableAssemblyId,
+                Core = details.Core,
+                Gauge = details.Gauge,
+                Awg = details.Awg,
+                LengthMm = details.LengthMm,
+                PairId = details.PairId,
+                Shielded = details.Shielded,
+                Drain = details.Drain,
+                FerruleFrom = details.FerruleFrom,
+                FerruleTo = details.FerruleTo,
+                LugFrom = details.LugFrom,
+                LugTo = details.LugTo,
+            });
         }
 
         return [.. result];
@@ -558,6 +569,114 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
 
         return [.. result];
     }
+
+    private static CableAssemblyV5[] ReadCableAssemblies(JsonElement root, ConductorV5[] conductors)
+    {
+        var result = new Dictionary<string, CableAssemblyV5>(StringComparer.Ordinal);
+        if (root.TryGetProperty("cableAssemblies", out JsonElement cables)
+            && cables.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement cable in cables.EnumerateArray())
+            {
+                string id = RequireString(cable, "id", "V3 cableAssembly에 id가 없습니다.");
+                string[] referencedIds = ReadStringArray(cable, "conductorIds");
+                string[] expandedIds = referencedIds
+                    .SelectMany(reference => conductors
+                        .Where(conductor => conductor.Id == reference
+                            || conductor.Id.StartsWith($"{reference}:", StringComparison.Ordinal))
+                        .Select(conductor => conductor.Id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                if (referencedIds.Length > 0 && expandedIds.Length == 0)
+                {
+                    throw new InvalidDataException($"V3 cableAssembly '{id}'가 존재하지 않는 전선을 참조합니다.");
+                }
+
+                result[id] = new CableAssemblyV5(
+                    id,
+                    ReadString(cable, "designation"),
+                    expandedIds,
+                    ReadString(cable, "cableType"),
+                    ReadDouble(cable, "lengthMm"),
+                    ReadBoolean(cable, "shielded") ?? false,
+                    ReadString(cable, "drainConductorId"),
+                    ReadPointArray(cable, "route"));
+            }
+        }
+
+        foreach (IGrouping<string, ConductorV5> group in conductors
+            .Where(conductor => !string.IsNullOrWhiteSpace(conductor.CableAssemblyId))
+            .GroupBy(conductor => conductor.CableAssemblyId!, StringComparer.Ordinal))
+        {
+            string[] memberIds = group.Select(conductor => conductor.Id).ToArray();
+            if (result.TryGetValue(group.Key, out CableAssemblyV5? existing))
+            {
+                result[group.Key] = existing with
+                {
+                    ConductorIds = existing.ConductorIds
+                        .Concat(memberIds)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray(),
+                    Shielded = existing.Shielded || group.Any(conductor => conductor.Shielded),
+                    DrainConductorId = existing.DrainConductorId
+                        ?? group.FirstOrDefault(conductor => conductor.Drain)?.Id,
+                };
+            }
+            else
+            {
+                result[group.Key] = new CableAssemblyV5(
+                    group.Key,
+                    group.Key,
+                    memberIds,
+                    null,
+                    group.Select(conductor => conductor.LengthMm).FirstOrDefault(length => length is not null),
+                    group.Any(conductor => conductor.Shielded),
+                    group.FirstOrDefault(conductor => conductor.Drain)?.Id,
+                    []);
+            }
+        }
+
+        return [.. result.Values.OrderBy(cable => cable.Id, StringComparer.Ordinal)];
+    }
+
+    private static TerminalAssemblyV5[] ReadTerminalAssemblies(JsonElement root)
+    {
+        if (!root.TryGetProperty("terminalAssemblies", out JsonElement assemblies)
+            || assemblies.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. assemblies.EnumerateArray().Select(assembly => new TerminalAssemblyV5(
+                RequireString(assembly, "id", "V3 terminalAssembly에 id가 없습니다."),
+                RequireString(assembly, "deviceId", "V3 terminalAssembly에 deviceId가 없습니다."),
+                ReadStringArray(assembly, "terminalIds"),
+                ReadString(assembly, "manufacturer"),
+                ReadString(assembly, "orderCode"),
+                ReadString(assembly, "designation"),
+                ReadString(assembly, "terminalType"),
+                ReadString(assembly, "marker"),
+                ReadInt(assembly, "maximumConductorsPerTerminal"),
+                ReadStringArray(assembly, "accessories"))),
+        ];
+    }
+
+    private static string[] ReadStringArray(JsonElement parent, string propertyName)
+        => parent.TryGetProperty(propertyName, out JsonElement values) && values.ValueKind == JsonValueKind.Array
+            ? values.EnumerateArray()
+                .Where(value => value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString()))
+                .Select(value => value.GetString()!)
+                .ToArray()
+            : [];
+
+    private static PointV5[] ReadPointArray(JsonElement parent, string propertyName)
+        => parent.TryGetProperty(propertyName, out JsonElement points) && points.ValueKind == JsonValueKind.Array
+            ? points.EnumerateArray().Select(point => new PointV5(
+                ReadDouble(point, "x") ?? throw new InvalidDataException($"{propertyName} 경로점 x가 없습니다."),
+                ReadDouble(point, "y") ?? throw new InvalidDataException($"{propertyName} 경로점 y가 없습니다."))).ToArray()
+            : [];
 
     private static TerminalRefV5? ReadTerminalRef(
         JsonElement parent,
@@ -783,6 +902,18 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
         {
             throw new InvalidDataException($"전선 개수 불변조건이 깨졌습니다: {inputConductors} -> {document.Conductors.Length}");
         }
+
+        if (format == WorkshopFormat.NativeV3
+            && ArrayCount(root, "cableAssemblies") > document.CableAssemblies.Length)
+        {
+            throw new InvalidDataException("케이블 묶음 변환 중 활성 데이터가 손실되었습니다.");
+        }
+
+        if (format == WorkshopFormat.NativeV3
+            && ArrayCount(root, "terminalAssemblies") != document.TerminalAssemblies.Length)
+        {
+            throw new InvalidDataException("단자대 조립 정보 변환 중 활성 데이터가 손실되었습니다.");
+        }
     }
 
     private static bool IsCompleteV3(JsonElement root)
@@ -955,5 +1086,20 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
         CompactLegacy,
     }
 
-    private sealed record LegacyConductorMetadata(string WireNumber, string Color, double GaugeMm2);
+    private sealed record LegacyConductorMetadata(
+        string WireNumber,
+        string Color,
+        double GaugeMm2,
+        string? CableAssemblyId,
+        string? Core,
+        string? Gauge,
+        string? Awg,
+        double? LengthMm,
+        string? PairId,
+        bool Shielded,
+        bool Drain,
+        string? FerruleFrom,
+        string? FerruleTo,
+        string? LugFrom,
+        string? LugTo);
 }

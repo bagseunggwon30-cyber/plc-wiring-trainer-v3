@@ -479,7 +479,11 @@ public sealed record ConductorV5(
 public sealed record TerminalBridgeV5(
     string Id,
     TerminalRefV5[] Terminals,
-    string Color);
+    string Color)
+{
+    /// <summary>명시적 고장 주입 모드에서 위험 점퍼를 승인해 저장했는지 나타냅니다.</summary>
+    public bool DiagnosticOverride { get; init; }
+}
 
 /// <summary>SourceSystemDefinitionV5 공개 문서 계약을 나타냅니다.</summary>
 /// <param name="Id">Id 계약 값입니다.</param>

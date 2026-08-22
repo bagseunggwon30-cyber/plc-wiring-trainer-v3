@@ -28,9 +28,10 @@ internal sealed class TerminalResolver
             return false;
         }
 
+        string canonicalId = TerminalAliasRegistry.Resolve(profile.LegacyType, reference.TerminalId);
         TerminalDefinitionV5? terminal = profile.Terminals.FirstOrDefault(item =>
-            item.Id == reference.TerminalId
-            || item.Aliases.Contains(reference.TerminalId, StringComparer.Ordinal));
+            string.Equals(item.Id, canonicalId, StringComparison.OrdinalIgnoreCase)
+            || item.Aliases.Contains(canonicalId, StringComparer.OrdinalIgnoreCase));
         if (terminal is null)
         {
             resolved = null!;
@@ -39,7 +40,7 @@ internal sealed class TerminalResolver
 
         int maximumConductors = document.TerminalAssemblies
             .Where(assembly => assembly.DeviceId == device.Id
-                && assembly.TerminalIds.Contains(terminal.Id, StringComparer.Ordinal)
+                && assembly.TerminalIds.Contains(terminal.Id, StringComparer.OrdinalIgnoreCase)
                 && assembly.MaximumConductorsPerTerminal is > 0)
             .Select(assembly => assembly.MaximumConductorsPerTerminal!.Value)
             .DefaultIfEmpty(terminal.MaxConductors)

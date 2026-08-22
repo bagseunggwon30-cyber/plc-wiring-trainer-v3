@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Text;
+using System.Text.Json;
 
 namespace PlcWiringTrainer.Core.Documents;
 
@@ -26,6 +28,7 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
 {
     private readonly IWorkshopDocumentMigrator _migrator;
     private readonly string _autosaveDirectory;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _autosaveGates = new(StringComparer.Ordinal);
 
     /// <summary>WorkshopDocumentRepository 작업을 수행합니다.</summary>
     public WorkshopDocumentRepository(IWorkshopDocumentMigrator migrator, string? autosaveDirectory = null)
@@ -57,11 +60,29 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
         string temporaryPath = $"{fullPath}.tmp.{Guid.NewGuid():N}";
         try
         {
-            await File.WriteAllTextAsync(
+            byte[] bytes = new UTF8Encoding(false).GetBytes(WorkshopDocumentSerializer.Serialize(normalized));
+            await using (var stream = new FileStream(
                 temporaryPath,
-                WorkshopDocumentSerializer.Serialize(normalized),
-                new UTF8Encoding(false),
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                64 * 1024,
+                FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+
+            string persistedJson = await File.ReadAllTextAsync(
+                temporaryPath,
+                Encoding.UTF8,
                 cancellationToken).ConfigureAwait(false);
+            WorkshopDocumentV5 persisted = WorkshopDocumentSerializer.Deserialize(persistedJson, verifyHash: true);
+            if (!string.Equals(persisted.ContentHash, normalized.ContentHash, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("디스크에 기록한 문서의 canonical hash가 저장 후보와 일치하지 않습니다.");
+            }
 
             if (File.Exists(fullPath))
             {
@@ -82,16 +103,39 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
     }
 
     /// <summary>LoadAsync 작업을 수행합니다.</summary>
-    public Task<MigrationResult> LoadAsync(string path, CancellationToken cancellationToken = default)
-        => _migrator.MigrateAsync(path, cancellationToken);
+    public async Task<MigrationResult> LoadAsync(string path, CancellationToken cancellationToken = default)
+    {
+        MigrationResult result = await _migrator.MigrateAsync(path, cancellationToken).ConfigureAwait(false);
+        if (result.Status == MigrationStatus.Quarantined && IsAutosavePath(path) && File.Exists(path))
+        {
+            File.Delete(path);
+        }
+
+        return result;
+    }
 
     /// <summary>SaveAutosaveAsync 작업을 수행합니다.</summary>
-    public Task SaveAutosaveAsync(
+    public async Task SaveAutosaveAsync(
         WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
-        return SaveAsync(AutosavePath(document.DocumentId), document, cancellationToken);
+        string path = AutosavePath(document.DocumentId);
+        SemaphoreSlim gate = _autosaveGates.GetOrAdd(document.DocumentId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (await ReadAutosaveRevisionAsync(path, cancellationToken).ConfigureAwait(false) > document.Revision)
+            {
+                return;
+            }
+
+            await SaveAsync(path, document, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     /// <summary>FindAutosavePathsAsync 작업을 수행합니다.</summary>
@@ -131,5 +175,30 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
         string safeId = string.Concat(documentId.Select(
             character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
         return Path.Combine(_autosaveDirectory, $"{safeId}.plcw");
+    }
+
+    private static async Task<int> ReadAutosaveRevisionAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return -1;
+        }
+
+        try
+        {
+            string json = await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+            return WorkshopDocumentSerializer.Deserialize(json, verifyHash: true).Revision;
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidDataException)
+        {
+            return -1;
+        }
+    }
+
+    private bool IsAutosavePath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_autosaveDirectory));
+        return string.Equals(Path.GetDirectoryName(fullPath), root, StringComparison.OrdinalIgnoreCase);
     }
 }

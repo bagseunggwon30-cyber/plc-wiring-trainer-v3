@@ -79,4 +79,53 @@ public sealed class RepositoryTests
         Assert.Equal("cable-1", document.Conductors[0].CableAssemblyId);
         Assert.Equal([routed.Id], Assert.Single(document.CableAssemblies).ConductorIds);
     }
+
+    [Fact]
+    public async Task AutosaveNeverLetsAnOlderRevisionReplaceANewerSnapshot()
+    {
+        string root = TestDirectory.Create();
+        var repository = new WorkshopDocumentRepository(
+            new WorkshopDocumentMigrator(Path.Combine(root, "backups"), Path.Combine(root, "quarantine")),
+            Path.Combine(root, "autosave"));
+        WorkshopDocumentV5 baseline = TestDocuments.WithLamp();
+        WorkshopDocumentV5 newer = DocumentHasher.WithContentHash(baseline with
+        {
+            Revision = baseline.Revision + 2,
+            Name = "newer",
+        });
+        WorkshopDocumentV5 older = DocumentHasher.WithContentHash(baseline with
+        {
+            Revision = baseline.Revision + 1,
+            Name = "older",
+        });
+
+        await repository.SaveAutosaveAsync(newer);
+        await repository.SaveAutosaveAsync(older);
+
+        string path = Assert.Single(await repository.FindAutosavePathsAsync());
+        MigrationResult loaded = await repository.LoadAsync(path);
+        Assert.Equal(newer.Revision, loaded.Document!.Revision);
+        Assert.Equal("newer", loaded.Document.Name);
+        Assert.Equal(newer.ContentHash, loaded.Document.ContentHash);
+    }
+
+    [Fact]
+    public async Task CorruptAutosaveIsQuarantinedAndRemovedFromRecoveryRoot()
+    {
+        string root = TestDirectory.Create();
+        string autosave = Path.Combine(root, "autosave");
+        Directory.CreateDirectory(autosave);
+        string path = Path.Combine(autosave, "corrupt.plcw");
+        await File.WriteAllTextAsync(path, "{ broken json");
+        var repository = new WorkshopDocumentRepository(
+            new WorkshopDocumentMigrator(Path.Combine(root, "backups"), Path.Combine(root, "quarantine")),
+            autosave);
+
+        MigrationResult result = await repository.LoadAsync(path);
+
+        Assert.Equal(MigrationStatus.Quarantined, result.Status);
+        Assert.False(File.Exists(path));
+        Assert.True(File.Exists(result.QuarantinePath));
+        Assert.Empty(await repository.FindAutosavePathsAsync());
+    }
 }

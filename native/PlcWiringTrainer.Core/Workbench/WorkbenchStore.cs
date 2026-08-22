@@ -70,6 +70,9 @@ public sealed class WorkbenchStore : IAsyncDisposable
     /// <summary>현재 문서와 revision/hash가 일치할 때만 게시된 마지막 검증 결과입니다.</summary>
     public ValidationResultV5? ValidationResult { get; private set; }
 
+    /// <summary>현재 revision의 검증 실행 자체가 실패했을 때 표시할 오류입니다.</summary>
+    public string? ValidationError { get; private set; }
+
     /// <summary>CanUndo 값을 제공합니다.</summary>
     public bool CanUndo => _undo.Count > 0;
 
@@ -81,10 +84,18 @@ public sealed class WorkbenchStore : IAsyncDisposable
 
     /// <summary>UpdateDevice 작업을 수행합니다.</summary>
     public void UpdateDevice(string deviceId, Func<DeviceInstanceV5, DeviceInstanceV5> update)
+        => TryUpdateDevice(deviceId, update, static _ => true);
+
+    /// <summary>candidate 전체 문서가 추가 안전 조건을 통과할 때만 장비 편집을 원자적으로 반영합니다.</summary>
+    public bool TryUpdateDevice(
+        string deviceId,
+        Func<DeviceInstanceV5, DeviceInstanceV5> update,
+        Func<WorkshopDocumentV5, bool> candidateGuard)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
         ArgumentNullException.ThrowIfNull(update);
+        ArgumentNullException.ThrowIfNull(candidateGuard);
         int index = Array.FindIndex(Document.Devices, device => device.Id == deviceId);
         if (index < 0)
         {
@@ -95,12 +106,19 @@ public sealed class WorkbenchStore : IAsyncDisposable
         DeviceInstanceV5 updated = update(original);
         if (updated == original)
         {
-            return;
+            return true;
         }
 
         DeviceInstanceV5[] devices = [.. Document.Devices];
         devices[index] = updated;
-        Commit(Document with { Devices = devices });
+        WorkshopDocumentV5 candidate = Document with { Devices = devices };
+        if (!candidateGuard(candidate))
+        {
+            return false;
+        }
+
+        Commit(candidate);
+        return true;
     }
 
     /// <summary>UpdateConductor 작업을 수행합니다.</summary>
@@ -139,15 +157,29 @@ public sealed class WorkbenchStore : IAsyncDisposable
 
     /// <summary>AddDevice 작업을 수행합니다.</summary>
     public void AddDevice(DeviceInstanceV5 device)
+        => TryAddDevice(device, static _ => true);
+
+    /// <summary>장비를 포함한 candidate 문서가 guard를 통과할 때만 한 undo 단계로 추가합니다.</summary>
+    public bool TryAddDevice(
+        DeviceInstanceV5 device,
+        Func<WorkshopDocumentV5, bool> candidateGuard)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(candidateGuard);
         if (Document.Devices.Any(item => item.Id == device.Id))
         {
             throw new InvalidOperationException($"중복 장비 ID입니다: {device.Id}");
         }
 
-        Commit(Document with { Devices = [.. Document.Devices, device] });
+        WorkshopDocumentV5 candidate = Document with { Devices = [.. Document.Devices, device] };
+        if (!candidateGuard(candidate))
+        {
+            return false;
+        }
+
+        Commit(candidate);
+        return true;
     }
 
     /// <summary>candidate 문서를 사전판정한 뒤 허용 또는 경고인 경우에만 전선을 한 undo 단계로 추가합니다.</summary>
@@ -162,15 +194,10 @@ public sealed class WorkbenchStore : IAsyncDisposable
         }
 
         ConnectionAssessmentV5 assessment = _connectionAssessmentService.AssessConductor(Document, conductor);
-        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
-        {
-            return assessment;
-        }
-
-        ConductorV5 committed = conductor.ManualColor
-            ? conductor
-            : conductor with { Color = assessment.SuggestedColor };
-        Commit(Document with { Conductors = [.. Document.Conductors, committed] });
+        ConductorV5 committed = ApplyConnectionAssessment(conductor, assessment);
+        CommitAssessedCandidate(
+            assessment,
+            document => document with { Conductors = [.. document.Conductors, committed] });
         return assessment;
     }
 
@@ -208,20 +235,22 @@ public sealed class WorkbenchStore : IAsyncDisposable
             Document,
             candidate,
             conductorId);
-        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
-        {
-            return assessment;
-        }
-
         ConductorV5[] conductors = [.. Document.Conductors];
-        conductors[index] = candidate with
-        {
-            Color = candidate.ManualColor ? candidate.Color : assessment.SuggestedColor,
-            DiagnosticOverride = candidate.DiagnosticOverride || assessment.RequiresDiagnosticOverride,
-        };
-        Commit(Document with { Conductors = conductors });
+        conductors[index] = ApplyConnectionAssessment(candidate, assessment);
+        CommitAssessedCandidate(
+            assessment,
+            document => document with { Conductors = conductors });
         return assessment;
     }
+
+    private static ConductorV5 ApplyConnectionAssessment(
+        ConductorV5 conductor,
+        ConnectionAssessmentV5 assessment)
+        => conductor with
+        {
+            Color = conductor.ManualColor ? conductor.Color : assessment.SuggestedColor,
+            DiagnosticOverride = conductor.DiagnosticOverride || assessment.RequiresDiagnosticOverride,
+        };
 
     /// <summary>잠기지 않은 전선 경로만 한 revision과 undo 단계로 교체합니다.</summary>
     public void ReplaceUnlockedRoutes(IReadOnlyDictionary<string, PointV5[]> routes)
@@ -404,12 +433,13 @@ public sealed class WorkbenchStore : IAsyncDisposable
         }
 
         ConnectionAssessmentV5 assessment = _connectionAssessmentService.AssessBridge(Document, bridge);
-        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
+        TerminalBridgeV5 committed = bridge with
         {
-            return assessment;
-        }
-
-        Commit(Document with { TerminalBridges = [.. Document.TerminalBridges, bridge] });
+            DiagnosticOverride = bridge.DiagnosticOverride || assessment.RequiresDiagnosticOverride,
+        };
+        CommitAssessedCandidate(
+            assessment,
+            document => document with { TerminalBridges = [.. document.TerminalBridges, committed] });
         return assessment;
     }
 
@@ -474,6 +504,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
     {
         ThrowIfDisposed();
         ValidationResult = null;
+        ValidationError = null;
         ValidationFreshness = ValidationFreshness.Stale;
         ScheduleValidation();
         Changed?.Invoke(this, EventArgs.Empty);
@@ -510,10 +541,24 @@ public sealed class WorkbenchStore : IAsyncDisposable
         RestoreAsNewRevision(candidate);
     }
 
+    private bool CommitAssessedCandidate(
+        ConnectionAssessmentV5 assessment,
+        Func<WorkshopDocumentV5, WorkshopDocumentV5> update)
+    {
+        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
+        {
+            return false;
+        }
+
+        Commit(update(Document));
+        return true;
+    }
+
     private void RestoreAsNewRevision(WorkshopDocumentV5 candidate)
     {
         Document = DocumentHasher.WithContentHash(candidate with { Revision = Document.Revision + 1 });
         ValidationResult = null;
+        ValidationError = null;
         ValidationFreshness = ValidationFreshness.Stale;
         ScheduleValidation();
         Changed?.Invoke(this, EventArgs.Empty);
@@ -552,6 +597,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
                 && string.Equals(result.ContentHash, Document.ContentHash, StringComparison.Ordinal))
             {
                 ValidationResult = result;
+                ValidationError = null;
                 ValidationFreshness = result.Issues.Any(issue => issue.Blocking)
                     ? ValidationFreshness.Blocked
                     : result.Issues.Any(issue => issue.Severity == ValidationSeverity.Error)
@@ -562,6 +608,17 @@ public sealed class WorkbenchStore : IAsyncDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+        }
+        catch (Exception exception)
+        {
+            if (snapshot.Revision == Document.Revision
+                && string.Equals(snapshot.ContentHash, Document.ContentHash, StringComparison.Ordinal))
+            {
+                ValidationResult = null;
+                ValidationError = exception.Message;
+                ValidationFreshness = ValidationFreshness.Fail;
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 

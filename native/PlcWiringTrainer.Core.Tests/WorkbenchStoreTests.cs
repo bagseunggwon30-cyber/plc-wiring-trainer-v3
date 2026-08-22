@@ -107,6 +107,33 @@ public sealed class WorkbenchStoreTests
     }
 
     [Fact]
+    public async Task FaultInjectionBridgePersistsTheRequiredDiagnosticOverride()
+    {
+        DeviceProfileCatalog catalog = DeviceProfileCatalog.CreateDefault();
+        WorkshopDocumentV5 source = TestDocuments.WithLamp();
+        WorkshopDocumentV5 document = DocumentHasher.WithContentHash(source with
+        {
+            Conductors = [],
+            Settings = source.Settings with { FaultInjectionEnabled = true },
+        });
+        await using var store = new WorkbenchStore(
+            document,
+            new CircuitValidationService(catalog),
+            new ConnectionAssessmentService(catalog),
+            TimeSpan.Zero);
+        var bridge = new TerminalBridgeV5(
+            "fault-bridge",
+            [new TerminalRefV5("supply", "+24V"), new TerminalRefV5("supply", "0V")],
+            "#F97316");
+
+        ConnectionAssessmentV5 assessment = store.AddTerminalBridge(bridge);
+
+        Assert.Equal(ConnectionDispositionV5.Warning, assessment.Disposition);
+        Assert.True(assessment.RequiresDiagnosticOverride);
+        Assert.True(Assert.Single(store.Document.TerminalBridges).DiagnosticOverride);
+    }
+
+    [Fact]
     public async Task BatchRouteCleanupUpdatesOnlyUnlockedWiresInOneRevision()
     {
         WorkshopDocumentV5 document = TestDocuments.WithLamp();
@@ -198,5 +225,89 @@ public sealed class WorkbenchStoreTests
             new TerminalRefV5("supply", "0V"));
 
         Assert.Equal("#F97316", Assert.Single(manualStore.Document.Conductors).Color);
+    }
+
+    [Fact]
+    public async Task NewFaultInjectionWirePersistsTheRequiredDiagnosticOverride()
+    {
+        DeviceProfileCatalog catalog = DeviceProfileCatalog.CreateDefault();
+        WorkshopDocumentV5 document = TestDocuments.WithLamp() with
+        {
+            Conductors = [],
+            Settings = new WorkshopSettingsV5(10, true, true, true),
+        };
+        await using var store = new WorkbenchStore(
+            document,
+            new CircuitValidationService(catalog),
+            new ConnectionAssessmentService(catalog),
+            TimeSpan.Zero);
+        var conductor = new ConductorV5(
+            "fault-short",
+            new TerminalRefV5("supply", "+24V"),
+            new TerminalRefV5("supply", "0V"),
+            [],
+            "fault short",
+            "#374151",
+            0.75,
+            false)
+        {
+            WireNumber = "W900",
+        };
+
+        ConnectionAssessmentV5 assessment = store.AddConductor(conductor);
+
+        Assert.Equal(ConnectionDispositionV5.Warning, assessment.Disposition);
+        Assert.True(assessment.RequiresDiagnosticOverride);
+        Assert.True(Assert.Single(store.Document.Conductors).DiagnosticOverride);
+    }
+
+    [Fact]
+    public async Task RejectedDeviceCandidateDoesNotConsumeRevisionOrHistory()
+    {
+        WorkshopDocumentV5 document = TestDocuments.WithLamp();
+        await using var store = new WorkbenchStore(
+            document,
+            new CircuitValidationService(DeviceProfileCatalog.CreateDefault()),
+            TimeSpan.Zero);
+        await store.WaitForValidationAsync();
+        int changedEvents = 0;
+        store.Changed += (_, _) => changedEvents++;
+
+        bool committed = store.TryUpdateDevice(
+            "lamp-1",
+            device => device with { X = 999 },
+            _ => false);
+
+        Assert.False(committed);
+        Assert.Equal(document.Revision, store.Document.Revision);
+        Assert.Equal(document.ContentHash, store.Document.ContentHash);
+        Assert.Equal(100, store.Document.Devices.Single(device => device.Id == "lamp-1").X);
+        Assert.False(store.CanUndo);
+        Assert.False(store.CanRedo);
+        Assert.Equal(0, changedEvents);
+    }
+
+    [Fact]
+    public async Task RejectedDeviceAdditionDoesNotConsumeRevisionOrHistory()
+    {
+        WorkshopDocumentV5 document = TestDocuments.WithLamp();
+        await using var store = new WorkbenchStore(
+            document,
+            new CircuitValidationService(DeviceProfileCatalog.CreateDefault()),
+            TimeSpan.Zero);
+        await store.WaitForValidationAsync();
+        DeviceInstanceV5 candidate = document.Devices[0] with { Id = "candidate-device" };
+        int changedEvents = 0;
+        store.Changed += (_, _) => changedEvents++;
+
+        bool committed = store.TryAddDevice(candidate, _ => false);
+
+        Assert.False(committed);
+        Assert.Equal(document.Revision, store.Document.Revision);
+        Assert.Equal(document.ContentHash, store.Document.ContentHash);
+        Assert.DoesNotContain(store.Document.Devices, device => device.Id == candidate.Id);
+        Assert.False(store.CanUndo);
+        Assert.False(store.CanRedo);
+        Assert.Equal(0, changedEvents);
     }
 }

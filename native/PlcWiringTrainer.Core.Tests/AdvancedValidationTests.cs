@@ -33,6 +33,169 @@ public sealed class AdvancedValidationTests
     private readonly CircuitValidationService _service = new(DeviceProfileCatalog.CreateDefault());
 
     [Fact]
+    public async Task TerminalAliasesAreCanonicalizedBeforeWholeDocumentValidation()
+    {
+        WorkshopDocumentV5 source = TestDocuments.WithLamp();
+        var exp = new DeviceInstanceV5(
+            "exp",
+            "ls-electric:exp2-0700d",
+            1,
+            EvidenceGrade.ManualVerified,
+            "EXP2",
+            300,
+            120,
+            0,
+            220,
+            180,
+            false,
+            new Dictionary<string, string>());
+        var conductor = new ConductorV5(
+            "alias-wire",
+            new TerminalRefV5("supply", "+24V"),
+            new TerminalRefV5("exp", "V+"),
+            [],
+            "alias",
+            "#EF4444",
+            0.75,
+            false)
+        {
+            WireNumber = "W701",
+        };
+        WorkshopDocumentV5 document = DocumentHasher.WithContentHash(source with
+        {
+            Devices = [source.Devices.Single(device => device.Id == "supply"), exp],
+            Conductors = [conductor],
+        });
+
+        ValidationResultV5 result = await _service.ValidateAsync(document);
+
+        Assert.DoesNotContain(result.Issues, issue => issue.Code == "UNKNOWN_TERMINAL");
+    }
+
+    [Fact]
+    public async Task DuplicatePersistentIdsProduceBlockingIssuesInsteadOfValidatorExceptions()
+    {
+        WorkshopDocumentV5 source = TestDocuments.WithLamp();
+        WorkshopDocumentV5 document = DocumentHasher.WithContentHash(source with
+        {
+            Devices = [source.Devices[0], source.Devices[0]],
+            Conductors = [source.Conductors[0], source.Conductors[0]],
+            CableAssemblies =
+            [
+                new CableAssemblyV5("C1", "C1", [], null, null, false, null, []),
+                new CableAssemblyV5("C1", "C1 duplicate", [], null, null, false, null, []),
+            ],
+        });
+
+        ValidationResultV5 result = await _service.ValidateAsync(document);
+
+        ValidationIssueV5[] duplicateIssues = result.Issues
+            .Where(issue => issue.Code == "DUPLICATE_DOCUMENT_ID")
+            .ToArray();
+        Assert.Equal(3, duplicateIssues.Length);
+        Assert.All(duplicateIssues, issue => Assert.True(issue.Blocking));
+    }
+
+    [Fact]
+    public async Task DuplicateDirectConnectionAcrossConductorAndBridgeIsBlocking()
+    {
+        WorkshopDocumentV5 source = TestDocuments.WithLamp();
+        ConductorV5 conductor = source.Conductors[0];
+        WorkshopDocumentV5 document = DocumentHasher.WithContentHash(source with
+        {
+            TerminalBridges =
+            [
+                new TerminalBridgeV5(
+                    "duplicate-path",
+                    [conductor.Start, conductor.End],
+                    "#EF4444"),
+            ],
+        });
+
+        ValidationResultV5 result = await _service.ValidateAsync(document);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "DUPLICATE_CONNECTION" && issue.Blocking);
+    }
+
+    [Fact]
+    public async Task ThreePhaseSourceRejectsADirectL1ToL2Connection()
+    {
+        DeviceProfileCatalog catalog = DeviceProfileCatalog.CreateDefault();
+        Assert.True(catalog.TryGet("boundary:ac-supply", out DeviceProfileV5 profile));
+        var source = new DeviceInstanceV5(
+            "three-phase",
+            profile.Id,
+            profile.Version,
+            EvidenceGrade.Educational,
+            "3상 전원",
+            20,
+            20,
+            0,
+            220,
+            220,
+            false,
+            []);
+        WorkshopDocumentV5 document = DocumentHasher.WithContentHash(TestDocuments.Empty() with
+        {
+            Devices = [source],
+            Conductors =
+            [
+                new ConductorV5(
+                    "phase-short",
+                    new TerminalRefV5(source.Id, "L1"),
+                    new TerminalRefV5(source.Id, "L2"),
+                    [],
+                    "W3",
+                    "#92400E",
+                    0.75,
+                    false)
+                {
+                    WireNumber = "W3",
+                },
+            ],
+        });
+
+        ValidationResultV5 result = await new CircuitValidationService(catalog).ValidateAsync(document);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "AC_PHASE_SHORT" && issue.Blocking);
+    }
+
+    [Fact]
+    public async Task EveryDcSourceParticipatesInShortCircuitDetection()
+    {
+        WorkshopDocumentV5 source = TestDocuments.WithLamp();
+        DeviceInstanceV5 secondSupply = source.Devices[0] with
+        {
+            Id = "supply-2",
+            Label = "supply-2",
+            X = 400,
+        };
+        WorkshopDocumentV5 document = DocumentHasher.WithContentHash(source with
+        {
+            Devices = [source.Devices[0], secondSupply],
+            Conductors =
+            [
+                new ConductorV5(
+                    "second-source-short",
+                    new TerminalRefV5(secondSupply.Id, "+24V"),
+                    new TerminalRefV5(secondSupply.Id, "0V"),
+                    [],
+                    "W4",
+                    "#EF4444",
+                    0.75,
+                    false)
+                {
+                    WireNumber = "W4",
+                },
+            ],
+        });
+
+        ValidationResultV5 result = await _service.ValidateAsync(document);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "DC_SHORT_CIRCUIT" && issue.Blocking);
+    }
+
+    [Fact]
     public async Task PnpCircuitRequiresZeroVoltPlcInputCommon()
     {
         ValidationResultV5 result = await _service.ValidateAsync(TestDocuments.PnpCircuit(plcCommonToZero: false));
@@ -52,6 +215,38 @@ public sealed class AdvancedValidationTests
     public async Task TwoWireCurrentLoopRejectsReversedPolarity()
     {
         ValidationResultV5 result = await _service.ValidateAsync(TestDocuments.ReversedCurrentLoop());
+
+        Assert.Contains(result.Issues, issue => issue.Code == "CURRENT_LOOP_POLARITY" && issue.Blocking);
+    }
+
+    [Fact]
+    public async Task TwoWireCurrentLoopRejectsAParallelTransmitterBypass()
+    {
+        WorkshopDocumentV5 source = TestDocuments.ReversedCurrentLoop();
+        ConductorV5[] validLoop =
+        [
+            source.Conductors[0] with
+            {
+                Start = new TerminalRefV5("supply", "+24V"),
+                End = new TerminalRefV5("tx", "+"),
+            },
+            source.Conductors[1],
+            source.Conductors[2] with
+            {
+                Start = new TerminalRefV5("ai", "I-"),
+                End = new TerminalRefV5("supply", "0V"),
+            },
+            source.Conductors[0] with
+            {
+                Id = "tx-bypass",
+                Start = new TerminalRefV5("tx", "+"),
+                End = new TerminalRefV5("tx", "-"),
+                WireNumber = "W99",
+            },
+        ];
+        WorkshopDocumentV5 document = DocumentHasher.WithContentHash(source with { Conductors = validLoop });
+
+        ValidationResultV5 result = await _service.ValidateAsync(document);
 
         Assert.Contains(result.Issues, issue => issue.Code == "CURRENT_LOOP_POLARITY" && issue.Blocking);
     }

@@ -24,6 +24,21 @@ public sealed class ValidationRaceTests
         Assert.Equal(store.Document.ContentHash, store.ValidationResult.ContentHash);
     }
 
+    [Fact]
+    public async Task ValidatorFailureLeavesTheCurrentDocumentInFailInsteadOfRunningForever()
+    {
+        await using var store = new WorkbenchStore(
+            TestDocuments.WithLamp(),
+            new ThrowingValidator(),
+            TimeSpan.Zero);
+
+        await store.WaitForValidationAsync();
+
+        Assert.Equal(ValidationFreshness.Fail, store.ValidationFreshness);
+        Assert.Null(store.ValidationResult);
+        Assert.Contains("validation failed", store.ValidationError, StringComparison.Ordinal);
+    }
+
     private sealed class OutOfOrderValidator : IValidationService
     {
         private int _callCount;
@@ -49,5 +64,14 @@ public sealed class ValidationRaceTests
                 [],
                 new SimulationResultV5([]));
         }
+    }
+
+
+    private sealed class ThrowingValidator : IValidationService
+    {
+        public Task<ValidationResultV5> ValidateAsync(
+            WorkshopDocumentV5 document,
+            CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("validation failed");
     }
 }
