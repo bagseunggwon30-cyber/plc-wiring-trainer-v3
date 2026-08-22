@@ -44,6 +44,25 @@ public sealed class WiringEditingTests
     }
 
     [Fact]
+    public void WireNumberAllocatorUsesTheLowestCurrentlyUnusedPositiveNumber()
+    {
+        WorkshopDocumentV5 document = TestDocuments.WithLamp();
+        document = document with
+        {
+            Conductors =
+            [
+                document.Conductors[0] with { WireNumber = "W001" },
+                document.Conductors[1] with { WireNumber = "W003" },
+            ],
+        };
+
+        Assert.Equal("W002", WireNumberAllocator.Next(document));
+
+        document = document with { Conductors = [document.Conductors[1]] };
+        Assert.Equal("W001", WireNumberAllocator.Next(document));
+    }
+
+    [Fact]
     public void DeviceTransformUsesOneRotationAwareTerminalCoordinate()
     {
         var device = new DeviceInstanceV5(
@@ -79,6 +98,98 @@ public sealed class WiringEditingTests
             Assert.True(pair.First.X == pair.Second.X || pair.First.Y == pair.Second.Y));
         Assert.DoesNotContain(route.Zip(route.Skip(1)), pair =>
             SegmentCrossesInterior(pair.First, pair.Second, request.Obstacles[0]));
+    }
+
+    [Fact]
+    public void OrthogonalPlannerAvoidsEveryObstacleDeterministically()
+    {
+        var planner = new OrthogonalRoutePlanner();
+        var request = new RouteRequestV5(
+            new PointV5(0, 50),
+            new PointV5(300, 50),
+            new PointV5(0, 50),
+            new PointV5(300, 50),
+            [],
+            [new RectV5(50, 20, 50, 60), new RectV5(170, -20, 50, 80)],
+            false);
+
+        PointV5[] first = planner.Plan(request);
+        PointV5[] second = planner.Plan(request);
+
+        Assert.Equal(first, second);
+        Assert.All(first.Zip(first.Skip(1)), pair =>
+            Assert.True(pair.First.X == pair.Second.X || pair.First.Y == pair.Second.Y));
+        Assert.All(request.Obstacles, obstacle =>
+            Assert.DoesNotContain(first.Zip(first.Skip(1)), pair =>
+                SegmentCrossesInterior(pair.First, pair.Second, obstacle)));
+    }
+
+    [Fact]
+    public void OrthogonalPlannerPrefersTheEqualLengthPathWithFewerWireCrossings()
+    {
+        var planner = new OrthogonalRoutePlanner();
+        var request = new RouteRequestV5(
+            new PointV5(0, 0),
+            new PointV5(100, 100),
+            new PointV5(0, 0),
+            new PointV5(100, 100),
+            [],
+            [],
+            false)
+        {
+            ExistingRoutes =
+            [
+                [new PointV5(50, -20), new PointV5(50, 20)],
+            ],
+        };
+
+        PointV5[] route = planner.Plan(request);
+
+        Assert.Equal(
+            [new PointV5(0, 0), new PointV5(0, 100), new PointV5(100, 100)],
+            route);
+    }
+
+    [Fact]
+    public void OrthogonalPlannerReturnsNoRouteInsteadOfCrossingAnInvalidKeepOut()
+    {
+        var planner = new OrthogonalRoutePlanner();
+        var request = new RouteRequestV5(
+            new PointV5(50, 50),
+            new PointV5(200, 50),
+            new PointV5(60, 50),
+            new PointV5(190, 50),
+            [],
+            [new RectV5(0, 0, 100, 100)],
+            false);
+
+        Assert.Empty(planner.Plan(request));
+    }
+
+    [Fact]
+    public void LockedRouteKeepsEveryStoredInteriorPointWhenEndpointsMove()
+    {
+        var planner = new OrthogonalRoutePlanner();
+        PointV5[] lockedInterior =
+        [
+            new PointV5(40, 0),
+            new PointV5(40, 100),
+            new PointV5(80, 100),
+        ];
+        var request = new RouteRequestV5(
+            new PointV5(-20, 20),
+            new PointV5(120, 80),
+            new PointV5(0, 20),
+            new PointV5(100, 80),
+            lockedInterior,
+            [new RectV5(30, 30, 20, 50)],
+            true);
+
+        PointV5[] route = planner.Plan(request);
+
+        Assert.All(lockedInterior, point => Assert.Contains(point, route));
+        Assert.All(route.Zip(route.Skip(1)), pair =>
+            Assert.True(pair.First.X == pair.Second.X || pair.First.Y == pair.Second.Y));
     }
 
     [Fact]
@@ -158,6 +269,25 @@ public sealed class WiringEditingTests
         Assert.Same(wire, WireRouteEditor.InsertWaypoint(wire, 1, new PointV5(80, 90)));
         Assert.Same(wire, WireRouteEditor.MoveWaypoint(wire, 0, new PointV5(90, 100)));
         Assert.Same(wire, WireRouteEditor.ClearWaypoints(wire));
+    }
+
+    [Fact]
+    public void LockingRouteMaterializesTheRenderedInteriorGeometry()
+    {
+        ConductorV5 wire = TestDocuments.WithLamp().Conductors[0];
+        PointV5[] rendered =
+        [
+            new PointV5(10, 10),
+            new PointV5(30, 10),
+            new PointV5(30, 90),
+            new PointV5(100, 90),
+            new PointV5(100, 110),
+        ];
+
+        ConductorV5 locked = WireRouteEditor.LockRoute(wire, rendered);
+
+        Assert.True(locked.RouteLocked);
+        Assert.Equal(rendered[1..^1], locked.Waypoints);
     }
 
     private static bool SegmentCrossesInterior(PointV5 start, PointV5 end, RectV5 bounds)

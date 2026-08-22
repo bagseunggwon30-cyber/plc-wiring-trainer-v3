@@ -185,6 +185,26 @@ public sealed class LegacyCatalogTests
         Assert.Equal("Assets/Devices/prox-pnp-v2.svg", Get(catalog, "prox-pnp-v2").AssetPath);
     }
 
+    [Theory]
+    [InlineData("legacy:tb-24v-10")]
+    [InlineData("legacy:tb-0v-10")]
+    [InlineData("legacy:tb-pe-10")]
+    public void DistributionBlocksExposeOneCommonConductiveBus(string profileId)
+    {
+        DeviceProfileV5 profile = Get(DeviceProfileCatalog.CreateDefault(), profileId);
+
+        Assert.Equal(20, profile.Terminals.Length);
+        Assert.Equal(19, profile.InternalLinks.Length);
+        Assert.All(profile.InternalLinks, link =>
+        {
+            Assert.Equal("1", link.FromTerminalId);
+            Assert.Equal(InternalLinkKind.Conductive, link.Kind);
+        });
+        Assert.Equal(
+            profile.Terminals.Select(terminal => terminal.Id).Skip(1),
+            profile.InternalLinks.Select(link => link.ToTerminalId));
+    }
+
     private static DeviceProfileV5 Get(DeviceProfileCatalog catalog, string id)
     {
         Assert.True(catalog.TryGet(id, out DeviceProfileV5? profile), id);

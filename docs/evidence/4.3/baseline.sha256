@@ -1,0 +1,4 @@
+# pre-wiring-stabilization-4.3.0-2026-08-22
+# commit 19885e137d4bef8c977b427ee6071fd76203ad9c
+432A636C7B2A009C190E3A354FAC5DC47F679A6A1A387F55D3C23B62134C229B *native/PlcWiringTrainer.Core/Catalog/legacy-device-catalog.v5.json
+34074DD37730BDA6BE9525437096B22CC6E20EBA7B441FD14FB89A941CE98211 *artifacts/release/PlcWiringTrainer-4.2.0-native-portable-19885e1/PlcWiringTrainer.exe

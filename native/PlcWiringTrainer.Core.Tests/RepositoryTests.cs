@@ -22,4 +22,61 @@ public sealed class RepositoryTests
         Assert.Equal("Replaced safely", loaded.Document!.Name);
         Assert.Empty(Directory.EnumerateFiles(root, "*.tmp.*"));
     }
+
+    [Fact]
+    public async Task AutosavesCanBeEnumeratedAndDiscardedInsideTheConfiguredRoot()
+    {
+        string root = TestDirectory.Create();
+        string autosave = Path.Combine(root, "autosave");
+        var migrator = new WorkshopDocumentMigrator(
+            Path.Combine(root, "backups"),
+            Path.Combine(root, "quarantine"));
+        var repository = new WorkshopDocumentRepository(migrator, autosave);
+
+        await repository.SaveAutosaveAsync(TestDocuments.WithLamp());
+
+        string path = Assert.Single(await repository.FindAutosavePathsAsync());
+        Assert.StartsWith(Path.GetFullPath(autosave), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+        await repository.DeleteAutosaveAsync("lamp-document");
+        Assert.Empty(await repository.FindAutosavePathsAsync());
+    }
+
+    [Fact]
+    public async Task AutosaveRecoveryPreservesWiringCableRouteAndViewportHash()
+    {
+        string root = TestDirectory.Create();
+        var repository = new WorkshopDocumentRepository(
+            new WorkshopDocumentMigrator(Path.Combine(root, "backups"), Path.Combine(root, "quarantine")),
+            Path.Combine(root, "autosave"));
+        WorkshopDocumentV5 source = TestDocuments.WithLamp();
+        ConductorV5 routed = source.Conductors[0] with
+        {
+            Waypoints = [new PointV5(300, 140), new PointV5(300, 260)],
+            RouteLocked = true,
+            CableAssemblyId = "cable-1",
+            Core = "1",
+        };
+        source = DocumentHasher.WithContentHash(source with
+        {
+            Conductors = [routed, .. source.Conductors.Skip(1)],
+            CableAssemblies =
+            [
+                new CableAssemblyV5("cable-1", "C1", [routed.Id], "shielded", 1800, true, null, []),
+            ],
+            Viewport = new ViewportV5(1.25, 84, -32),
+        });
+
+        await repository.SaveAutosaveAsync(source);
+        string recoveryPath = Assert.Single(await repository.FindAutosavePathsAsync());
+        MigrationResult recovered = await repository.LoadAsync(recoveryPath);
+
+        WorkshopDocumentV5 document = Assert.IsType<WorkshopDocumentV5>(recovered.Document);
+        Assert.Equal(source.ContentHash, document.ContentHash);
+        Assert.True(DocumentHasher.MatchesContentHash(document));
+        Assert.Equal(source.Viewport, document.Viewport);
+        Assert.Equal(routed.Waypoints, document.Conductors[0].Waypoints);
+        Assert.True(document.Conductors[0].RouteLocked);
+        Assert.Equal("cable-1", document.Conductors[0].CableAssemblyId);
+        Assert.Equal([routed.Id], Assert.Single(document.CableAssemblies).ConductorIds);
+    }
 }

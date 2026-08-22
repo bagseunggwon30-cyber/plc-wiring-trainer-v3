@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using PlcWiringTrainer.Core.Documents;
 
@@ -5,6 +6,72 @@ namespace PlcWiringTrainer.Core.Tests;
 
 public sealed class MigrationTests
 {
+    [Fact]
+    public async Task AllSixtyFourLegacyProfileAndTerminalAliasesMigrateBehaviorally()
+    {
+        const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+        var profileAliases = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+            typeof(WorkshopDocumentMigrator).GetField("LegacyProfileAliases", flags)!.GetValue(null));
+        var terminalAliasGroups = Assert.IsAssignableFrom<IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>>(
+            typeof(WorkshopDocumentMigrator).GetField("LegacyTerminalAliases", flags)!.GetValue(null));
+        string[] activeIdentityAliases =
+        [
+            "dc-supply-24v",
+            "lamp-green-v1",
+            "lamp-yellow-v1",
+            "lamp-white-v1",
+            "prox-npn-v2",
+            "prox-pnp-v2",
+        ];
+        Assert.Equal(64, profileAliases.Count + terminalAliasGroups.Sum(group => group.Value.Count) + activeIdentityAliases.Length);
+
+        string root = TestDirectory.Create();
+        var migrator = new WorkshopDocumentMigrator(
+            Path.Combine(root, "backups"),
+            Path.Combine(root, "quarantine"));
+        int index = 0;
+        foreach ((string alias, string expectedProfileId) in profileAliases
+            .Concat(activeIdentityAliases.Select(alias => new KeyValuePair<string, string>(alias, alias))))
+        {
+            string source = Path.Combine(root, $"profile-alias-{index++}.json");
+            await File.WriteAllTextAsync(source, $$"""
+                { "d": { "device": { "type": "{{alias}}", "x": 10, "y": 20 } }, "w": [], "n": 1 }
+                """);
+
+            MigrationResult result = await migrator.MigrateAsync(source);
+
+            Assert.Equal(MigrationStatus.Converted, result.Status);
+            Assert.Equal(expectedProfileId, Assert.Single(result.Document!.Devices).ProfileId);
+        }
+
+        foreach ((string legacyType, IReadOnlyDictionary<string, string> aliases) in terminalAliasGroups)
+        {
+            foreach ((string alias, string expectedTerminalId) in aliases)
+            {
+                string source = Path.Combine(root, $"terminal-alias-{index++}.json");
+                await File.WriteAllTextAsync(source, $$"""
+                    {
+                      "d": {
+                        "source": { "type": "{{legacyType}}", "x": 10, "y": 20 },
+                        "lamp": { "type": "LAMP-W", "x": 200, "y": 20 }
+                      },
+                      "w": [{
+                        "id": "wire",
+                        "from": { "dev": "source", "term": "{{alias}}" },
+                        "to": { "dev": "lamp", "term": "A1" }
+                      }],
+                      "n": 1
+                    }
+                    """);
+
+                MigrationResult result = await migrator.MigrateAsync(source);
+
+                Assert.Equal(MigrationStatus.Converted, result.Status);
+                Assert.Equal(expectedTerminalId, Assert.Single(result.Document!.Conductors).Start.TerminalId);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
@@ -124,7 +191,7 @@ public sealed class MigrationTests
         Assert.Equal(2, document.Devices.Length);
         Assert.Equal("mean-well:mdr-100-24", document.Devices.Single(device => device.Id == "d1").ProfileId);
         Assert.Equal("MDR-100", document.Devices.Single(device => device.Id == "d1").CatalogEntryId);
-        Assert.Equal("legacy:pb-1c", document.Devices.Single(device => device.Id == "d2").ProfileId);
+        Assert.Equal("educational:pushbutton-1c", document.Devices.Single(device => device.Id == "d2").ProfileId);
         Assert.Equal("PB-1C", document.Devices.Single(device => device.Id == "d2").CatalogEntryId);
         Assert.Equal(90, document.Devices.Single(device => device.Id == "d1").Rotation);
         ConductorV5 conductor = Assert.Single(document.Conductors);

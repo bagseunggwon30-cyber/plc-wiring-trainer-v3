@@ -1,14 +1,21 @@
 using PlcWiringTrainer.Core.Documents;
 using PlcWiringTrainer.Core.Validation;
+using PlcWiringTrainer.Core.Wiring;
 
 namespace PlcWiringTrainer.Core.Workbench;
 
+/// <summary>ValidationFreshness 값의 종류를 정의합니다.</summary>
 public enum ValidationFreshness
 {
+    /// <summary>Stale 상태를 나타냅니다.</summary>
     Stale,
+    /// <summary>Running 상태를 나타냅니다.</summary>
     Running,
+    /// <summary>Pass 상태를 나타냅니다.</summary>
     Pass,
+    /// <summary>Fail 상태를 나타냅니다.</summary>
     Fail,
+    /// <summary>Blocked 상태를 나타냅니다.</summary>
     Blocked,
 }
 
@@ -16,6 +23,7 @@ public enum ValidationFreshness
 public sealed class WorkbenchStore : IAsyncDisposable
 {
     private readonly IValidationService _validationService;
+    private readonly IConnectionAssessmentService _connectionAssessmentService;
     private readonly TimeSpan _validationDebounce;
     private readonly Stack<WorkshopDocumentV5> _undo = new();
     private readonly Stack<WorkshopDocumentV5> _redo = new();
@@ -23,31 +31,55 @@ public sealed class WorkbenchStore : IAsyncDisposable
     private Task _validationTask = Task.CompletedTask;
     private bool _disposed;
 
+    /// <summary>WorkbenchStore 작업을 수행합니다.</summary>
     public WorkbenchStore(
         WorkshopDocumentV5 document,
         IValidationService validationService,
         TimeSpan? validationDebounce = null)
+        : this(
+            document,
+            validationService,
+            new ConnectionAssessmentService(DeviceProfileCatalog.CreateDefault()),
+            validationDebounce)
+    {
+    }
+
+    /// <summary>WorkbenchStore 작업을 수행합니다.</summary>
+    public WorkbenchStore(
+        WorkshopDocumentV5 document,
+        IValidationService validationService,
+        IConnectionAssessmentService connectionAssessmentService,
+        TimeSpan? validationDebounce = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         _validationService = validationService ?? throw new ArgumentNullException(nameof(validationService));
+        _connectionAssessmentService = connectionAssessmentService
+            ?? throw new ArgumentNullException(nameof(connectionAssessmentService));
         _validationDebounce = validationDebounce ?? TimeSpan.FromMilliseconds(300);
         Document = DocumentHasher.WithContentHash(document);
         ValidationFreshness = ValidationFreshness.Stale;
         ScheduleValidation();
     }
 
+    /// <summary>현재 revision과 canonical hash가 반영된 읽기 전용 문서 스냅샷입니다.</summary>
     public WorkshopDocumentV5 Document { get; private set; }
 
+    /// <summary>ValidationFreshness 값을 제공합니다.</summary>
     public ValidationFreshness ValidationFreshness { get; private set; }
 
+    /// <summary>현재 문서와 revision/hash가 일치할 때만 게시된 마지막 검증 결과입니다.</summary>
     public ValidationResultV5? ValidationResult { get; private set; }
 
+    /// <summary>CanUndo 값을 제공합니다.</summary>
     public bool CanUndo => _undo.Count > 0;
 
+    /// <summary>CanRedo 값을 제공합니다.</summary>
     public bool CanRedo => _redo.Count > 0;
 
+    /// <summary>Changed 값을 제공합니다.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>UpdateDevice 작업을 수행합니다.</summary>
     public void UpdateDevice(string deviceId, Func<DeviceInstanceV5, DeviceInstanceV5> update)
     {
         ThrowIfDisposed();
@@ -71,6 +103,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
         Commit(Document with { Devices = devices });
     }
 
+    /// <summary>UpdateConductor 작업을 수행합니다.</summary>
     public void UpdateConductor(string conductorId, Func<ConductorV5, ConductorV5> update)
     {
         ThrowIfDisposed();
@@ -89,11 +122,22 @@ public sealed class WorkbenchStore : IAsyncDisposable
             return;
         }
 
+        if (updated.Id != original.Id)
+        {
+            throw new InvalidOperationException("전선 ID는 편집할 수 없습니다.");
+        }
+
+        if (updated.Start != original.Start || updated.End != original.End)
+        {
+            throw new InvalidOperationException("끝단 변경에는 ReconnectConductor를 사용해야 합니다.");
+        }
+
         ConductorV5[] conductors = [.. Document.Conductors];
         conductors[index] = updated;
         Commit(Document with { Conductors = conductors });
     }
 
+    /// <summary>AddDevice 작업을 수행합니다.</summary>
     public void AddDevice(DeviceInstanceV5 device)
     {
         ThrowIfDisposed();
@@ -106,7 +150,9 @@ public sealed class WorkbenchStore : IAsyncDisposable
         Commit(Document with { Devices = [.. Document.Devices, device] });
     }
 
-    public void AddConductor(ConductorV5 conductor)
+    /// <summary>candidate 문서를 사전판정한 뒤 허용 또는 경고인 경우에만 전선을 한 undo 단계로 추가합니다.</summary>
+    /// <returns>차단 결과이면 문서, revision, hash, autosave와 undo 기록은 바뀌지 않습니다.</returns>
+    public ConnectionAssessmentV5 AddConductor(ConductorV5 conductor)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(conductor);
@@ -115,9 +161,95 @@ public sealed class WorkbenchStore : IAsyncDisposable
             throw new InvalidOperationException($"중복 전선 ID입니다: {conductor.Id}");
         }
 
-        Commit(Document with { Conductors = [.. Document.Conductors, conductor] });
+        ConnectionAssessmentV5 assessment = _connectionAssessmentService.AssessConductor(Document, conductor);
+        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
+        {
+            return assessment;
+        }
+
+        ConductorV5 committed = conductor.ManualColor
+            ? conductor
+            : conductor with { Color = assessment.SuggestedColor };
+        Commit(Document with { Conductors = [.. Document.Conductors, committed] });
+        return assessment;
     }
 
+    /// <summary>기존 전선을 점유량 계산에서 제외한 candidate로 재판정하고 끝단만 원자적으로 변경합니다.</summary>
+    /// <returns>차단 결과이면 기존 끝단과 경로 및 모든 편집 이력이 그대로 유지됩니다.</returns>
+    public ConnectionAssessmentV5 ReconnectConductor(
+        string conductorId,
+        bool reconnectStart,
+        TerminalRefV5 terminal)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(conductorId);
+        ArgumentNullException.ThrowIfNull(terminal);
+        int index = Array.FindIndex(Document.Conductors, conductor => conductor.Id == conductorId);
+        if (index < 0)
+        {
+            throw new KeyNotFoundException($"전선을 찾을 수 없습니다: {conductorId}");
+        }
+
+        ConductorV5 original = Document.Conductors[index];
+        ConductorV5 candidate = reconnectStart
+            ? original with { Start = terminal }
+            : original with { End = terminal };
+        if (candidate == original)
+        {
+            return new ConnectionAssessmentV5(
+                ConnectionDispositionV5.Allowed,
+                "CONNECTION_UNCHANGED",
+                "전선 끝단이 변경되지 않았습니다.",
+                candidate.Start,
+                candidate.End);
+        }
+
+        ConnectionAssessmentV5 assessment = _connectionAssessmentService.AssessConductor(
+            Document,
+            candidate,
+            conductorId);
+        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
+        {
+            return assessment;
+        }
+
+        ConductorV5[] conductors = [.. Document.Conductors];
+        conductors[index] = candidate with
+        {
+            Color = candidate.ManualColor ? candidate.Color : assessment.SuggestedColor,
+            DiagnosticOverride = candidate.DiagnosticOverride || assessment.RequiresDiagnosticOverride,
+        };
+        Commit(Document with { Conductors = conductors });
+        return assessment;
+    }
+
+    /// <summary>잠기지 않은 전선 경로만 한 revision과 undo 단계로 교체합니다.</summary>
+    public void ReplaceUnlockedRoutes(IReadOnlyDictionary<string, PointV5[]> routes)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(routes);
+        bool changed = false;
+        ConductorV5[] conductors = Document.Conductors
+            .Select(conductor =>
+            {
+                if (conductor.RouteLocked
+                    || !routes.TryGetValue(conductor.Id, out PointV5[]? waypoints)
+                    || conductor.Waypoints.SequenceEqual(waypoints))
+                {
+                    return conductor;
+                }
+
+                changed = true;
+                return conductor with { Waypoints = [.. waypoints] };
+            })
+            .ToArray();
+        if (changed)
+        {
+            Commit(Document with { Conductors = conductors });
+        }
+    }
+
+    /// <summary>RemoveDevice 작업을 수행합니다.</summary>
     public void RemoveDevice(string deviceId)
     {
         ThrowIfDisposed();
@@ -142,6 +274,10 @@ public sealed class WorkbenchStore : IAsyncDisposable
             .Select(cable => cable with
             {
                 ConductorIds = cable.ConductorIds.Except(removedConductorIds, StringComparer.Ordinal).ToArray(),
+                DrainConductorId = cable.DrainConductorId is not null
+                    && removedConductorIds.Contains(cable.DrainConductorId, StringComparer.Ordinal)
+                        ? null
+                        : cable.DrainConductorId,
             })
             .ToArray();
         Commit(Document with
@@ -161,30 +297,94 @@ public sealed class WorkbenchStore : IAsyncDisposable
         });
     }
 
+    /// <summary>RemoveConductor 작업을 수행합니다.</summary>
     public void RemoveConductor(string conductorId)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(conductorId);
-        if (!Document.Conductors.Any(conductor => conductor.Id == conductorId))
+        RemoveConductors([conductorId]);
+    }
+
+    /// <summary>여러 전선을 하나의 revision과 undo 단계로 원자적으로 삭제합니다.</summary>
+    public void RemoveConductors(IReadOnlyCollection<string> conductorIds)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(conductorIds);
+        var ids = new HashSet<string>(conductorIds, StringComparer.Ordinal);
+        if (ids.Count == 0)
         {
-            throw new KeyNotFoundException($"전선을 찾을 수 없습니다: {conductorId}");
+            return;
+        }
+
+        string[] missing = ids.Where(id => !Document.Conductors.Any(conductor => conductor.Id == id)).ToArray();
+        if (missing.Length > 0)
+        {
+            throw new KeyNotFoundException($"전선을 찾을 수 없습니다: {string.Join(", ", missing)}");
         }
 
         Commit(Document with
         {
-            Conductors = Document.Conductors.Where(conductor => conductor.Id != conductorId).ToArray(),
+            Conductors = Document.Conductors.Where(conductor => !ids.Contains(conductor.Id)).ToArray(),
             CableAssemblies = Document.CableAssemblies
                 .Select(cable => cable with
                 {
                     ConductorIds = cable.ConductorIds
-                        .Where(id => id != conductorId)
+                        .Where(id => !ids.Contains(id))
                         .ToArray(),
+                    DrainConductorId = cable.DrainConductorId is not null && ids.Contains(cable.DrainConductorId)
+                        ? null
+                        : cable.DrainConductorId,
                 })
                 .ToArray(),
         });
     }
 
-    public void AddTerminalBridge(TerminalBridgeV5 bridge)
+    /// <summary>여러 전선의 공통 속성을 하나의 revision과 undo 단계로 변경합니다.</summary>
+    public void UpdateConductors(
+        IReadOnlyCollection<string> conductorIds,
+        Func<ConductorV5, ConductorV5> update)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(conductorIds);
+        ArgumentNullException.ThrowIfNull(update);
+        var ids = new HashSet<string>(conductorIds, StringComparer.Ordinal);
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        string[] missing = ids.Where(id => !Document.Conductors.Any(conductor => conductor.Id == id)).ToArray();
+        if (missing.Length > 0)
+        {
+            throw new KeyNotFoundException($"전선을 찾을 수 없습니다: {string.Join(", ", missing)}");
+        }
+
+        bool changed = false;
+        ConductorV5[] conductors = Document.Conductors.Select(conductor =>
+        {
+            if (!ids.Contains(conductor.Id))
+            {
+                return conductor;
+            }
+
+            ConductorV5 edited = update(conductor);
+            if (edited.Id != conductor.Id || edited.Start != conductor.Start || edited.End != conductor.End)
+            {
+                throw new InvalidOperationException("일괄 속성 편집으로 전선 ID나 끝단을 변경할 수 없습니다.");
+            }
+
+            changed |= edited != conductor;
+            return edited;
+        }).ToArray();
+        if (changed)
+        {
+            Commit(Document with { Conductors = conductors });
+        }
+    }
+
+    /// <summary>모든 단자 쌍의 전기 위험과 conductor/bridge 합산 점유량을 판정한 뒤 점퍼를 추가합니다.</summary>
+    /// <returns>차단 결과이면 문서와 편집 이력은 바뀌지 않습니다.</returns>
+    public ConnectionAssessmentV5 AddTerminalBridge(TerminalBridgeV5 bridge)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(bridge);
@@ -198,9 +398,22 @@ public sealed class WorkbenchStore : IAsyncDisposable
             throw new InvalidOperationException($"중복 점퍼 ID입니다: {bridge.Id}");
         }
 
+        if (bridge.Terminals.Distinct().Count() != bridge.Terminals.Length)
+        {
+            throw new ArgumentException("같은 단자를 한 점퍼에 두 번 넣을 수 없습니다.", nameof(bridge));
+        }
+
+        ConnectionAssessmentV5 assessment = _connectionAssessmentService.AssessBridge(Document, bridge);
+        if (assessment.Disposition == ConnectionDispositionV5.Blocked)
+        {
+            return assessment;
+        }
+
         Commit(Document with { TerminalBridges = [.. Document.TerminalBridges, bridge] });
+        return assessment;
     }
 
+    /// <summary>UpdateViewDevicePosition 작업을 수행합니다.</summary>
     public void UpdateViewDevicePosition(string viewId, string deviceId, PointV5 position)
     {
         ThrowIfDisposed();
@@ -221,6 +434,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
         Commit(Document with { ViewLayouts = layouts });
     }
 
+    /// <summary>Undo 작업을 수행합니다.</summary>
     public bool Undo()
     {
         ThrowIfDisposed();
@@ -234,6 +448,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
         return true;
     }
 
+    /// <summary>Redo 작업을 수행합니다.</summary>
     public bool Redo()
     {
         ThrowIfDisposed();
@@ -247,12 +462,14 @@ public sealed class WorkbenchStore : IAsyncDisposable
         return true;
     }
 
+    /// <summary>WaitForValidationAsync 작업을 수행합니다.</summary>
     public Task WaitForValidationAsync()
     {
         ThrowIfDisposed();
         return _validationTask;
     }
 
+    /// <summary>Revalidate 작업을 수행합니다.</summary>
     public void Revalidate()
     {
         ThrowIfDisposed();
@@ -262,6 +479,7 @@ public sealed class WorkbenchStore : IAsyncDisposable
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>DisposeAsync 작업을 수행합니다.</summary>
     public async ValueTask DisposeAsync()
     {
         if (_disposed)

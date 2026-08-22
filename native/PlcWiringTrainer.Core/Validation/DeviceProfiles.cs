@@ -4,35 +4,61 @@ using PlcWiringTrainer.Core.Documents;
 
 namespace PlcWiringTrainer.Core.Validation;
 
+/// <summary>DeviceProfileKind 값의 종류를 정의합니다.</summary>
 public enum DeviceProfileKind
 {
+    /// <summary>Generic 상태를 나타냅니다.</summary>
     Generic,
+    /// <summary>DcPowerSupply 상태를 나타냅니다.</summary>
     DcPowerSupply,
+    /// <summary>Lamp 상태를 나타냅니다.</summary>
     Lamp,
+    /// <summary>NpnProximitySensor 상태를 나타냅니다.</summary>
     NpnProximitySensor,
+    /// <summary>PnpProximitySensor 상태를 나타냅니다.</summary>
     PnpProximitySensor,
+    /// <summary>PlcDigitalInput 상태를 나타냅니다.</summary>
     PlcDigitalInput,
+    /// <summary>AcPowerSupply 상태를 나타냅니다.</summary>
     AcPowerSupply,
+    /// <summary>AcLoad 상태를 나타냅니다.</summary>
     AcLoad,
+    /// <summary>TwoWireTransmitter 상태를 나타냅니다.</summary>
     TwoWireTransmitter,
+    /// <summary>AnalogInput 상태를 나타냅니다.</summary>
     AnalogInput,
 }
 
+/// <summary>PaletteAvailabilityV5 값의 종류를 정의합니다.</summary>
 public enum PaletteAvailabilityV5
 {
+    /// <summary>Ready 상태를 나타냅니다.</summary>
     Ready,
+    /// <summary>Preparation 상태를 나타냅니다.</summary>
     Preparation,
+    /// <summary>Boundary 상태를 나타냅니다.</summary>
     Boundary,
+    /// <summary>Hidden 상태를 나타냅니다.</summary>
     Hidden,
 }
 
+/// <summary>ManualEvidenceStatusV5 값의 종류를 정의합니다.</summary>
 public enum ManualEvidenceStatusV5
 {
+    /// <summary>Unresolved 상태를 나타냅니다.</summary>
     Unresolved,
+    /// <summary>FamilyManual 상태를 나타냅니다.</summary>
     FamilyManual,
+    /// <summary>ExactProduct 상태를 나타냅니다.</summary>
     ExactProduct,
 }
 
+/// <summary>DeviceArtworkV5 공개 계약을 나타냅니다.</summary>
+/// <param name="AssetPath">AssetPath 계약 값입니다.</param>
+/// <param name="SourcePath">SourcePath 계약 값입니다.</param>
+/// <param name="Sha256">Sha256 계약 값입니다.</param>
+/// <param name="ImageBox">ImageBox 계약 값입니다.</param>
+/// <param name="ImageHasLabels">ImageHasLabels 계약 값입니다.</param>
 public sealed record DeviceArtworkV5(
     string AssetPath,
     string SourcePath,
@@ -40,12 +66,26 @@ public sealed record DeviceArtworkV5(
     RectV5? ImageBox,
     bool ImageHasLabels);
 
+/// <summary>ManualReferenceV5 공개 계약을 나타냅니다.</summary>
+/// <param name="DocumentPath">DocumentPath 계약 값입니다.</param>
+/// <param name="Sha256">Sha256 계약 값입니다.</param>
+/// <param name="Pages">Pages 계약 값입니다.</param>
+/// <param name="SourceUrl">SourceUrl 계약 값입니다.</param>
 public sealed record ManualReferenceV5(
     string DocumentPath,
     string Sha256,
     string Pages,
     string SourceUrl);
 
+/// <summary>DeviceProfileV5 공개 계약을 나타냅니다.</summary>
+/// <param name="Id">Id 계약 값입니다.</param>
+/// <param name="Version">Version 계약 값입니다.</param>
+/// <param name="DisplayName">DisplayName 계약 값입니다.</param>
+/// <param name="Kind">Kind 계약 값입니다.</param>
+/// <param name="EvidenceGrade">EvidenceGrade 계약 값입니다.</param>
+/// <param name="AssetPath">AssetPath 계약 값입니다.</param>
+/// <param name="Terminals">Terminals 계약 값입니다.</param>
+/// <param name="IsPaletteVisible">IsPaletteVisible 계약 값입니다.</param>
 public sealed record DeviceProfileV5(
     string Id,
     int Version,
@@ -56,36 +96,50 @@ public sealed record DeviceProfileV5(
     TerminalDefinitionV5[] Terminals,
     bool IsPaletteVisible = true)
 {
+    /// <summary>LegacyType 값을 제공합니다.</summary>
     public required string LegacyType { get; init; }
 
+    /// <summary>Category 값을 제공합니다.</summary>
     public required string Category { get; init; }
 
+    /// <summary>Description 값을 제공합니다.</summary>
     public string Description { get; init; } = string.Empty;
 
+    /// <summary>DefaultWidth 값을 제공합니다.</summary>
     public double DefaultWidth { get; init; } = 150;
 
+    /// <summary>DefaultHeight 값을 제공합니다.</summary>
     public double DefaultHeight { get; init; } = 100;
 
+    /// <summary>Availability 값을 제공합니다.</summary>
     public PaletteAvailabilityV5 Availability { get; init; } = PaletteAvailabilityV5.Ready;
 
+    /// <summary>ManualEvidence 값을 제공합니다.</summary>
     public ManualEvidenceStatusV5 ManualEvidence { get; init; }
 
+    /// <summary>Manufacturer 값을 제공합니다.</summary>
     public string Manufacturer { get; init; } = string.Empty;
 
+    /// <summary>PartNumber 값을 제공합니다.</summary>
     public string PartNumber { get; init; } = string.Empty;
 
+    /// <summary>ManualReferences 값을 제공합니다.</summary>
     public ManualReferenceV5[] ManualReferences { get; init; } = [];
 
+    /// <summary>Artwork 값을 제공합니다.</summary>
     public required DeviceArtworkV5 Artwork { get; init; }
 
+    /// <summary>InternalLinks 값을 제공합니다.</summary>
     public InternalLinkV5[] InternalLinks { get; init; } = [];
 }
 
+/// <summary>DeviceProfileCatalog 값을 제공합니다.</summary>
 public sealed class DeviceProfileCatalog
 {
     private readonly Dictionary<string, DeviceProfileV5> _profiles;
     private readonly Dictionary<string, DeviceProfileV5> _compatibilityAliases;
 
+    /// <summary>DeviceProfileCatalog 작업을 수행합니다.</summary>
     public DeviceProfileCatalog(IEnumerable<DeviceProfileV5> profiles)
         : this(profiles, [])
     {
@@ -100,17 +154,21 @@ public sealed class DeviceProfileCatalog
         _compatibilityAliases = compatibilityAliases.ToDictionary(StringComparer.Ordinal);
     }
 
+    /// <summary>Profiles 값을 제공합니다.</summary>
     public IReadOnlyCollection<DeviceProfileV5> Profiles => _profiles.Values;
 
+    /// <summary>ResolvableProfiles 값을 제공합니다.</summary>
     public IReadOnlyCollection<DeviceProfileV5> ResolvableProfiles => _profiles.Values
         .Concat(_compatibilityAliases.Values)
         .DistinctBy(profile => profile.Id)
         .ToArray();
 
+    /// <summary>TryGet 작업을 수행합니다.</summary>
     public bool TryGet(string profileId, out DeviceProfileV5 profile)
         => _profiles.TryGetValue(profileId, out profile!)
             || _compatibilityAliases.TryGetValue(profileId, out profile!);
 
+    /// <summary>CreateDefault 작업을 수행합니다.</summary>
     public static DeviceProfileCatalog CreateDefault()
     {
         LegacyCatalogFile manifest = LegacyCatalogReader.Load();

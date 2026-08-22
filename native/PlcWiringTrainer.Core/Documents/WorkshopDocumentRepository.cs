@@ -13,6 +13,12 @@ public interface IWorkshopDocumentRepository
 
     /// <summary>사용자 문서와 분리된 자동 복구 위치에 snapshot을 저장합니다.</summary>
     Task SaveAutosaveAsync(WorkshopDocumentV5 document, CancellationToken cancellationToken = default);
+
+    /// <summary>최근 자동 복구본 경로를 수정 시각의 내림차순으로 반환합니다.</summary>
+    Task<string[]> FindAutosavePathsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>문서 ID에 해당하는 자동 복구본을 삭제합니다.</summary>
+    Task DeleteAutosaveAsync(string documentId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>문서 파일 I/O와 migrator를 결합하는 기본 저장소입니다.</summary>
@@ -21,6 +27,7 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
     private readonly IWorkshopDocumentMigrator _migrator;
     private readonly string _autosaveDirectory;
 
+    /// <summary>WorkshopDocumentRepository 작업을 수행합니다.</summary>
     public WorkshopDocumentRepository(IWorkshopDocumentMigrator migrator, string? autosaveDirectory = null)
     {
         _migrator = migrator ?? throw new ArgumentNullException(nameof(migrator));
@@ -30,6 +37,7 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
             "Autosave");
     }
 
+    /// <summary>SaveAsync 작업을 수행합니다.</summary>
     public async Task SaveAsync(
         string path,
         WorkshopDocumentV5 document,
@@ -73,16 +81,55 @@ public sealed class WorkshopDocumentRepository : IWorkshopDocumentRepository
         }
     }
 
+    /// <summary>LoadAsync 작업을 수행합니다.</summary>
     public Task<MigrationResult> LoadAsync(string path, CancellationToken cancellationToken = default)
         => _migrator.MigrateAsync(path, cancellationToken);
 
+    /// <summary>SaveAutosaveAsync 작업을 수행합니다.</summary>
     public Task SaveAutosaveAsync(
         WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);
-        string safeId = string.Concat(document.DocumentId.Select(
+        return SaveAsync(AutosavePath(document.DocumentId), document, cancellationToken);
+    }
+
+    /// <summary>FindAutosavePathsAsync 작업을 수행합니다.</summary>
+    public Task<string[]> FindAutosavePathsAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!Directory.Exists(_autosaveDirectory))
+        {
+            return Task.FromResult(Array.Empty<string>());
+        }
+
+        string[] paths = new DirectoryInfo(_autosaveDirectory)
+            .EnumerateFiles("*.plcw", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .ThenBy(file => file.Name, StringComparer.Ordinal)
+            .Select(file => file.FullName)
+            .ToArray();
+        return Task.FromResult(paths);
+    }
+
+    /// <summary>DeleteAutosaveAsync 작업을 수행합니다.</summary>
+    public Task DeleteAutosaveAsync(string documentId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
+        cancellationToken.ThrowIfCancellationRequested();
+        string path = AutosavePath(documentId);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private string AutosavePath(string documentId)
+    {
+        string safeId = string.Concat(documentId.Select(
             character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
-        return SaveAsync(Path.Combine(_autosaveDirectory, $"{safeId}.plcw"), document, cancellationToken);
+        return Path.Combine(_autosaveDirectory, $"{safeId}.plcw");
     }
 }

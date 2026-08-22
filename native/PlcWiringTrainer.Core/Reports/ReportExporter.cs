@@ -5,15 +5,28 @@ using PlcWiringTrainer.Core.Validation;
 
 namespace PlcWiringTrainer.Core.Reports;
 
+/// <summary>ReportKindV5 값의 종류를 정의합니다.</summary>
 public enum ReportKindV5
 {
+    /// <summary>CanonicalJson 상태를 나타냅니다.</summary>
     CanonicalJson,
+    /// <summary>PinToPinCsv 상태를 나타냅니다.</summary>
     PinToPinCsv,
+    /// <summary>CableCoreCsv 상태를 나타냅니다.</summary>
     CableCoreCsv,
+    /// <summary>TerminalPlanCsv 상태를 나타냅니다.</summary>
     TerminalPlanCsv,
+    /// <summary>BillOfMaterialsCsv 상태를 나타냅니다.</summary>
     BillOfMaterialsCsv,
 }
 
+/// <summary>ReportArtifactV5 공개 계약을 나타냅니다.</summary>
+/// <param name="SuggestedFileName">SuggestedFileName 계약 값입니다.</param>
+/// <param name="MediaType">MediaType 계약 값입니다.</param>
+/// <param name="Content">Content 계약 값입니다.</param>
+/// <param name="VerifiedPrewire">VerifiedPrewire 계약 값입니다.</param>
+/// <param name="Revision">Revision 계약 값입니다.</param>
+/// <param name="ContentHash">ContentHash 계약 값입니다.</param>
 public sealed record ReportArtifactV5(
     string SuggestedFileName,
     string MediaType,
@@ -43,11 +56,13 @@ public sealed class ReportExporter : IReportExporter
     private static readonly string[] BillOfMaterialsHeader = ["profileId", "catalogEntryId", "displayName", "exactOrderCode", "quantity", "evidence"];
     private readonly DeviceProfileCatalog _catalog;
 
+    /// <summary>ReportExporter 작업을 수행합니다.</summary>
     public ReportExporter(DeviceProfileCatalog catalog)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
     }
 
+    /// <summary>ExportAsync 작업을 수행합니다.</summary>
     public Task<ReportArtifactV5> ExportAsync(
         WorkshopDocumentV5 document,
         ValidationResultV5? validation,

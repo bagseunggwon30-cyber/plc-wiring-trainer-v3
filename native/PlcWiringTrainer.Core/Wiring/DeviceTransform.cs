@@ -5,6 +5,7 @@ namespace PlcWiringTrainer.Core.Wiring;
 /// <summary>장비 회전을 포함한 단자 좌표와 선택 영역 변환을 제공합니다.</summary>
 public static class DeviceTransform
 {
+    /// <summary>TerminalToWorld 작업을 수행합니다.</summary>
     public static PointV5 TerminalToWorld(
         DeviceInstanceV5 device,
         PointV5 profileSize,
@@ -18,6 +19,7 @@ public static class DeviceTransform
         return RotateAroundCenter(device, new PointV5(localX, localY), device.Rotation);
     }
 
+    /// <summary>Contains 작업을 수행합니다.</summary>
     public static bool Contains(DeviceInstanceV5 device, PointV5 worldPoint)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -28,6 +30,7 @@ public static class DeviceTransform
             && local.Y <= device.Y + device.Height;
     }
 
+    /// <summary>AxisAlignedBounds 작업을 수행합니다.</summary>
     public static RectV5 AxisAlignedBounds(DeviceInstanceV5 device)
     {
         PointV5[] corners =

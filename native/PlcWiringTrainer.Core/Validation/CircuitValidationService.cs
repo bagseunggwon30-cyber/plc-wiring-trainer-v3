@@ -7,11 +7,13 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
 {
     private readonly DeviceProfileCatalog _catalog;
 
+    /// <summary>CircuitValidationService 작업을 수행합니다.</summary>
     public CircuitValidationService(DeviceProfileCatalog catalog)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
     }
 
+    /// <summary>ValidateAsync 작업을 수행합니다.</summary>
     public Task<ValidationResultV5> ValidateAsync(
         WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default)
@@ -33,7 +35,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "PHYSICAL_SCALE_REQUIRED",
+                ValidationIssueCodes.PHYSICAL_SCALE_REQUIRED,
                 ValidationSeverity.Error,
                 true,
                 "완료된 물리 패널은 mm 원본 단위와 0보다 큰 canvasUnitsPerMm 축척이 필요합니다.",
@@ -46,7 +48,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "SOURCE_SYSTEM_INCOMPLETE",
+                ValidationIssueCodes.SOURCE_SYSTEM_INCOMPLETE,
                 ValidationSeverity.Error,
                 true,
                 "완료된 전원 시스템에는 전원 종류와 정격 전압이 필요합니다.",
@@ -61,7 +63,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             {
                 issues.Add(Issue(
                     document,
-                    "PROFILE_NOT_FOUND",
+                ValidationIssueCodes.PROFILE_NOT_FOUND,
                     ValidationSeverity.Error,
                     true,
                     $"'{device.Label}' 장비의 전기 프로필을 찾을 수 없습니다.",
@@ -85,7 +87,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             {
                 issues.Add(Issue(
                     document,
-                    "DEVICE_OUTSIDE_PANEL",
+                ValidationIssueCodes.DEVICE_OUTSIDE_PANEL,
                     ValidationSeverity.Warning,
                     false,
                     $"'{device.Label}' 장비가 패널 작업 영역을 벗어났습니다.",
@@ -97,7 +99,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             {
                 issues.Add(Issue(
                     document,
-                    "PROFILE_VERSION_MISMATCH",
+                ValidationIssueCodes.PROFILE_VERSION_MISMATCH,
                     ValidationSeverity.Error,
                     true,
                     $"'{device.Label}' 장비 프로필 버전이 현재 매니페스트와 다릅니다.",
@@ -111,7 +113,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 bool blocking = document.Mode == WorkshopMode.Prewire;
                 issues.Add(Issue(
                     document,
-                    blocking ? "MANUAL_EVIDENCE_REQUIRED" : "EDUCATIONAL_PROFILE",
+                    blocking ? ValidationIssueCodes.MANUAL_EVIDENCE_REQUIRED : ValidationIssueCodes.EDUCATIONAL_PROFILE,
                     blocking ? ValidationSeverity.Error : ValidationSeverity.Information,
                     blocking,
                     blocking
@@ -138,7 +140,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 {
                     issues.Add(Issue(
                         document,
-                        "INVALID_INTERNAL_LINK",
+                ValidationIssueCodes.INVALID_INTERNAL_LINK,
                         ValidationSeverity.Error,
                         true,
                         $"'{deviceId}' 프로필의 내부 도통 단자가 존재하지 않습니다: {link.FromTerminalId} ↔ {link.ToTerminalId}",
@@ -163,7 +165,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             {
                 issues.Add(Issue(
                     document,
-                    "INVALID_TERMINAL_BRIDGE",
+                ValidationIssueCodes.INVALID_TERMINAL_BRIDGE,
                     ValidationSeverity.Error,
                     true,
                     $"점퍼 '{bridge.Id}'가 존재하지 않는 단자 또는 2개 미만의 단자를 참조합니다.",
@@ -183,13 +185,13 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         }
 
         foreach (IGrouping<string, ConductorV5> group in document.Conductors
-            .Where(conductor => !string.IsNullOrWhiteSpace(conductor.Label))
-            .GroupBy(conductor => conductor.Label, StringComparer.OrdinalIgnoreCase)
+            .Where(conductor => !string.IsNullOrWhiteSpace(conductor.WireNumber))
+            .GroupBy(conductor => conductor.WireNumber, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1))
         {
             issues.Add(Issue(
                 document,
-                "DUPLICATE_WIRE_NUMBER",
+                ValidationIssueCodes.DUPLICATE_WIRE_NUMBER,
                 ValidationSeverity.Warning,
                 false,
                 $"선번 '{group.Key}'이(가) 둘 이상의 전선에 사용되었습니다.",
@@ -207,7 +209,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "DUPLICATE_CABLE_CORE",
+                ValidationIssueCodes.DUPLICATE_CABLE_CORE,
                 ValidationSeverity.Error,
                 true,
                 $"케이블/core '{group.Key}'이(가) 둘 이상의 전선에 배정되었습니다.",
@@ -219,7 +221,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "SHIELD_DRAIN_REQUIRED",
+                ValidationIssueCodes.SHIELD_DRAIN_REQUIRED,
                 ValidationSeverity.Warning,
                 false,
                 $"차폐 케이블 '{cable.Designation ?? cable.Id}'에 drain 도체가 지정되지 않았습니다.",
@@ -231,25 +233,98 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
                 "physical-cable"));
         }
 
+        var conductorsById = document.Conductors.ToDictionary(conductor => conductor.Id, StringComparer.Ordinal);
+        var cablesById = document.CableAssemblies.ToDictionary(cable => cable.Id, StringComparer.Ordinal);
+        foreach (CableAssemblyV5 cable in document.CableAssemblies)
+        {
+            foreach (string conductorId in cable.ConductorIds.Where(id => !conductorsById.ContainsKey(id)))
+            {
+                issues.Add(Issue(
+                    document,
+                ValidationIssueCodes.UNKNOWN_CABLE_CONDUCTOR,
+                    ValidationSeverity.Error,
+                    true,
+                    $"케이블 '{cable.Designation ?? cable.Id}'이(가) 없는 전선 '{conductorId}'을 참조합니다.",
+                    [],
+                    "physical-cable"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(cable.DrainConductorId)
+                && !conductorsById.ContainsKey(cable.DrainConductorId))
+            {
+                issues.Add(Issue(
+                    document,
+                ValidationIssueCodes.UNKNOWN_DRAIN_CONDUCTOR,
+                    ValidationSeverity.Error,
+                    true,
+                    $"케이블 '{cable.Designation ?? cable.Id}'의 drain 전선을 찾을 수 없습니다.",
+                    [],
+                    "physical-cable"));
+            }
+
+            foreach (ConductorV5 conductor in cable.ConductorIds
+                .Select(id => conductorsById.GetValueOrDefault(id))
+                .OfType<ConductorV5>())
+            {
+                if (!string.Equals(conductor.CableAssemblyId, cable.Id, StringComparison.Ordinal))
+                {
+                    issues.Add(Issue(
+                        document,
+                ValidationIssueCodes.CABLE_MEMBERSHIP_MISMATCH,
+                        ValidationSeverity.Error,
+                        true,
+                        $"전선 '{conductor.WireNumber}'의 케이블 소속이 assembly와 일치하지 않습니다.",
+                        [ConductorTarget(conductor)],
+                        "physical-cable"));
+                }
+            }
+        }
+
         foreach (ConductorV5 conductor in document.Conductors)
         {
+            if (!string.IsNullOrWhiteSpace(conductor.CableAssemblyId))
+            {
+                if (!cablesById.TryGetValue(conductor.CableAssemblyId, out CableAssemblyV5? cable))
+                {
+                    issues.Add(Issue(
+                        document,
+                ValidationIssueCodes.UNKNOWN_CABLE_ASSEMBLY,
+                        ValidationSeverity.Error,
+                        true,
+                        $"전선 '{conductor.WireNumber}'이(가) 없는 케이블 assembly를 참조합니다.",
+                        [ConductorTarget(conductor)],
+                        "physical-cable"));
+                }
+                else if (!cable.ConductorIds.Contains(conductor.Id, StringComparer.Ordinal))
+                {
+                    issues.Add(Issue(
+                        document,
+                        "CABLE_MEMBERSHIP_MISMATCH",
+                        ValidationSeverity.Error,
+                        true,
+                        $"전선 '{conductor.WireNumber}'이(가) 케이블 assembly의 conductor 목록에 없습니다.",
+                        [ConductorTarget(conductor)],
+                        "physical-cable"));
+                }
+            }
+
             if (!double.IsFinite(conductor.GaugeMm2) || conductor.GaugeMm2 <= 0)
             {
                 issues.Add(Issue(
                     document,
-                    "INVALID_CONDUCTOR_GAUGE",
+                ValidationIssueCodes.INVALID_CONDUCTOR_GAUGE,
                     ValidationSeverity.Error,
                     true,
-                    $"'{conductor.Label}' 전선의 굵기는 0보다 커야 합니다.",
+                    $"'{conductor.WireNumber}' 전선의 굵기는 0보다 커야 합니다.",
                     [ConductorTarget(conductor)],
                     "physical-conductor"));
             }
 
-            if (string.IsNullOrWhiteSpace(conductor.Label))
+            if (string.IsNullOrWhiteSpace(conductor.WireNumber))
             {
                 issues.Add(Issue(
                     document,
-                    "WIRE_NUMBER_REQUIRED",
+                ValidationIssueCodes.WIRE_NUMBER_REQUIRED,
                     ValidationSeverity.Warning,
                     false,
                     "선번이 없는 전선이 있습니다.",
@@ -263,10 +338,10 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             {
                 issues.Add(Issue(
                     document,
-                    "UNKNOWN_TERMINAL",
+                ValidationIssueCodes.UNKNOWN_TERMINAL,
                     ValidationSeverity.Error,
                     true,
-                    $"'{conductor.Label}' 전선이 존재하지 않는 단자를 참조합니다.",
+                    $"'{conductor.WireNumber}' 전선이 존재하지 않는 단자를 참조합니다.",
                     [ConductorTarget(conductor)],
                     "topology"));
                 continue;
@@ -281,14 +356,15 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             .GroupBy(terminal => terminal.Key, StringComparer.Ordinal))
         {
             if (terminalDefinitions.TryGetValue(group.Key, out TerminalDefinitionV5? terminal)
-                && group.Count() > terminal.MaxConductors)
+                && group.Count() > EffectiveMaximumConductors(document, group.First(), terminal))
             {
+                int maximumConductors = EffectiveMaximumConductors(document, group.First(), terminal);
                 issues.Add(Issue(
                     document,
-                    "TERMINAL_CAPACITY_EXCEEDED",
+                ValidationIssueCodes.TERMINAL_CAPACITY_EXCEEDED,
                     ValidationSeverity.Error,
                     true,
-                    $"단자 '{group.Key}'의 허용 전선 수 {terminal.MaxConductors}개를 초과했습니다.",
+                    $"단자 '{group.Key}'의 허용 전선 수 {maximumConductors}개를 초과했습니다.",
                     TargetsForTerminal(document, group.First()),
                     "physical-terminal"));
             }
@@ -300,7 +376,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "DC_SHORT_CIRCUIT",
+                ValidationIssueCodes.DC_SHORT_CIRCUIT,
                 ValidationSeverity.Error,
                 true,
                 "+24V와 0V가 같은 결선망에 연결되어 있습니다.",
@@ -315,7 +391,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "AC_LINE_NEUTRAL_SHORT",
+                ValidationIssueCodes.AC_LINE_NEUTRAL_SHORT,
                 ValidationSeverity.Error,
                 true,
                 "AC 전원의 L과 N이 같은 결선망에 연결되어 있습니다.",
@@ -327,7 +403,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "AC_LINE_TO_PE",
+                ValidationIssueCodes.AC_LINE_TO_PE,
                 ValidationSeverity.Error,
                 true,
                 "AC L이 보호 접지(PE)에 연결되어 있습니다.",
@@ -400,6 +476,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         return Task.FromResult(result);
     }
 
+    /// <summary>SolveAsync 작업을 수행합니다.</summary>
     public async Task<CircuitSolutionV5> SolveAsync(
         WorkshopDocumentV5 document,
         CancellationToken cancellationToken = default)
@@ -460,7 +537,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
             : new TerminalRefV5(device.Id, "A1");
         issues.Add(Issue(
             document,
-            "LAMP_OPEN_OR_REVERSED",
+                ValidationIssueCodes.LAMP_OPEN_OR_REVERSED,
             ValidationSeverity.Error,
             true,
             $"'{device.Label}' 표시등의 +24V/0V 결선을 확인하십시오.",
@@ -486,7 +563,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "SENSOR_SUPPLY_POSITIVE",
+                ValidationIssueCodes.SENSOR_SUPPLY_POSITIVE,
                 ValidationSeverity.Error,
                 true,
                 $"'{sensor.Label}' 센서의 갈색 BN을 +24V에 연결하십시오.",
@@ -498,7 +575,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "SENSOR_SUPPLY_RETURN",
+                ValidationIssueCodes.SENSOR_SUPPLY_RETURN,
                 ValidationSeverity.Error,
                 true,
                 $"'{sensor.Label}' 센서의 청색 BU를 0V에 연결하십시오.",
@@ -511,7 +588,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "SENSOR_OUTPUT_NOT_CONNECTED",
+                ValidationIssueCodes.SENSOR_OUTPUT_NOT_CONNECTED,
                 ValidationSeverity.Error,
                 true,
                 $"'{sensor.Label}' 센서의 흑색 BK 출력을 PLC 입력에 연결하십시오.",
@@ -531,7 +608,9 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         TerminalRefV5? expected = isNpn ? positive : dcReturn;
         if (common is null || !IsConnected(connected, common, expected))
         {
-            string code = isNpn ? "NPN_INPUT_COMMON_POLARITY" : "PNP_INPUT_COMMON_POLARITY";
+            string code = isNpn
+                ? ValidationIssueCodes.NPN_INPUT_COMMON_POLARITY
+                : ValidationIssueCodes.PNP_INPUT_COMMON_POLARITY;
             string expectedLabel = isNpn ? "+24V" : "0V";
             issues.Add(Issue(
                 document,
@@ -569,7 +648,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         TerminalRefV5 problem = !lineOk ? loadLine : !neutralOk ? loadNeutral : loadEarth;
         issues.Add(Issue(
             document,
-            "AC_LOAD_WIRING",
+                ValidationIssueCodes.AC_LOAD_WIRING,
             ValidationSeverity.Error,
             true,
             $"'{device.Label}' AC 부하의 L/N/PE 결선을 확인하십시오.",
@@ -607,7 +686,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "CURRENT_LOOP_POLARITY",
+                ValidationIssueCodes.CURRENT_LOOP_POLARITY,
                 ValidationSeverity.Error,
                 true,
                 $"'{transmitter.Label}' 4-20 mA 루프의 전원·전송기·입력 극성 또는 직렬 경로가 잘못되었습니다.",
@@ -620,7 +699,7 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
         {
             issues.Add(Issue(
                 document,
-                "ANALOG_SCALING_INCOMPLETE",
+                ValidationIssueCodes.ANALOG_SCALING_INCOMPLETE,
                 ValidationSeverity.Warning,
                 false,
                 $"'{transmitter.Label}' 전송기의 공학 단위 스케일 범위가 지정되지 않았습니다.",
@@ -722,6 +801,18 @@ public sealed class CircuitValidationService : IValidationService, ICircuitServi
 
         return link.NormallyClosed ? !active : active;
     }
+
+    private static int EffectiveMaximumConductors(
+        WorkshopDocumentV5 document,
+        TerminalRefV5 reference,
+        TerminalDefinitionV5 terminal)
+        => document.TerminalAssemblies
+            .Where(assembly => assembly.DeviceId == reference.DeviceId
+                && assembly.TerminalIds.Contains(terminal.Id, StringComparer.Ordinal)
+                && assembly.MaximumConductorsPerTerminal is > 0)
+            .Select(assembly => assembly.MaximumConductorsPerTerminal!.Value)
+            .DefaultIfEmpty(terminal.MaxConductors)
+            .Min();
 
     private static ValidationIssueV5 Issue(
         WorkshopDocumentV5 document,

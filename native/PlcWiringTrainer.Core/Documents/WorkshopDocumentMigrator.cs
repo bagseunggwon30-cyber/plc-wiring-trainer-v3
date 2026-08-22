@@ -7,13 +7,23 @@ using PlcWiringTrainer.Core.Validation;
 
 namespace PlcWiringTrainer.Core.Documents;
 
+/// <summary>MigrationStatus 값의 종류를 정의합니다.</summary>
 public enum MigrationStatus
 {
+    /// <summary>AlreadyV5 상태를 나타냅니다.</summary>
     AlreadyV5,
+    /// <summary>Converted 상태를 나타냅니다.</summary>
     Converted,
+    /// <summary>Quarantined 상태를 나타냅니다.</summary>
     Quarantined,
 }
 
+/// <summary>MigrationResult 공개 계약을 나타냅니다.</summary>
+/// <param name="Status">Status 계약 값입니다.</param>
+/// <param name="Document">Document 계약 값입니다.</param>
+/// <param name="BackupPath">BackupPath 계약 값입니다.</param>
+/// <param name="QuarantinePath">QuarantinePath 계약 값입니다.</param>
+/// <param name="Error">Error 계약 값입니다.</param>
 public sealed record MigrationResult(
     MigrationStatus Status,
     WorkshopDocumentV5? Document,
@@ -111,6 +121,7 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
     private readonly string _backupDirectory;
     private readonly string _quarantineDirectory;
 
+    /// <summary>WorkshopDocumentMigrator 작업을 수행합니다.</summary>
     public WorkshopDocumentMigrator(string backupDirectory, string quarantineDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(backupDirectory);
@@ -119,6 +130,7 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
         _quarantineDirectory = Path.GetFullPath(quarantineDirectory);
     }
 
+    /// <summary>MigrateAsync 작업을 수행합니다.</summary>
     public async Task<MigrationResult> MigrateAsync(
         string sourcePath,
         CancellationToken cancellationToken = default)
@@ -807,6 +819,12 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
             return legacyType;
         }
 
+        // 명시적 레거시 별칭은 일반 카탈로그 legacy:* 프로필보다 우선해야 과거 검증 프로필을 잃지 않습니다.
+        if (LegacyProfileAliases.TryGetValue(legacyType, out string? profileId))
+        {
+            return profileId;
+        }
+
         if (CatalogProfileAliases.Value.TryGetValue(legacyType, out string? catalogProfileId))
         {
             return catalogProfileId;
@@ -817,9 +835,7 @@ public sealed class WorkshopDocumentMigrator : IWorkshopDocumentMigrator
             return legacyType;
         }
 
-        return LegacyProfileAliases.TryGetValue(legacyType, out string? profileId)
-            ? profileId
-            : $"legacy:{legacyType}";
+        return $"legacy:{legacyType}";
     }
 
     private static int ProfileVersion(string profileId)

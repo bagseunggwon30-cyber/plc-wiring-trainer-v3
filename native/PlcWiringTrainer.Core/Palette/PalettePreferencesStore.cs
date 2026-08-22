@@ -4,6 +4,8 @@ using System.Text.Json;
 namespace PlcWiringTrainer.Core.Palette;
 
 /// <summary>사용자가 숨긴 장비와 보조 팔레트의 펼침 상태를 보존합니다.</summary>
+/// <param name="HiddenProfileIds">HiddenProfileIds 계약 값입니다.</param>
+/// <param name="IsPaneOpen">IsPaneOpen 계약 값입니다.</param>
 public sealed record PalettePreferencesV1(
     string[] HiddenProfileIds,
     bool IsPaneOpen = false);
@@ -18,12 +20,14 @@ public sealed class PalettePreferencesStore
 
     private readonly string _path;
 
+    /// <summary>PalettePreferencesStore 작업을 수행합니다.</summary>
     public PalettePreferencesStore(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _path = Path.GetFullPath(path);
     }
 
+    /// <summary>Load 작업을 수행합니다.</summary>
     public PalettePreferencesV1 Load()
     {
         if (!File.Exists(_path))
@@ -44,6 +48,7 @@ public sealed class PalettePreferencesStore
         }
     }
 
+    /// <summary>Save 작업을 수행합니다.</summary>
     public void Save(PalettePreferencesV1 preferences)
     {
         ArgumentNullException.ThrowIfNull(preferences);

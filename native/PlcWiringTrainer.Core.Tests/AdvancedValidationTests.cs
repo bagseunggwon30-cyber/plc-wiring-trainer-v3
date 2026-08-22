@@ -5,6 +5,31 @@ namespace PlcWiringTrainer.Core.Tests;
 
 public sealed class AdvancedValidationTests
 {
+    [Fact]
+    public async Task ValidationIssueOrderingAndTypedTargetsAreDeterministic()
+    {
+        var service = new CircuitValidationService(DeviceProfileCatalog.CreateDefault());
+        WorkshopDocumentV5 document = TestDocuments.WithLamp();
+
+        ValidationResultV5 first = await service.ValidateAsync(document);
+        ValidationResultV5 second = await service.ValidateAsync(document);
+
+        Assert.Equal(
+            first.Issues
+                .OrderBy(issue => issue.Severity)
+                .ThenByDescending(issue => issue.Blocking)
+                .ThenBy(issue => issue.Code),
+            first.Issues);
+        Assert.Equal(
+            first.Issues.Select(issue =>
+                (issue.Code, issue.Severity, issue.Blocking, Targets: string.Join('|', issue.Targets.Select(TargetKey)))),
+            second.Issues.Select(issue =>
+                (issue.Code, issue.Severity, issue.Blocking, Targets: string.Join('|', issue.Targets.Select(TargetKey)))));
+    }
+
+    private static string TargetKey(ValidationTargetV5 target)
+        => $"{target.Kind}:{target.Id}:{target.DeviceId}:{target.TerminalId}";
+
     private readonly CircuitValidationService _service = new(DeviceProfileCatalog.CreateDefault());
 
     [Fact]
@@ -36,13 +61,50 @@ public sealed class AdvancedValidationTests
     {
         WorkshopDocumentV5 document = TestDocuments.WithLamp();
         ConductorV5 first = document.Conductors[0] with { GaugeMm2 = 0 };
-        ConductorV5 second = document.Conductors[1] with { Label = first.Label };
+        ConductorV5 second = document.Conductors[1] with
+        {
+            Label = "서로 다른 표시명",
+            WireNumber = first.WireNumber,
+        };
         document = DocumentHasher.WithContentHash(document with { Conductors = [first, second] });
 
         ValidationResultV5 result = await _service.ValidateAsync(document);
 
         Assert.Contains(result.Issues, issue => issue.Code == "INVALID_CONDUCTOR_GAUGE" && issue.Blocking);
         Assert.Contains(result.Issues, issue => issue.Code == "DUPLICATE_WIRE_NUMBER");
+    }
+
+    [Fact]
+    public async Task CableMembershipAndDrainReferencesMustExistAndAgree()
+    {
+        WorkshopDocumentV5 document = TestDocuments.WithLamp();
+        ConductorV5 assigned = document.Conductors[0] with
+        {
+            CableAssemblyId = "cable-1",
+            Core = "1",
+        };
+        document = DocumentHasher.WithContentHash(document with
+        {
+            Conductors = [assigned, document.Conductors[1]],
+            CableAssemblies =
+            [
+                new CableAssemblyV5(
+                    "cable-1",
+                    "C1",
+                    ["missing-conductor"],
+                    "shielded",
+                    1000,
+                    true,
+                    "missing-drain",
+                    []),
+            ],
+        });
+
+        ValidationResultV5 result = await _service.ValidateAsync(document);
+
+        Assert.Contains(result.Issues, issue => issue.Code == "CABLE_MEMBERSHIP_MISMATCH" && issue.Blocking);
+        Assert.Contains(result.Issues, issue => issue.Code == "UNKNOWN_CABLE_CONDUCTOR" && issue.Blocking);
+        Assert.Contains(result.Issues, issue => issue.Code == "UNKNOWN_DRAIN_CONDUCTOR" && issue.Blocking);
     }
 
     [Fact]

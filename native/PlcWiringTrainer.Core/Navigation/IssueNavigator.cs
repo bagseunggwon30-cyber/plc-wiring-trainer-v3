@@ -3,13 +3,23 @@ using PlcWiringTrainer.Core.Validation;
 
 namespace PlcWiringTrainer.Core.Navigation;
 
+/// <summary>NavigationSelectionKind 값의 종류를 정의합니다.</summary>
 public enum NavigationSelectionKind
 {
+    /// <summary>Conductor 상태를 나타냅니다.</summary>
     Conductor,
+    /// <summary>Terminal 상태를 나타냅니다.</summary>
     Terminal,
+    /// <summary>Device 상태를 나타냅니다.</summary>
     Device,
 }
 
+/// <summary>NavigationTarget 공개 계약을 나타냅니다.</summary>
+/// <param name="Kind">Kind 계약 값입니다.</param>
+/// <param name="Id">Id 계약 값입니다.</param>
+/// <param name="FocusBounds">FocusBounds 계약 값입니다.</param>
+/// <param name="DeviceId">DeviceId 계약 값입니다.</param>
+/// <param name="TerminalId">TerminalId 계약 값입니다.</param>
 public sealed record NavigationTarget(
     NavigationSelectionKind Kind,
     string Id,
@@ -20,6 +30,7 @@ public sealed record NavigationTarget(
 /// <summary>검증 대상의 우선순위를 실제 캔버스 선택과 이동 범위로 해석합니다.</summary>
 public static class IssueNavigator
 {
+    /// <summary>Resolve 작업을 수행합니다.</summary>
     public static NavigationTarget? Resolve(WorkshopDocumentV5 document, ValidationIssueV5 issue)
     {
         ArgumentNullException.ThrowIfNull(document);

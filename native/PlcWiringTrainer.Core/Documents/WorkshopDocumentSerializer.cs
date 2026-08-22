@@ -12,6 +12,7 @@ public static class WorkshopDocumentSerializer
     private static readonly JsonSerializerOptions CompactOptions = CreateOptions(writeIndented: false);
     private static readonly JsonSerializerOptions IndentedOptions = CreateOptions(writeIndented: true);
 
+    /// <summary>Deserialize 작업을 수행합니다.</summary>
     public static WorkshopDocumentV5 Deserialize(string json, bool verifyHash = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(json);
@@ -36,6 +37,7 @@ public static class WorkshopDocumentSerializer
         return document;
     }
 
+    /// <summary>Serialize 작업을 수행합니다.</summary>
     public static string Serialize(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -56,8 +58,10 @@ public static class WorkshopDocumentSerializer
         };
 }
 
+/// <summary>DocumentHasher 값을 제공합니다.</summary>
 public static class DocumentHasher
 {
+    /// <summary>WithContentHash 작업을 수행합니다.</summary>
     public static WorkshopDocumentV5 WithContentHash(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -65,6 +69,7 @@ public static class DocumentHasher
         return document with { ContentHash = hash };
     }
 
+    /// <summary>MatchesContentHash 작업을 수행합니다.</summary>
     public static bool MatchesContentHash(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -72,6 +77,7 @@ public static class DocumentHasher
             && string.Equals(document.ContentHash, ComputeContentHash(document), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>ComputeContentHash 작업을 수행합니다.</summary>
     public static string ComputeContentHash(WorkshopDocumentV5 document)
     {
         ArgumentNullException.ThrowIfNull(document);

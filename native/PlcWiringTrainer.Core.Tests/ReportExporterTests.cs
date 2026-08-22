@@ -54,4 +54,31 @@ public sealed class ReportExporterTests
         Assert.False(artifact.VerifiedPrewire);
         Assert.Equal("application/json", artifact.MediaType);
     }
+
+    [Fact]
+    public async Task PinToPinUsesWireNumberAndTheEffectiveManualColor()
+    {
+        WorkshopDocumentV5 document = TestDocuments.WithLamp();
+        document = DocumentHasher.WithContentHash(document with
+        {
+            Conductors =
+            [
+                document.Conductors[0] with
+                {
+                    Label = "사용자 표시명",
+                    WireNumber = "W777",
+                    Color = "#F97316",
+                    ManualColor = true,
+                },
+            ],
+        });
+        var exporter = new ReportExporter(DeviceProfileCatalog.CreateDefault());
+
+        ReportArtifactV5 artifact = await exporter.ExportAsync(document, null, ReportKindV5.PinToPinCsv);
+        string csv = Encoding.UTF8.GetString(artifact.Content);
+
+        Assert.Contains("W777", csv, StringComparison.Ordinal);
+        Assert.Contains("#F97316", csv, StringComparison.Ordinal);
+        Assert.DoesNotContain("사용자 표시명", csv, StringComparison.Ordinal);
+    }
 }

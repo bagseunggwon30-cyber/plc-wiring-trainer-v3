@@ -7809,7 +7809,27 @@
           "maxConductors": 1
         }
       ],
-      "internalLinks": [],
+      "internalLinks": [
+        { "from": "1", "to": "1'", "kind": "conductive" },
+        { "from": "1", "to": "2", "kind": "conductive" },
+        { "from": "1", "to": "2'", "kind": "conductive" },
+        { "from": "1", "to": "3", "kind": "conductive" },
+        { "from": "1", "to": "3'", "kind": "conductive" },
+        { "from": "1", "to": "4", "kind": "conductive" },
+        { "from": "1", "to": "4'", "kind": "conductive" },
+        { "from": "1", "to": "5", "kind": "conductive" },
+        { "from": "1", "to": "5'", "kind": "conductive" },
+        { "from": "1", "to": "6", "kind": "conductive" },
+        { "from": "1", "to": "6'", "kind": "conductive" },
+        { "from": "1", "to": "7", "kind": "conductive" },
+        { "from": "1", "to": "7'", "kind": "conductive" },
+        { "from": "1", "to": "8", "kind": "conductive" },
+        { "from": "1", "to": "8'", "kind": "conductive" },
+        { "from": "1", "to": "9", "kind": "conductive" },
+        { "from": "1", "to": "9'", "kind": "conductive" },
+        { "from": "1", "to": "10", "kind": "conductive" },
+        { "from": "1", "to": "10'", "kind": "conductive" }
+      ],
       "mount": {
         "tags": [
           "din",
@@ -8146,7 +8166,27 @@
           "maxConductors": 1
         }
       ],
-      "internalLinks": [],
+      "internalLinks": [
+        { "from": "1", "to": "1'", "kind": "conductive" },
+        { "from": "1", "to": "2", "kind": "conductive" },
+        { "from": "1", "to": "2'", "kind": "conductive" },
+        { "from": "1", "to": "3", "kind": "conductive" },
+        { "from": "1", "to": "3'", "kind": "conductive" },
+        { "from": "1", "to": "4", "kind": "conductive" },
+        { "from": "1", "to": "4'", "kind": "conductive" },
+        { "from": "1", "to": "5", "kind": "conductive" },
+        { "from": "1", "to": "5'", "kind": "conductive" },
+        { "from": "1", "to": "6", "kind": "conductive" },
+        { "from": "1", "to": "6'", "kind": "conductive" },
+        { "from": "1", "to": "7", "kind": "conductive" },
+        { "from": "1", "to": "7'", "kind": "conductive" },
+        { "from": "1", "to": "8", "kind": "conductive" },
+        { "from": "1", "to": "8'", "kind": "conductive" },
+        { "from": "1", "to": "9", "kind": "conductive" },
+        { "from": "1", "to": "9'", "kind": "conductive" },
+        { "from": "1", "to": "10", "kind": "conductive" },
+        { "from": "1", "to": "10'", "kind": "conductive" }
+      ],
       "mount": {
         "tags": [
           "din",
@@ -8700,7 +8740,27 @@
           "maxConductors": 1
         }
       ],
-      "internalLinks": [],
+      "internalLinks": [
+        { "from": "1", "to": "1'", "kind": "conductive" },
+        { "from": "1", "to": "2", "kind": "conductive" },
+        { "from": "1", "to": "2'", "kind": "conductive" },
+        { "from": "1", "to": "3", "kind": "conductive" },
+        { "from": "1", "to": "3'", "kind": "conductive" },
+        { "from": "1", "to": "4", "kind": "conductive" },
+        { "from": "1", "to": "4'", "kind": "conductive" },
+        { "from": "1", "to": "5", "kind": "conductive" },
+        { "from": "1", "to": "5'", "kind": "conductive" },
+        { "from": "1", "to": "6", "kind": "conductive" },
+        { "from": "1", "to": "6'", "kind": "conductive" },
+        { "from": "1", "to": "7", "kind": "conductive" },
+        { "from": "1", "to": "7'", "kind": "conductive" },
+        { "from": "1", "to": "8", "kind": "conductive" },
+        { "from": "1", "to": "8'", "kind": "conductive" },
+        { "from": "1", "to": "9", "kind": "conductive" },
+        { "from": "1", "to": "9'", "kind": "conductive" },
+        { "from": "1", "to": "10", "kind": "conductive" },
+        { "from": "1", "to": "10'", "kind": "conductive" }
+      ],
       "mount": {
         "tags": [
           "din",

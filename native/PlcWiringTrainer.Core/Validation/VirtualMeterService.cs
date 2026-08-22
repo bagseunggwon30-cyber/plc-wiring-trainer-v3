@@ -2,8 +2,10 @@ using PlcWiringTrainer.Core.Documents;
 
 namespace PlcWiringTrainer.Core.Validation;
 
+/// <summary>VirtualMeterService 값을 제공합니다.</summary>
 public sealed class VirtualMeterService : IVirtualMeterService
 {
+    /// <summary>MeasureVoltage 작업을 수행합니다.</summary>
     public double? MeasureVoltage(
         CircuitSolutionV5 solution,
         TerminalRefV5 positiveProbe,
