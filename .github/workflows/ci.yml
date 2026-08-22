@@ -22,10 +22,31 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet restore PlcWiringTrainer.slnx
-      - run: dotnet test native\PlcWiringTrainer.Core.Tests\PlcWiringTrainer.Core.Tests.csproj -c Release --no-restore
+      - name: Core tests and coverage
+        run: dotnet test native\PlcWiringTrainer.Core.Tests\PlcWiringTrainer.Core.Tests.csproj -c Release --no-restore --collect:"XPlat Code Coverage" --results-directory artifacts\TestResults\Coverage
+      - name: Enforce Core coverage baseline
+        shell: pwsh
+        run: |
+          $coveragePath = Get-ChildItem artifacts\TestResults\Coverage -Filter coverage.cobertura.xml -Recurse |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+          if (-not $coveragePath) { throw 'coverage.cobertura.xml was not produced' }
+          [xml]$coverage = Get-Content $coveragePath.FullName
+          $lineRate = [double]$coverage.coverage.'line-rate'
+          $branchRate = [double]$coverage.coverage.'branch-rate'
+          if ($lineRate -lt 0.7954) { throw "Core line coverage regressed: $lineRate < 0.7954" }
+          if ($branchRate -lt 0.7441) { throw "Core branch coverage regressed: $branchRate < 0.7441" }
+          "Core coverage: line={0:P2}, branch={1:P2}" -f $lineRate, $branchRate
+      - run: dotnet build PlcWiringTrainer.slnx -c Release --no-restore
       - run: dotnet build native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 --no-restore
       - run: dotnet publish native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts\publish\win-x64 --no-restore
       - run: dotnet format PlcWiringTrainer.slnx --verify-no-changes --no-restore
+      - name: Upload Core coverage
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: core-coverage
+          path: artifacts/TestResults/Coverage/**/coverage.cobertura.xml
       - name: Reject browser runtime files
         shell: pwsh
         run: |
@@ -43,3 +64,136 @@ jobs:
           if (-not (Test-Path artifacts\publish\win-x64\PlcWiringTrainer.pri -PathType Leaf)) {
             throw 'Native PlcWiringTrainer.pri is missing from publish output'
           }
+      - name: Package portable release and SHA-256 manifest
+        shell: pwsh
+        run: |
+          $publishRoot = (Resolve-Path artifacts\publish\win-x64).Path
+          $manifestPath = Join-Path $publishRoot 'SHA256SUMS.txt'
+          Get-ChildItem $publishRoot -File -Recurse |
+            Where-Object FullName -ne $manifestPath |
+            Sort-Object FullName |
+            ForEach-Object {
+              $relative = [IO.Path]::GetRelativePath($publishRoot, $_.FullName).Replace('\', '/')
+              "$(Get-FileHash $_.FullName -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  $relative"
+            } | Set-Content $manifestPath -Encoding utf8NoBOM
+          Compress-Archive -Path "$publishRoot\*" -DestinationPath artifacts\PlcWiringTrainer-4.3.0-win-x64.zip
+      - name: Upload portable release
+        uses: actions/upload-artifact@v6
+        with:
+          name: PlcWiringTrainer-4.3.0-win-x64
+          path: |
+            artifacts/PlcWiringTrainer-4.3.0-win-x64.zip
+            artifacts/publish/win-x64/SHA256SUMS.txt
+
+  windows-ui:
+    if: vars.PLCW_UI_RUNNER_ENABLED == 'true'
+    runs-on: [self-hosted, windows, plc-wiring-ui, display-1920x1080-dpi100]
+    timeout-minutes: 90
+    concurrency:
+      group: plc-wiring-interactive-ui
+      cancel-in-progress: false
+    env:
+      PLCW_POINTER_UI_TESTS: 1
+      PLCW_DISPLAY_PROFILE: display-1920x1080-dpi100
+      PLCW_UI_EVIDENCE_ROOT: ${{ github.workspace }}\artifacts\ui-evidence
+      PLCW_NATIVE_EXE: ${{ github.workspace }}\artifacts\publish\win-x64\PlcWiringTrainer.exe
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore PlcWiringTrainer.slnx
+      - run: dotnet publish native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts\publish\win-x64 --no-restore
+      - name: Run isolated native UI suite ten times
+        shell: pwsh
+        run: |
+          1..10 | ForEach-Object {
+            $run = $_
+            $result = "artifacts\TestResults\UiRun$run"
+            dotnet test native\PlcWiringTrainer.UiTests\PlcWiringTrainer.UiTests.csproj -c Release -p:Platform=x64 --no-restore --logger "trx;LogFileName=ui-run-$run.trx" --results-directory $result
+            if ($LASTEXITCODE -ne 0) { throw "Native UI run $run failed" }
+          }
+      - name: Verify desktop shortcut opens the native window
+        shell: pwsh
+        run: |
+          if (Get-Process PlcWiringTrainer -ErrorAction SilentlyContinue) {
+            throw 'A residual PlcWiringTrainer process exists before shortcut verification'
+          }
+          $shortcutPath = Join-Path $env:PLCW_UI_EVIDENCE_ROOT 'PLC Wiring Trainer.lnk'
+          New-Item -ItemType Directory -Path $env:PLCW_UI_EVIDENCE_ROOT -Force | Out-Null
+          $shell = New-Object -ComObject WScript.Shell
+          $shortcut = $shell.CreateShortcut($shortcutPath)
+          $shortcut.TargetPath = $env:PLCW_NATIVE_EXE
+          $shortcut.WorkingDirectory = Split-Path $env:PLCW_NATIVE_EXE
+          $shortcut.Save()
+          Start-Process -FilePath $shortcutPath
+          $deadline = [DateTime]::UtcNow.AddSeconds(20)
+          do {
+            $process = Get-Process PlcWiringTrainer -ErrorAction SilentlyContinue |
+              Where-Object MainWindowTitle |
+              Select-Object -First 1
+            if ($process) { break }
+            Start-Sleep -Milliseconds 200
+          } while ([DateTime]::UtcNow -lt $deadline)
+          if (-not $process) { throw 'The desktop shortcut did not open a native window' }
+          "shortcutWindowTitle=$($process.MainWindowTitle)" | Set-Content (Join-Path $env:PLCW_UI_EVIDENCE_ROOT 'shortcut.txt')
+          $process.CloseMainWindow() | Out-Null
+          if (-not $process.WaitForExit(5000)) { throw 'The shortcut process did not exit cleanly' }
+      - name: Reject residual native processes
+        if: always()
+        shell: pwsh
+        run: |
+          $residual = Get-Process PlcWiringTrainer -ErrorAction SilentlyContinue
+          if ($residual) {
+            $residual | Select-Object Id, ProcessName, MainWindowTitle | Format-Table | Out-String |
+              Set-Content (Join-Path $env:PLCW_UI_EVIDENCE_ROOT 'residual-processes.txt')
+            throw 'Residual PlcWiringTrainer processes remain after native UI verification'
+          }
+      - name: Upload native UI evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-ui-evidence
+          path: |
+            artifacts/ui-evidence/**
+            artifacts/TestResults/UiRun*/**
+
+  windows-ui-dpi-matrix:
+    if: vars.PLCW_UI_RUNNER_ENABLED == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        profile:
+          - display-1280x720-dpi100
+          - display-1280x720-dpi125
+          - display-1280x720-dpi150
+          - display-1920x1080-dpi125
+          - display-1920x1080-dpi150
+    runs-on: [self-hosted, windows, plc-wiring-ui, "${{ matrix.profile }}"]
+    timeout-minutes: 45
+    concurrency:
+      group: plc-wiring-interactive-ui
+      cancel-in-progress: false
+    env:
+      PLCW_POINTER_UI_TESTS: 1
+      PLCW_DISPLAY_PROFILE: ${{ matrix.profile }}
+      PLCW_UI_EVIDENCE_ROOT: ${{ github.workspace }}\artifacts\ui-evidence\${{ matrix.profile }}
+      PLCW_NATIVE_EXE: ${{ github.workspace }}\artifacts\publish\win-x64\PlcWiringTrainer.exe
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore PlcWiringTrainer.slnx
+      - run: dotnet publish native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts\publish\win-x64 --no-restore
+      - name: Run native UI flow at configured display profile
+        run: dotnet test native\PlcWiringTrainer.UiTests\PlcWiringTrainer.UiTests.csproj -c Release -p:Platform=x64 --no-restore --logger "trx;LogFileName=ui-${{ matrix.profile }}.trx" --results-directory artifacts\TestResults\UiMatrix
+      - name: Upload display-profile evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-ui-${{ matrix.profile }}
+          path: |
+            artifacts/ui-evidence/**
+            artifacts/TestResults/UiMatrix/**

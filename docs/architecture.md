@@ -44,12 +44,17 @@
 
 `WireDraftMachine`은 클릭→클릭과 드래그→놓기를 같은 비영속 상태로 관리합니다. 빈 캔버스 경로점, `Backspace`, `Esc`, 끝단자 재연결은 결선 완료 전 revision을 소비하지 않습니다. `DeviceTransform`은 렌더링, hit-test, 단자 좌표, 문제 이동에서 같은 회전·배율 계산을 사용합니다.
 
-## 4.2 작업공간과 모듈 경계
+## 4.3 작업공간과 모듈 경계
 
 - `WorkbenchShell`은 `패널 배치 / 결선 / 검증` 작업공간을 전환하지만 문서, 선택, viewport와 undo 기록은 하나만 유지합니다.
 - `PaletteController`는 접힘 상태, 검색, 숨김 목록과 빠른 장비 삽입 후보를 관리합니다. 빈 캔버스 우클릭 메뉴를 탐색하는 동안에는 revision을 변경하지 않습니다.
 - `WorkbenchCommandDispatcher`만 문서 변경 명령을 `WorkbenchStore`에 전달합니다. 캔버스는 선택과 편집 의도를 이벤트로 보고합니다.
 - `CanvasViewport`와 Core의 `DeviceTransform`은 화면 배율과 장비 회전 계산의 책임을 분리합니다.
+- `CanvasAssetCache`는 Win2D PNG/SVG 수명을, `CanvasHitTester`는 단자→전선→장비 hit-test를 담당합니다. UIA overlay는 같은 변환으로 장비·단자·전선 ID와 화면 bounds를 노출합니다.
+- `ConnectionAssessmentService`와 `WorkbenchStore`는 신규 결선, 재결선과 점퍼에 동일한 단자 alias, 수용량, 굵기와 전기 안전 정책을 적용합니다. 차단된 후보는 revision이나 undo를 소비하지 않습니다.
+- `WireNumber`는 검증·속성·보고서가 공유하는 실제 선번이며 `Label`은 표시명으로만 사용합니다.
+- 잠근 전선은 당시 렌더링된 내부 경로를 waypoint로 저장하고, 자동 라우터는 전체 장애물을 다시 검사합니다.
+- `PLCW_DATA_ROOT`를 지정한 테스트는 palette, autosave, import backup과 quarantine를 모두 해당 임시 루트 안에 격리합니다.
 
 ## 제거된 실행 기능의 경계
 

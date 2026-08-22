@@ -1,20 +1,22 @@
-# PLC Wiring Trainer 4.2
+# PLC Wiring Trainer 4.3
 
 Windows 전용 네이티브 PLC 결선 교육 도구입니다. UI와 실행 환경은 `WinUI 3 + C# + XAML + Win2D`로 구성하며 HTML, Electron, Chromium, WebView, Three.js를 사용하지 않습니다.
 
-## 4.2 범위
+## 4.3 범위
 
 - `패널 배치 / 결선 / 검증` 작업공간과 하나의 문서 세션
 - 기본 접힘 장비 팔레트와 빈 캔버스 우클릭 빠른 장비 검색
-- 단자 우선 선택, 직교 배선, waypoint, 팬·줌, 경로 잠금과 끝단자 재연결
+- 단자 우선 선택, 다중 장애물 직교 배선, waypoint, 팬·줌, 경로 고정과 안전 판정을 거치는 끝단자 재연결
 - 장비/전선 속성 편집과 undo/redo
 - DC, AC, NPN sinking, PNP sourcing, 2선식 4–20 mA, 물리 결선 검증
 - 검증 문제 클릭 시 문제 전선 선택·중앙 이동·확대·강조
-- `.plcw` schema v5 저장, 원자적 교체, 자동 복구본
+- `.plcw` schema v5 저장, 원자적 교체, 격리 가능한 자동 복구본과 시작 시 복구 선택
 - compact/v1/v2/V3/flat/v4 JSON 가져오기, 원본/알 수 없는 필드 보존, 손상 문서 격리
 - canonical JSON과 pin-to-pin, cable/core, 단자 계획, BOM CSV 보고서
 
-자동화 실습, 미션 실행기, XG-SIM과 3D 렌더러는 4.2.0 실행 코드에 포함하지 않습니다. 기존 v5 문서 필드는 호환을 위해 보존하며 재도입 조건은 [roadmap](docs/roadmap/README.md)에만 기록합니다.
+자동화 실습, 미션 실행기, XG-SIM과 3D 렌더러는 4.3.0 실행 코드에 포함하지 않습니다. 기존 v5 문서 필드는 호환을 위해 보존하며 재도입 조건은 [roadmap](docs/roadmap/README.md)에만 기록합니다.
+
+새 결선, 재결선과 점퍼는 같은 단자 해석·수용량·전기 안전 판정을 사용합니다. 전선 교차는 도통을 만들지 않으며 분기는 실제 단자, 점퍼 또는 분배 장비에서만 구성합니다.
 
 ## 빌드와 테스트
 
