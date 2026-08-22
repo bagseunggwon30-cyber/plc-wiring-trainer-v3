@@ -1,9 +1,25 @@
+using System.Diagnostics;
+using System.Security.Cryptography;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
 
 namespace PlcWiringTrainer.UiTests;
+
+public sealed class IsolatedPointerFactAttribute : FactAttribute
+{
+    public IsolatedPointerFactAttribute()
+    {
+        if (!string.Equals(
+            Environment.GetEnvironmentVariable("PLCW_POINTER_UI_TESTS"),
+            "1",
+            StringComparison.Ordinal))
+        {
+            Skip = "격리된 interactive Windows 세션에서만 물리 포인터 입력을 검증합니다.";
+        }
+    }
+}
 
 [Collection("Native UI")]
 public sealed class NativeWorkbenchUiTests
@@ -13,7 +29,7 @@ public sealed class NativeWorkbenchUiTests
     {
         using var session = NativeAppSession.Start();
 
-        Assert.Equal("PLC Wiring Trainer 4.2.0", session.Window.Title);
+        Assert.Equal("PLC Wiring Trainer 4.3.0", session.Window.Title);
         Assert.NotNull(session.FindByAutomationId("WorkspaceNavigation"));
         Assert.NotNull(session.FindByAutomationId("PlacementWorkspaceButton"));
         Assert.NotNull(session.FindByAutomationId("WiringWorkspaceButton"));
@@ -27,6 +43,9 @@ public sealed class NativeWorkbenchUiTests
             "검증 결선 13종 · 연습 전용 35종 · 준비 중 5종 · 숨김 0종",
             session.FindByAutomationId("PaletteSummaryText").Name);
         Assert.NotNull(session.FindByAutomationId("WiringCanvas"));
+        Assert.NotNull(session.WaitForAutomationId("Device:supply"));
+        Assert.NotNull(session.WaitForAutomationId("Terminal:supply:+24V"));
+        Assert.NotNull(session.WaitForAutomationId("Conductor:plc-common-wrong"));
         Assert.NotNull(session.FindByAutomationId("InspectorTabs"));
         Assert.NotNull(session.FindByAutomationId("SaveDocumentButton"));
         session.SelectTab("결선 검증");
@@ -52,6 +71,7 @@ public sealed class NativeWorkbenchUiTests
 
         TextBox label = session.FindByAutomationId("ConductorLabelBox").AsTextBox();
         Assert.Equal("W004", label.Text);
+        Assert.NotNull(session.FindByAutomationId("ConductorDisplayNameBox"));
         label.Text = "W-ERR-01";
         Assert.Equal("W-ERR-01", label.Text);
     }
@@ -73,29 +93,19 @@ public sealed class NativeWorkbenchUiTests
         Assert.NotNull(session.WaitForAutomationId("PaletteHideButton"));
     }
 
-    [Fact(Skip = "격리된 Windows UI 세션에서만 물리 포인터 입력을 검증합니다.")]
+    [IsolatedPointerFact]
     public void BlankCanvasRightClickSearchPlacesADeviceWithoutOpeningThePalette()
     {
         using var session = NativeAppSession.Start();
         AutomationElement canvas = session.FindByAutomationId("WiringCanvas");
         System.Drawing.Rectangle bounds = canvas.BoundingRectangle;
-        System.Drawing.Point[] candidates =
-        [
-            new(bounds.Right - 80, bounds.Bottom - 80),
-            new(bounds.Left + 80, bounds.Bottom - 80),
-            new(bounds.Right - 80, bounds.Top + 80),
-        ];
-
-        foreach (System.Drawing.Point candidate in candidates)
-        {
-            FlaUI.Core.Input.Mouse.RightClick(candidate);
-            if (WaitUntil(
-                () => session.ExistsByAutomationId("QuickInsertSearchBox"),
-                TimeSpan.FromSeconds(1)))
-            {
-                break;
-            }
-        }
+        string helpText = canvas.HelpText;
+        Assert.StartsWith("blank-local:", helpText, StringComparison.Ordinal);
+        string[] coordinates = helpText["blank-local:".Length..].Split(',');
+        Assert.Equal(2, coordinates.Length);
+        Assert.True(int.TryParse(coordinates[0], out int localX), helpText);
+        Assert.True(int.TryParse(coordinates[1], out int localY), helpText);
+        FlaUI.Core.Input.Mouse.RightClick(new System.Drawing.Point(bounds.Left + localX, bounds.Top + localY));
 
         TextBox search = session.WaitForAutomationId("QuickInsertSearchBox").AsTextBox();
         Assert.False(session.ExistsByAutomationId("DevicePalette"));
@@ -135,16 +145,22 @@ internal sealed class NativeAppSession : IDisposable
 {
     private readonly Application _application;
     private readonly UIA3Automation _automation;
+    private readonly string _executable;
+    private readonly string? _evidenceDirectory;
     private readonly string _settingsDirectory;
 
     private NativeAppSession(
         Application application,
         UIA3Automation automation,
         Window window,
-        string settingsDirectory)
+        string settingsDirectory,
+        string executable,
+        string? evidenceDirectory)
     {
         _application = application;
         _automation = automation;
+        _executable = executable;
+        _evidenceDirectory = evidenceDirectory;
         _settingsDirectory = settingsDirectory;
         Window = window;
     }
@@ -161,8 +177,11 @@ internal sealed class NativeAppSession : IDisposable
             $"plcw-native-ui-{Guid.NewGuid():N}");
         Directory.CreateDirectory(settingsDirectory);
         string settingsPath = Path.Combine(settingsDirectory, "palette.json");
+        string? evidenceDirectory = CreateEvidenceDirectory();
         string? previousSettingsPath = Environment.GetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH");
+        string? previousDataRoot = Environment.GetEnvironmentVariable("PLCW_DATA_ROOT");
         Environment.SetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH", settingsPath);
+        Environment.SetEnvironmentVariable("PLCW_DATA_ROOT", settingsDirectory);
         Application application;
         try
         {
@@ -176,6 +195,7 @@ internal sealed class NativeAppSession : IDisposable
         finally
         {
             Environment.SetEnvironmentVariable("PLCW_PALETTE_SETTINGS_PATH", previousSettingsPath);
+            Environment.SetEnvironmentVariable("PLCW_DATA_ROOT", previousDataRoot);
         }
 
         var automation = new UIA3Automation();
@@ -186,7 +206,13 @@ internal sealed class NativeAppSession : IDisposable
             window = application.GetMainWindow(automation);
             if (window is not null)
             {
-                return new NativeAppSession(application, automation, window, settingsDirectory);
+                return new NativeAppSession(
+                    application,
+                    automation,
+                    window,
+                    settingsDirectory,
+                    executable,
+                    evidenceDirectory);
             }
 
             Thread.Sleep(200);
@@ -292,6 +318,7 @@ internal sealed class NativeAppSession : IDisposable
 
     public void Dispose()
     {
+        TryWriteEvidence();
         try
         {
             if (!_application.HasExited)
@@ -308,6 +335,8 @@ internal sealed class NativeAppSession : IDisposable
                     _application.Kill();
                 }
             }
+
+            AppendCleanupEvidence();
         }
         finally
         {
@@ -318,6 +347,68 @@ internal sealed class NativeAppSession : IDisposable
                 Directory.Delete(_settingsDirectory, recursive: true);
             }
         }
+    }
+
+    private static string? CreateEvidenceDirectory()
+    {
+        string? root = Environment.GetEnvironmentVariable("PLCW_UI_EVIDENCE_ROOT");
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            return null;
+        }
+
+        string directory = Path.Combine(
+            Path.GetFullPath(root),
+            $"{DateTime.UtcNow:yyyyMMddTHHmmssfffZ}-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private void TryWriteEvidence()
+    {
+        if (_evidenceDirectory is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Window.CaptureToFile(Path.Combine(_evidenceDirectory, "window.png"));
+            string tree = string.Join(
+                Environment.NewLine,
+                Window.FindAllDescendants().Select(element =>
+                    $"{element.ControlType}\t{element.AutomationId}\t{SafeName(element)}\t{element.BoundingRectangle}"));
+            File.WriteAllText(Path.Combine(_evidenceDirectory, "uia-tree.txt"), tree);
+
+            var version = FileVersionInfo.GetVersionInfo(_executable);
+            string metadata = string.Join(
+                Environment.NewLine,
+                $"utc={DateTime.UtcNow:O}",
+                $"exe={_executable}",
+                $"fileVersion={version.FileVersion}",
+                $"sha256={Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_executable)))}",
+                $"processId={_application.ProcessId}",
+                $"windowBounds={Window.BoundingRectangle}",
+                $"displayProfile={Environment.GetEnvironmentVariable("PLCW_DISPLAY_PROFILE")}",
+                $"hasExitedBeforeCleanup={_application.HasExited}");
+            File.WriteAllText(Path.Combine(_evidenceDirectory, "run.txt"), metadata);
+        }
+        catch (Exception exception)
+        {
+            File.WriteAllText(Path.Combine(_evidenceDirectory, "evidence-error.txt"), exception.ToString());
+        }
+    }
+
+    private void AppendCleanupEvidence()
+    {
+        if (_evidenceDirectory is null)
+        {
+            return;
+        }
+
+        File.AppendAllText(
+            Path.Combine(_evidenceDirectory, "run.txt"),
+            $"{Environment.NewLine}hasExitedAfterCleanup={_application.HasExited}{Environment.NewLine}");
     }
 
     private static string FindExecutable()
@@ -356,4 +447,5 @@ internal sealed class NativeAppSession : IDisposable
             ? executable
             : throw new FileNotFoundException("테스트할 EXE를 찾지 못했습니다. 먼저 Debug x64 빌드를 실행하십시오.", executable);
     }
+
 }

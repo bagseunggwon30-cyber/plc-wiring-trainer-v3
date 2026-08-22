@@ -98,6 +98,14 @@ internal sealed class CanvasViewport
         return new PointV5(world.X, world.Y);
     }
 
+    public Point WorldToScreen(PointV5 world)
+    {
+        Vector2 screen = Vector2.Transform(
+            new Vector2((float)world.X, (float)world.Y),
+            Matrix);
+        return new Point(screen.X, screen.Y);
+    }
+
     private void CenterOn(double worldX, double worldY, double viewportWidth, double viewportHeight)
     {
         OffsetX = (viewportWidth / 2) - (worldX * Zoom);

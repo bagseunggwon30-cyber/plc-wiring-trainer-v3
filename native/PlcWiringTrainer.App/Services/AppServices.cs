@@ -18,9 +18,12 @@ internal sealed record AppServices(
     public static AppServices CreateDefault()
     {
         DeviceProfileCatalog catalog = DeviceProfileCatalog.CreateDefault();
-        string appData = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PLC Wiring Trainer");
+        string? configuredDataRoot = Environment.GetEnvironmentVariable("PLCW_DATA_ROOT");
+        string appData = string.IsNullOrWhiteSpace(configuredDataRoot)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PLC Wiring Trainer")
+            : Path.GetFullPath(configuredDataRoot);
         var migrator = new WorkshopDocumentMigrator(
             Path.Combine(appData, "Import Backups"),
             Path.Combine(appData, "Quarantine"));

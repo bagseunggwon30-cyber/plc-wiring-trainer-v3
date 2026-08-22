@@ -27,6 +27,10 @@
             PointerWheelChanged="Canvas_PointerWheelChanged"
             RightTapped="Canvas_RightTapped" />
 
+        <Canvas
+            x:Name="AutomationOverlay"
+            IsHitTestVisible="False" />
+
         <Border
             x:Name="WireHint"
             Margin="14"

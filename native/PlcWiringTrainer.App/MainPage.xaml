@@ -76,6 +76,11 @@
                 Click="ResetView_Click"
                 Icon="ZoomIn"
                 Label="화면 맞춤" />
+            <AppBarButton
+                AutomationProperties.AutomationId="CleanupRoutesButton"
+                Click="CleanupRoutes_Click"
+                Icon="AlignLeft"
+                Label="결선 정리" />
             <AppBarToggleButton
                 x:Name="PalettePaneToggle"
                 AutomationProperties.AutomationId="PalettePaneToggle"
@@ -226,6 +231,8 @@
                 BorderThickness="0,1,1,0">
                 <controls:WiringCanvas
                     x:Name="WiringCanvas"
+                    ConductorBatchColorRequested="WiringCanvas_ConductorBatchColorRequested"
+                    ConductorBatchDeleteRequested="WiringCanvas_ConductorBatchDeleteRequested"
                     ConductorEditRequested="WiringCanvas_ConductorEditRequested"
                     DeviceDuplicateRequested="WiringCanvas_DeviceDuplicateRequested"
                     DeviceDropRequested="WiringCanvas_DeviceDropRequested"
@@ -376,6 +383,11 @@
                                 <StackPanel x:Name="ConductorPropertiesPanel" Spacing="10" Visibility="Collapsed">
                                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="전선 속성" />
                                     <TextBox
+                                        x:Name="ConductorDisplayNameBox"
+                                        AutomationProperties.AutomationId="ConductorDisplayNameBox"
+                                        Header="표시명"
+                                        TextChanged="ConductorDisplayNameBox_TextChanged" />
+                                    <TextBox
                                         x:Name="ConductorLabelBox"
                                         AutomationProperties.AutomationId="ConductorLabelBox"
                                         Header="선번"
@@ -384,6 +396,10 @@
                                         x:Name="ConductorColorBox"
                                         Header="색상 (#RRGGBB)"
                                         TextChanged="ConductorColorBox_TextChanged" />
+                                    <CheckBox
+                                        x:Name="ConductorAutomaticColorBox"
+                                        Click="ConductorAutomaticColorBox_Click"
+                                        Content="단자 계약에 따른 자동 전선색" />
                                     <NumberBox
                                         x:Name="ConductorGaugeBox"
                                         Header="굵기 (mm²)"

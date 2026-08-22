@@ -1,22 +1,34 @@
 using PlcWiringTrainer.Core.Documents;
 using PlcWiringTrainer.Core.Validation;
+using PlcWiringTrainer.Core.Wiring;
 using PlcWiringTrainer.Core.Workbench;
 
 namespace PlcWiringTrainer.App.Workbench;
+
+internal sealed record AutosaveRecoveryCandidate(
+    string Path,
+    WorkshopDocumentV5 Document,
+    DateTime LastWriteTimeUtc);
 
 /// <summary>열린 문서와 자동 복구 작업의 수명을 UI 요소에서 분리해 관리합니다.</summary>
 internal sealed class DocumentSessionController : IAsyncDisposable
 {
     private readonly DeviceProfileCatalog _catalog;
     private readonly WorkshopDocumentRepository _repository;
+    private readonly IConnectionAssessmentService _connectionAssessmentService;
     private CancellationTokenSource? _autosaveCancellation;
+    private Task _autosaveTask = Task.CompletedTask;
     private WorkbenchStore? _store;
     private int _lastAutosaveRevision;
 
-    public DocumentSessionController(DeviceProfileCatalog catalog, WorkshopDocumentRepository repository)
+    public DocumentSessionController(
+        DeviceProfileCatalog catalog,
+        WorkshopDocumentRepository repository,
+        IConnectionAssessmentService connectionAssessmentService)
     {
         _catalog = catalog;
         _repository = repository;
+        _connectionAssessmentService = connectionAssessmentService;
     }
 
     public WorkbenchStore Store
@@ -40,6 +52,7 @@ internal sealed class DocumentSessionController : IAsyncDisposable
 
     public async Task ReplaceAsync(WorkshopDocumentV5 document, string? currentPath = null)
     {
+        await StopAutosaveAsync();
         WorkbenchStore? previous = _store;
         if (previous is not null)
         {
@@ -65,9 +78,32 @@ internal sealed class DocumentSessionController : IAsyncDisposable
         CurrentPath = path;
     }
 
+    public async Task<AutosaveRecoveryCandidate[]> FindRecoveryCandidatesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        string[] paths = await _repository.FindAutosavePathsAsync(cancellationToken);
+        var candidates = new List<AutosaveRecoveryCandidate>();
+        foreach (string path in paths)
+        {
+            MigrationResult result = await _repository.LoadAsync(path, cancellationToken);
+            if (result.Document is not null)
+            {
+                candidates.Add(new AutosaveRecoveryCandidate(
+                    path,
+                    result.Document,
+                    File.GetLastWriteTimeUtc(path)));
+            }
+        }
+
+        return [.. candidates.OrderByDescending(candidate => candidate.LastWriteTimeUtc)];
+    }
+
+    public Task DiscardRecoveryAsync(string documentId, CancellationToken cancellationToken = default)
+        => _repository.DeleteAutosaveAsync(documentId, cancellationToken);
+
     public async ValueTask DisposeAsync()
     {
-        CancelAutosave();
+        await StopAutosaveAsync();
         if (_store is not null)
         {
             _store.Changed -= Store_Changed;
@@ -78,7 +114,10 @@ internal sealed class DocumentSessionController : IAsyncDisposable
 
     private void Attach(WorkshopDocumentV5 document)
     {
-        _store = new WorkbenchStore(document, new CircuitValidationService(_catalog));
+        _store = new WorkbenchStore(
+            document,
+            new CircuitValidationService(_catalog),
+            _connectionAssessmentService);
         _store.Changed += Store_Changed;
         _lastAutosaveRevision = 0;
     }
@@ -99,7 +138,7 @@ internal sealed class DocumentSessionController : IAsyncDisposable
     {
         CancelAutosave();
         _autosaveCancellation = new CancellationTokenSource();
-        _ = AutosaveAfterDelayAsync(snapshot, _autosaveCancellation.Token);
+        _autosaveTask = AutosaveAfterDelayAsync(snapshot, _autosaveCancellation.Token);
     }
 
     private async Task AutosaveAfterDelayAsync(WorkshopDocumentV5 snapshot, CancellationToken cancellationToken)
@@ -123,5 +162,21 @@ internal sealed class DocumentSessionController : IAsyncDisposable
         _autosaveCancellation?.Cancel();
         _autosaveCancellation?.Dispose();
         _autosaveCancellation = null;
+    }
+
+    private async Task StopAutosaveAsync()
+    {
+        CancelAutosave();
+        try
+        {
+            await _autosaveTask;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _autosaveTask = Task.CompletedTask;
+        }
     }
 }

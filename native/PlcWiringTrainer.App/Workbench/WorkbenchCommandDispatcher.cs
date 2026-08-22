@@ -17,7 +17,7 @@ internal sealed class WorkbenchCommandDispatcher
 
     public void AddDevice(DeviceInstanceV5 device) => _store().AddDevice(device);
 
-    public void AddConductor(ConductorV5 conductor) => _store().AddConductor(conductor);
+    public ConnectionAssessmentV5 AddConductor(ConductorV5 conductor) => _store().AddConductor(conductor);
 
     public void UpdateDevice(string id, Func<DeviceInstanceV5, DeviceInstanceV5> update)
         => _store().UpdateDevice(id, update);
@@ -29,9 +29,25 @@ internal sealed class WorkbenchCommandDispatcher
 
     public void RemoveConductor(string id) => _store().RemoveConductor(id);
 
-    public void Apply(ConductorEditRequest request)
+    public void RemoveConductors(IReadOnlyCollection<string> ids) => _store().RemoveConductors(ids);
+
+    public void ChangeConductorColors(IReadOnlyCollection<string> ids, string color)
+        => _store().UpdateConductors(ids, conductor => WireRouteEditor.ChangeColor(conductor, color));
+
+    public void ReplaceUnlockedRoutes(IReadOnlyDictionary<string, PointV5[]> routes)
+        => _store().ReplaceUnlockedRoutes(routes);
+
+    public ConnectionAssessmentV5? Apply(ConductorEditRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.Kind is ConductorEditKind.ReconnectStart or ConductorEditKind.ReconnectEnd)
+        {
+            return _store().ReconnectConductor(
+                request.ConductorId,
+                request.Kind == ConductorEditKind.ReconnectStart,
+                request.Terminal ?? throw Missing(nameof(request.Terminal)));
+        }
+
         UpdateConductor(request.ConductorId, conductor => request.Kind switch
         {
             ConductorEditKind.ReplaceWaypoints => conductor with
@@ -45,18 +61,15 @@ internal sealed class WorkbenchCommandDispatcher
                 conductor,
                 request.WaypointIndex,
                 request.Waypoint ?? throw Missing(nameof(request.Waypoint))),
-            ConductorEditKind.ToggleRouteLock => conductor with { RouteLocked = !conductor.RouteLocked },
+            ConductorEditKind.ToggleRouteLock => conductor.RouteLocked
+                ? WireRouteEditor.UnlockRoute(conductor)
+                : WireRouteEditor.LockRoute(
+                    conductor,
+                    request.Waypoints ?? throw Missing(nameof(request.Waypoints))),
             ConductorEditKind.ClearWaypoints => WireRouteEditor.ClearWaypoints(conductor),
-            ConductorEditKind.ReconnectStart => conductor with
-            {
-                Start = request.Terminal ?? throw Missing(nameof(request.Terminal)),
-            },
-            ConductorEditKind.ReconnectEnd => conductor with
-            {
-                End = request.Terminal ?? throw Missing(nameof(request.Terminal)),
-            },
             _ => throw new ArgumentOutOfRangeException(nameof(request)),
         });
+        return null;
     }
 
     private static InvalidOperationException Missing(string member)

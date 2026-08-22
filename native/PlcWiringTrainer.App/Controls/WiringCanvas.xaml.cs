@@ -1,8 +1,6 @@
 using System.Globalization;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Microsoft.Graphics.Canvas;
-using Microsoft.Graphics.Canvas.Svg;
 using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI;
 using Microsoft.Graphics.Canvas.UI.Xaml;
@@ -21,6 +19,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
+using Windows.UI.Core;
 
 namespace PlcWiringTrainer.App.Controls;
 
@@ -48,9 +47,11 @@ public sealed record CanvasQuickInsertRequest(
 public sealed partial class WiringCanvas : UserControl
 {
     private readonly DeviceProfileCatalog _catalog = DeviceProfileCatalog.CreateDefault();
-    private readonly Dictionary<string, CanvasBitmap> _deviceBitmaps = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CanvasSvgDocument> _deviceSvgDocuments = new(StringComparer.Ordinal);
+    private readonly ConnectionAssessmentService _connectionAssessment;
+    private readonly CanvasAssetCache _assetCache = new();
+    private readonly HashSet<string> _selectedConductorIds = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _highlightTimer;
+    private readonly CanvasHitTester _hitTester;
     private readonly WireDraftMachine _wireDraft = new();
     private readonly OrthogonalRoutePlanner _routePlanner = new();
     private readonly CanvasViewport _viewport = new();
@@ -82,6 +83,8 @@ public sealed partial class WiringCanvas : UserControl
     public WiringCanvas()
     {
         InitializeComponent();
+        _connectionAssessment = new ConnectionAssessmentService(_catalog);
+        _hitTester = new CanvasHitTester(_catalog);
         _highlightTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.4) };
         _highlightTimer.Tick += (_, _) =>
         {
@@ -97,6 +100,7 @@ public sealed partial class WiringCanvas : UserControl
         {
             _store = value;
             _selection = CanvasSelection.Empty;
+            _selectedConductorIds.Clear();
             _wireDraft.Cancel();
             _wirePointerWorld = null;
             _reconnectConductorId = null;
@@ -128,13 +132,150 @@ public sealed partial class WiringCanvas : UserControl
 
     public event EventHandler<ConductorEditRequest>? ConductorEditRequested;
 
-    public void Refresh() => NativeCanvas.Invalidate();
+    public event EventHandler<(string[] ConductorIds, string Color)>? ConductorBatchColorRequested;
+
+    public event EventHandler<string[]>? ConductorBatchDeleteRequested;
+
+    public void Refresh()
+    {
+        UpdateAutomationMetadata();
+        NativeCanvas.Invalidate();
+    }
+
+    internal PointV5[] GetRenderedRoute(string conductorId)
+    {
+        if (_store is null)
+        {
+            return [];
+        }
+
+        ConductorV5? conductor = _store.Document.Conductors.FirstOrDefault(item => item.Id == conductorId);
+        return conductor is null ? [] : GetRoutePoints(_store.Document, conductor);
+    }
+
+    internal IReadOnlyDictionary<string, PointV5[]> GetUnlockedRouteWaypoints()
+    {
+        if (_store is null)
+        {
+            return new Dictionary<string, PointV5[]>();
+        }
+
+        return _store.Document.Conductors
+            .Where(conductor => !conductor.RouteLocked)
+            .ToDictionary(
+                conductor => conductor.Id,
+                conductor =>
+                {
+                    PointV5[] route = GetRoutePoints(_store.Document, conductor);
+                    return route.Length > 2 ? route[1..^1] : [];
+                },
+                StringComparer.Ordinal);
+    }
+
+    private void UpdateAutomationMetadata()
+    {
+        if (_store is null || NativeCanvas.ActualWidth <= 0 || NativeCanvas.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        WorkshopDocumentV5 document = _store.Document;
+        Dictionary<string, PointV5[]> routes = document.Conductors.ToDictionary(
+            conductor => conductor.Id,
+            conductor => GetRoutePoints(document, conductor),
+            StringComparer.Ordinal);
+        RebuildAutomationTargets(document, routes);
+
+        for (double y = 48; y < NativeCanvas.ActualHeight - 48; y += 36)
+        {
+            for (double x = 48; x < NativeCanvas.ActualWidth - 48; x += 36)
+            {
+                PointV5 world = ScreenToWorld(new Point(x, y));
+                if (HitTerminal(document, world) is null
+                    && CanvasHitTester.Conductor(
+                        document,
+                        world,
+                        _viewport.Zoom,
+                        conductor => routes[conductor.Id]) is null
+                    && HitDevice(document, world) is null)
+                {
+                    AutomationProperties.SetHelpText(this, $"blank-local:{x:F0},{y:F0}");
+                    return;
+                }
+            }
+        }
+
+        AutomationProperties.SetHelpText(this, "blank-local:unavailable");
+    }
+
+    private void RebuildAutomationTargets(
+        WorkshopDocumentV5 document,
+        Dictionary<string, PointV5[]> routes)
+    {
+        AutomationOverlay.Children.Clear();
+        foreach (DeviceInstanceV5 device in document.Devices)
+        {
+            AddAutomationTarget(
+                $"Device:{device.Id}",
+                $"장비 {device.Label} ({device.Id})",
+                DeviceTransform.AxisAlignedBounds(device));
+            if (!_catalog.TryGet(device.ProfileId, out DeviceProfileV5 profile))
+            {
+                continue;
+            }
+
+            foreach (TerminalDefinitionV5 terminal in profile.Terminals)
+            {
+                PointV5 point = TerminalPoint(device, profile, terminal);
+                AddAutomationTarget(
+                    $"Terminal:{device.Id}:{terminal.Id}",
+                    $"단자 {device.Id}:{terminal.Id}",
+                    new RectV5(point.X - 7, point.Y - 7, 14, 14));
+            }
+        }
+
+        foreach (ConductorV5 conductor in document.Conductors)
+        {
+            PointV5[] route = routes[conductor.Id];
+            if (route.Length == 0)
+            {
+                continue;
+            }
+
+            double left = route.Min(point => point.X);
+            double top = route.Min(point => point.Y);
+            double right = route.Max(point => point.X);
+            double bottom = route.Max(point => point.Y);
+            AddAutomationTarget(
+                $"Conductor:{conductor.Id}",
+                $"전선 {conductor.WireNumber} ({conductor.Id})",
+                new RectV5(left - 5, top - 5, Math.Max(10, right - left + 10), Math.Max(10, bottom - top + 10)));
+        }
+    }
+
+    private void AddAutomationTarget(string automationId, string name, RectV5 worldBounds)
+    {
+        Point topLeft = _viewport.WorldToScreen(new PointV5(worldBounds.X, worldBounds.Y));
+        var target = new Border
+        {
+            Width = Math.Max(1, worldBounds.Width * _viewport.Zoom),
+            Height = Math.Max(1, worldBounds.Height * _viewport.Zoom),
+            Opacity = 0,
+            IsHitTestVisible = false,
+        };
+        AutomationProperties.SetAutomationId(target, automationId);
+        AutomationProperties.SetName(target, name);
+        Canvas.SetLeft(target, topLeft.X);
+        Canvas.SetTop(target, topLeft.Y);
+        AutomationOverlay.Children.Add(target);
+    }
 
     public void ResetView()
     {
         _viewport.Reset(_store?.Document, NativeCanvas.ActualWidth, NativeCanvas.ActualHeight);
 
         UpdateZoomText();
+        UpdateAutomationMetadata();
         NativeCanvas.Invalidate();
     }
 
@@ -152,6 +293,11 @@ public sealed partial class WiringCanvas : UserControl
                 target.TerminalId),
             _ => new CanvasSelection(CanvasSelectionKind.Device, target.Id, target.DeviceId ?? target.Id),
         };
+        _selectedConductorIds.Clear();
+        if (_selection.Kind == CanvasSelectionKind.Conductor)
+        {
+            _selectedConductorIds.Add(_selection.Id);
+        }
         UpdateZoomText();
         _highlightTimer.Stop();
         _highlightTimer.Start();
@@ -159,45 +305,12 @@ public sealed partial class WiringCanvas : UserControl
             ? $"선택된 전선: {target.Id}"
             : $"선택된 대상: {target.Id}");
         SelectionChanged?.Invoke(this, _selection);
+        UpdateAutomationMetadata();
         NativeCanvas.Invalidate();
     }
 
     private void Canvas_CreateResources(CanvasControl sender, CanvasCreateResourcesEventArgs args)
-        => args.TrackAsyncAction(LoadDeviceAssetsAsync(sender).AsAsyncAction());
-
-    private async Task LoadDeviceAssetsAsync(CanvasControl sender)
-    {
-        DisposeDeviceAssets();
-        foreach (DeviceProfileV5 profile in _catalog.ResolvableProfiles.Where(profile => !string.IsNullOrWhiteSpace(profile.AssetPath)))
-        {
-            string assetPath = Path.Combine(
-                AppContext.BaseDirectory,
-                profile.AssetPath.Replace('/', Path.DirectorySeparatorChar));
-            if (!File.Exists(assetPath))
-            {
-                continue;
-            }
-
-            try
-            {
-                if (string.Equals(Path.GetExtension(assetPath), ".svg", StringComparison.OrdinalIgnoreCase))
-                {
-                    string svg = await File.ReadAllTextAsync(assetPath).ConfigureAwait(true);
-                    _deviceSvgDocuments[profile.Id] = CanvasSvgDocument.LoadFromXml(sender, svg);
-                }
-                else
-                {
-                    _deviceBitmaps[profile.Id] = await CanvasBitmap.LoadAsync(sender, assetPath);
-                }
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or COMException)
-            {
-                // 개별 교육용 이미지가 손상돼도 편집 문서와 나머지 카탈로그는 계속 사용할 수 있어야 합니다.
-            }
-        }
-
-        sender.Invalidate();
-    }
+        => args.TrackAsyncAction(_assetCache.LoadAsync(sender, _catalog.ResolvableProfiles).AsAsyncAction());
 
     private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
@@ -223,13 +336,15 @@ public sealed partial class WiringCanvas : UserControl
         if (_wireDraft.Current is { } draft
             && TryGetTerminalPoint(store.Document, draft.Start, out PointV5 pendingPoint))
         {
-            drawing.DrawCircle((float)pendingPoint.X, (float)pendingPoint.Y, 12, Color.FromArgb(255, 250, 204, 21), 3);
+            ConnectionAssessmentV5? assessment = CurrentDraftAssessment();
+            Color previewColor = AssessmentColor(assessment);
+            drawing.DrawCircle((float)pendingPoint.X, (float)pendingPoint.Y, 12, previewColor, 3);
             if (_wirePointerWorld is not null)
             {
                 PointV5[] preview = GetDraftRoutePoints(store.Document, draft, _wirePointerWorld);
                 for (int index = 0; index < preview.Length - 1; index++)
                 {
-                    drawing.DrawLine(ToVector(preview[index]), ToVector(preview[index + 1]), Color.FromArgb(190, 250, 204, 21), 2);
+                    drawing.DrawLine(ToVector(preview[index]), ToVector(preview[index + 1]), previewColor, 2);
                 }
             }
         }
@@ -262,7 +377,7 @@ public sealed partial class WiringCanvas : UserControl
             return;
         }
 
-        bool selected = _selection.Kind == CanvasSelectionKind.Conductor && _selection.Id == conductor.Id;
+        bool selected = _selectedConductorIds.Contains(conductor.Id);
         bool emphasized = selected && _highlightTimer.IsEnabled;
         Color color = ParseColor(conductor.Color, Color.FromArgb(255, 239, 68, 68));
         float width = selected ? 5 : 2.5f;
@@ -280,7 +395,7 @@ public sealed partial class WiringCanvas : UserControl
         }
 
         PointV5 labelPoint = points[points.Length / 2];
-        drawing.DrawText(conductor.Label, (float)labelPoint.X + 5, (float)labelPoint.Y - 20, Color.FromArgb(255, 226, 232, 240));
+        drawing.DrawText(conductor.WireNumber, (float)labelPoint.X + 5, (float)labelPoint.Y - 20, Color.FromArgb(255, 226, 232, 240));
 
         if (selected)
         {
@@ -331,7 +446,7 @@ public sealed partial class WiringCanvas : UserControl
             Color fill = Color.FromArgb(255, 30, 41, 59);
             Color outline = selected ? Color.FromArgb(255, 56, 189, 248) : Color.FromArgb(255, 148, 163, 184);
             var titleFormat = new CanvasTextFormat { FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
-            bool hasAsset = DrawDeviceAsset(drawing, profile?.Id ?? device.ProfileId, x, y, device.Width, device.Height);
+            bool hasAsset = _assetCache.Draw(drawing, profile?.Id ?? device.ProfileId, x, y, device.Width, device.Height);
             if (hasAsset)
             {
                 if (selected)
@@ -374,60 +489,11 @@ public sealed partial class WiringCanvas : UserControl
         }
     }
 
-    private bool DrawDeviceAsset(
-        CanvasDrawingSession drawing,
-        string profileId,
-        double x,
-        double y,
-        double width,
-        double height)
-    {
-        double imageX = x + 3;
-        double imageY = y + 3;
-        double imageWidth = Math.Max(1, width - 6);
-        double imageHeight = Math.Max(1, height - 6);
-        if (_deviceBitmaps.TryGetValue(profileId, out CanvasBitmap? bitmap))
-        {
-            drawing.DrawImage(
-                bitmap,
-                new Rect(imageX, imageY, imageWidth, imageHeight),
-                bitmap.Bounds);
-            return true;
-        }
-
-        if (_deviceSvgDocuments.TryGetValue(profileId, out CanvasSvgDocument? svgDocument))
-        {
-            drawing.DrawSvg(
-                svgDocument,
-                new Size(imageWidth, imageHeight),
-                new Vector2((float)imageX, (float)imageY));
-            return true;
-        }
-
-        return false;
-    }
-
     private void WiringCanvas_Unloaded(object sender, RoutedEventArgs e)
     {
         _highlightTimer.Stop();
-        DisposeDeviceAssets();
+        _assetCache.Clear();
         NativeCanvas.RemoveFromVisualTree();
-    }
-
-    private void DisposeDeviceAssets()
-    {
-        foreach (CanvasBitmap bitmap in _deviceBitmaps.Values)
-        {
-            bitmap.Dispose();
-        }
-
-        foreach (CanvasSvgDocument document in _deviceSvgDocuments.Values)
-        {
-            document.Dispose();
-        }
-
-        _deviceBitmaps.Clear();
-        _deviceSvgDocuments.Clear();
     }
 
     private void Canvas_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -476,8 +542,11 @@ public sealed partial class WiringCanvas : UserControl
         ConductorV5? conductor = HitConductor(store.Document, world);
         if (conductor is not null)
         {
+            bool additiveSelection = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control)
+                & CoreVirtualKeyStates.Down) != 0;
             if (_selection.Kind == CanvasSelectionKind.Conductor
                 && _selection.Id == conductor.Id
+                && !additiveSelection
                 && !conductor.RouteLocked)
             {
                 BeginNewWaypointDrag(store.Document, conductor, world, e.Pointer);
@@ -485,7 +554,7 @@ public sealed partial class WiringCanvas : UserControl
                 return;
             }
 
-            Select(new CanvasSelection(CanvasSelectionKind.Conductor, conductor.Id));
+            SelectConductor(conductor.Id, additiveSelection);
             e.Handled = true;
             return;
         }
@@ -626,6 +695,8 @@ public sealed partial class WiringCanvas : UserControl
             UpdateWireHint();
             NativeCanvas.Invalidate();
         }
+
+        UpdateAutomationMetadata();
     }
 
     private void Canvas_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
@@ -634,6 +705,7 @@ public sealed partial class WiringCanvas : UserControl
         double factor = pointer.Properties.MouseWheelDelta > 0 ? 1.12 : 1 / 1.12;
         _viewport.ZoomAt(pointer.Position, factor);
         UpdateZoomText();
+        UpdateAutomationMetadata();
         NativeCanvas.Invalidate();
         e.Handled = true;
     }
@@ -694,8 +766,40 @@ public sealed partial class WiringCanvas : UserControl
 
     private void Select(CanvasSelection selection)
     {
+        _selectedConductorIds.Clear();
+        if (selection.Kind == CanvasSelectionKind.Conductor)
+        {
+            _selectedConductorIds.Add(selection.Id);
+        }
+
         _selection = selection;
         SelectionChanged?.Invoke(this, selection);
+        NativeCanvas.Invalidate();
+    }
+
+    private void SelectConductor(string conductorId, bool additive)
+    {
+        if (!additive)
+        {
+            _selectedConductorIds.Clear();
+        }
+
+        if (additive && !_selectedConductorIds.Add(conductorId))
+        {
+            _selectedConductorIds.Remove(conductorId);
+        }
+        else
+        {
+            _selectedConductorIds.Add(conductorId);
+        }
+
+        string? primary = _selectedConductorIds.Contains(conductorId)
+            ? conductorId
+            : _selectedConductorIds.Order(StringComparer.Ordinal).FirstOrDefault();
+        _selection = primary is null
+            ? CanvasSelection.Empty
+            : new CanvasSelection(CanvasSelectionKind.Conductor, primary);
+        SelectionChanged?.Invoke(this, _selection);
         NativeCanvas.Invalidate();
     }
 
@@ -710,10 +814,37 @@ public sealed partial class WiringCanvas : UserControl
 
         WireDraftV5? draft = _wireDraft.Current;
         WireHint.Visibility = draft is null ? Visibility.Collapsed : Visibility.Visible;
+        ConnectionAssessmentV5? assessment = CurrentDraftAssessment();
         WireHintText.Text = draft is null
             ? string.Empty
-            : $"{draft.Start.Key} · 경로점 {draft.Waypoints.Length}개 · 빈 곳 클릭, Backspace, Esc";
+            : assessment is null
+                ? $"{draft.Start.Key} · 경로점 {draft.Waypoints.Length}개 · 빈 곳 클릭, Backspace, Esc"
+                : $"{assessment.Disposition} [{assessment.Code}] {assessment.Message} · 점유 "
+                    + $"{assessment.StartOccupancy}/{assessment.StartCapacity} → "
+                    + $"{assessment.EndOccupancy}/{assessment.EndCapacity}";
     }
+
+    private ConnectionAssessmentV5? CurrentDraftAssessment()
+    {
+        if (_store is null || _wireDraft.Current is not { } draft || _wirePointerWorld is null)
+        {
+            return null;
+        }
+
+        TerminalRefV5? destination = HitTerminal(_store.Document, _wirePointerWorld);
+        return destination is null || destination == draft.Start
+            ? null
+            : _connectionAssessment.Assess(_store.Document, draft.Start, destination);
+    }
+
+    private static Color AssessmentColor(ConnectionAssessmentV5? assessment)
+        => assessment?.Disposition switch
+        {
+            ConnectionDispositionV5.Allowed => Color.FromArgb(230, 34, 197, 94),
+            ConnectionDispositionV5.Warning => Color.FromArgb(230, 250, 204, 21),
+            ConnectionDispositionV5.Blocked => Color.FromArgb(230, 239, 68, 68),
+            _ => Color.FromArgb(190, 250, 204, 21),
+        };
 
     private void WiringCanvas_KeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -742,7 +873,17 @@ public sealed partial class WiringCanvas : UserControl
 
         if (e.Key == VirtualKey.Delete && _selection.Kind is CanvasSelectionKind.Device or CanvasSelectionKind.Conductor)
         {
-            SelectionDeleteRequested?.Invoke(this, _selection);
+            if (_selection.Kind == CanvasSelectionKind.Conductor && _selectedConductorIds.Count > 1)
+            {
+                ConductorBatchDeleteRequested?.Invoke(
+                    this,
+                    _selectedConductorIds.Order(StringComparer.Ordinal).ToArray());
+            }
+            else
+            {
+                SelectionDeleteRequested?.Invoke(this, _selection);
+            }
+
             e.Handled = true;
         }
     }
@@ -951,7 +1092,12 @@ public sealed partial class WiringCanvas : UserControl
             return;
         }
 
-        Select(new CanvasSelection(CanvasSelectionKind.Conductor, conductor.Id));
+        if (!_selectedConductorIds.Contains(conductor.Id))
+        {
+            Select(new CanvasSelection(CanvasSelectionKind.Conductor, conductor.Id));
+        }
+
+        bool singleSelected = _selectedConductorIds.Count == 1;
         var flyout = new MenuFlyout();
         var colorMenu = new MenuFlyoutSubItem { Text = "선 색상" };
         foreach ((string label, string color) in new[]
@@ -973,14 +1119,16 @@ public sealed partial class WiringCanvas : UserControl
 
         flyout.Items.Add(colorMenu);
         flyout.Items.Add(new MenuFlyoutSeparator());
-        flyout.Items.Add(MenuItem("현재 위치에 경로점 추가", AddWaypoint_Click, !conductor.RouteLocked));
-        flyout.Items.Add(MenuItem(conductor.RouteLocked ? "경로 잠금 해제" : "경로 잠금", ToggleRouteLock_Click));
-        flyout.Items.Add(MenuItem("경로점 초기화", ResetRoute_Click, !conductor.RouteLocked && conductor.Waypoints.Length > 0));
+        flyout.Items.Add(MenuItem("현재 위치에 경로점 추가", AddWaypoint_Click, singleSelected && !conductor.RouteLocked));
+        flyout.Items.Add(MenuItem(conductor.RouteLocked ? "경로 잠금 해제" : "경로 잠금", ToggleRouteLock_Click, singleSelected));
+        flyout.Items.Add(MenuItem("경로점 초기화", ResetRoute_Click, singleSelected && !conductor.RouteLocked && conductor.Waypoints.Length > 0));
         flyout.Items.Add(new MenuFlyoutSeparator());
-        flyout.Items.Add(MenuItem("시작 단자 재연결", ReconnectStart_Click));
-        flyout.Items.Add(MenuItem("끝 단자 재연결", ReconnectEnd_Click));
+        flyout.Items.Add(MenuItem("시작 단자 재연결", ReconnectStart_Click, singleSelected));
+        flyout.Items.Add(MenuItem("끝 단자 재연결", ReconnectEnd_Click, singleSelected));
         flyout.Items.Add(new MenuFlyoutSeparator());
-        flyout.Items.Add(MenuItem("전선 삭제", DeleteConductor_Click));
+        flyout.Items.Add(MenuItem(
+            singleSelected ? "전선 삭제" : $"선택 전선 {_selectedConductorIds.Count}개 삭제",
+            DeleteConductor_Click));
         flyout.ShowAt(NativeCanvas, new FlyoutShowOptions { Position = e.GetPosition(NativeCanvas) });
         e.Handled = true;
     }
@@ -1042,9 +1190,18 @@ public sealed partial class WiringCanvas : UserControl
             && _selection.Kind == CanvasSelectionKind.Conductor
             && sender is MenuFlyoutItem { Tag: string color })
         {
-            ConductorEditRequested?.Invoke(
-                this,
-                new ConductorEditRequest(ConductorEditKind.ChangeColor, _selection.Id, Color: color));
+            if (_selectedConductorIds.Count > 1)
+            {
+                ConductorBatchColorRequested?.Invoke(
+                    this,
+                    (_selectedConductorIds.Order(StringComparer.Ordinal).ToArray(), color));
+            }
+            else
+            {
+                ConductorEditRequested?.Invoke(
+                    this,
+                    new ConductorEditRequest(ConductorEditKind.ChangeColor, _selection.Id, Color: color));
+            }
         }
     }
 
@@ -1068,9 +1225,13 @@ public sealed partial class WiringCanvas : UserControl
     {
         if (_store is not null && _selection.Kind == CanvasSelectionKind.Conductor)
         {
+            ConductorV5 conductor = _store.Document.Conductors.First(item => item.Id == _selection.Id);
             ConductorEditRequested?.Invoke(
                 this,
-                new ConductorEditRequest(ConductorEditKind.ToggleRouteLock, _selection.Id));
+                new ConductorEditRequest(
+                    ConductorEditKind.ToggleRouteLock,
+                    _selection.Id,
+                    Waypoints: GetRoutePoints(_store.Document, conductor)));
         }
     }
 
@@ -1105,7 +1266,16 @@ public sealed partial class WiringCanvas : UserControl
     {
         if (_selection.Kind == CanvasSelectionKind.Conductor)
         {
-            SelectionDeleteRequested?.Invoke(this, _selection);
+            if (_selectedConductorIds.Count > 1)
+            {
+                ConductorBatchDeleteRequested?.Invoke(
+                    this,
+                    _selectedConductorIds.Order(StringComparer.Ordinal).ToArray());
+            }
+            else
+            {
+                SelectionDeleteRequested?.Invoke(this, _selection);
+            }
         }
     }
 
@@ -1117,49 +1287,17 @@ public sealed partial class WiringCanvas : UserControl
     }
 
     private TerminalRefV5? HitTerminal(WorkshopDocumentV5 document, PointV5 point)
-    {
-        double radius = 13 / _viewport.Zoom;
-        foreach (DeviceInstanceV5 device in document.Devices.Reverse())
-        {
-            if (!_catalog.TryGet(device.ProfileId, out DeviceProfileV5 profile))
-            {
-                continue;
-            }
-
-            foreach (TerminalDefinitionV5 terminal in profile.Terminals)
-            {
-                PointV5 terminalPoint = TerminalPoint(device, profile, terminal);
-                if (Distance(point, terminalPoint) <= radius)
-                {
-                    return new TerminalRefV5(device.Id, terminal.Id);
-                }
-            }
-        }
-
-        return null;
-    }
+        => _hitTester.Terminal(document, point, _viewport.Zoom);
 
     private ConductorV5? HitConductor(WorkshopDocumentV5 document, PointV5 point)
-    {
-        double tolerance = 9 / _viewport.Zoom;
-        foreach (ConductorV5 conductor in document.Conductors.Reverse())
-        {
-            PointV5[] route = GetRoutePoints(document, conductor);
-            for (int index = 0; index < route.Length - 1; index++)
-            {
-                if (DistanceToSegment(point, route[index], route[index + 1]) <= tolerance)
-                {
-                    return conductor;
-                }
-            }
-        }
-
-        return null;
-    }
+        => CanvasHitTester.Conductor(
+            document,
+            point,
+            _viewport.Zoom,
+            conductor => GetRoutePoints(document, conductor));
 
     private static DeviceInstanceV5? HitDevice(WorkshopDocumentV5 document, PointV5 point)
-        => document.Devices.Reverse().FirstOrDefault(device =>
-            DeviceTransform.Contains(device, point));
+        => CanvasHitTester.Device(document, point);
 
     private PointV5[] GetRoutePoints(WorkshopDocumentV5 document, ConductorV5 conductor)
     {
@@ -1179,6 +1317,7 @@ public sealed partial class WiringCanvas : UserControl
             .Where(device => device.Id != conductor.Start.DeviceId && device.Id != conductor.End.DeviceId)
             .Select(DeviceTransform.AxisAlignedBounds)
             .Select(bounds => bounds.Inflate(8))
+            .Concat(RoutingKeepOuts(document))
             .ToArray();
         return _routePlanner.Plan(new RouteRequestV5(
             start,
@@ -1187,7 +1326,10 @@ public sealed partial class WiringCanvas : UserControl
             LeadOutPoint(endDevice, endProfile, endTerminal),
             conductor.Waypoints,
             obstacles,
-            conductor.RouteLocked));
+            conductor.RouteLocked)
+        {
+            ExistingRoutes = ExistingStoredRoutes(document, conductor.Id),
+        });
     }
 
     private PointV5[] GetDraftRoutePoints(WorkshopDocumentV5 document, WireDraftV5 draft, PointV5 pointer)
@@ -1202,6 +1344,7 @@ public sealed partial class WiringCanvas : UserControl
             .Where(item => item.Id != draft.Start.DeviceId)
             .Select(DeviceTransform.AxisAlignedBounds)
             .Select(bounds => bounds.Inflate(8))
+            .Concat(RoutingKeepOuts(document))
             .ToArray();
         return _routePlanner.Plan(new RouteRequestV5(
             start,
@@ -1210,8 +1353,50 @@ public sealed partial class WiringCanvas : UserControl
             pointer,
             draft.Waypoints,
             obstacles,
-            false));
+            false)
+        {
+            ExistingRoutes = ExistingStoredRoutes(document),
+        });
     }
+
+    private PointV5[][] ExistingStoredRoutes(WorkshopDocumentV5 document, string? excludedConductorId = null)
+        => document.Conductors
+            .Where(conductor => conductor.Id != excludedConductorId)
+            .Select(conductor => StoredRoutePolyline(document, conductor))
+            .Where(route => route.Length >= 2)
+            .ToArray();
+
+    private PointV5[] StoredRoutePolyline(WorkshopDocumentV5 document, ConductorV5 conductor)
+    {
+        if (!TryGetTerminalPoint(document, conductor.Start, out PointV5 start)
+            || !TryGetTerminalPoint(document, conductor.End, out PointV5 end))
+        {
+            return [];
+        }
+
+        var route = new List<PointV5> { start };
+        foreach (PointV5 point in conductor.Waypoints.Append(end))
+        {
+            PointV5 previous = route[^1];
+            if (previous.X != point.X && previous.Y != point.Y)
+            {
+                route.Add(new PointV5(point.X, previous.Y));
+            }
+
+            route.Add(point);
+        }
+
+        return route.ToArray();
+    }
+
+    private static IEnumerable<RectV5> RoutingKeepOuts(WorkshopDocumentV5 document)
+        => document.PanelElements
+            .Where(element => element.Kind == PanelElementKind.Door
+                || string.Equals(
+                    element.Properties.GetValueOrDefault("routingKeepOut"),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(element => element.Bounds.Inflate(8));
 
     private bool TryGetTerminalPoint(
         WorkshopDocumentV5 document,
@@ -1318,19 +1503,4 @@ public sealed partial class WiringCanvas : UserControl
     private static double Distance(Point left, Point right)
         => Math.Sqrt(Math.Pow(left.X - right.X, 2) + Math.Pow(left.Y - right.Y, 2));
 
-    private static double DistanceToSegment(PointV5 point, PointV5 start, PointV5 end)
-    {
-        double dx = end.X - start.X;
-        double dy = end.Y - start.Y;
-        if (Math.Abs(dx) < double.Epsilon && Math.Abs(dy) < double.Epsilon)
-        {
-            return Distance(point, start);
-        }
-
-        double t = Math.Clamp(
-            (((point.X - start.X) * dx) + ((point.Y - start.Y) * dy)) / ((dx * dx) + (dy * dy)),
-            0,
-            1);
-        return Distance(point, new PointV5(start.X + (t * dx), start.Y + (t * dy)));
-    }
 }

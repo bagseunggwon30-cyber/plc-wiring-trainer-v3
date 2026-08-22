@@ -33,6 +33,7 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
     private bool _refreshingInspector;
     private bool _refreshingValidationItems;
     private bool _paletteEditMode;
+    private bool _recoveryPromptShown;
     private PointV5 _quickInsertWorld = new(100, 100);
 
     public WorkbenchShell()
@@ -41,7 +42,7 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
         _catalog = services.Catalog;
         _connectionAssessment = services.ConnectionAssessment;
         _reportExporter = services.ReportExporter;
-        _session = new DocumentSessionController(_catalog, services.Repository);
+        _session = new DocumentSessionController(_catalog, services.Repository, _connectionAssessment);
         _session.Changed += Store_Changed;
         _session.AutosaveFailed += Session_AutosaveFailed;
         _palette = services.Palette;
@@ -62,11 +63,12 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
 
     private WorkbenchStore Store => _session.Store;
 
-    private void Page_Loaded(object sender, RoutedEventArgs e)
+    private async void Page_Loaded(object sender, RoutedEventArgs e)
     {
         RefreshFromStore();
         WiringCanvas.ResetView();
         StatusText.Text = "단자를 두 번 눌러 직교 전선을 만들 수 있습니다. 가운데/오른쪽 버튼으로 이동, 휠로 확대합니다.";
+        await OfferAutosaveRecoveryAsync();
     }
 
     private async void Page_Unloaded(object sender, RoutedEventArgs e)
@@ -84,6 +86,81 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
         await ReplaceStoreAsync(CreateEmptyDocument(), null);
         WiringCanvas.ResetView();
         StatusText.Text = "새 v5 문서를 만들었습니다.";
+    }
+
+    private async void CleanupRoutes_Click(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyDictionary<string, PointV5[]> routes = WiringCanvas.GetUnlockedRouteWaypoints();
+        if (routes.Count == 0)
+        {
+            StatusText.Text = "정리할 잠기지 않은 전선이 없습니다.";
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "결선 정리",
+            Content = $"잠기지 않은 전선 {routes.Count}개의 직교 경로를 다시 배치합니다. 한 번의 실행 취소로 되돌릴 수 있습니다.",
+            PrimaryButtonText = "정리 적용",
+            CloseButtonText = "취소",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        _commands.ReplaceUnlockedRoutes(routes);
+        StatusText.Text = $"잠기지 않은 전선 {routes.Count}개의 경로를 정리했습니다.";
+    }
+
+    private async Task OfferAutosaveRecoveryAsync()
+    {
+        if (_recoveryPromptShown)
+        {
+            return;
+        }
+
+        _recoveryPromptShown = true;
+        AutosaveRecoveryCandidate? candidate;
+        try
+        {
+            candidate = (await _session.FindRecoveryCandidatesAsync()).FirstOrDefault();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            StatusText.Text = $"자동 복구본을 확인하지 못했습니다: {exception.Message}";
+            return;
+        }
+        if (candidate is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "자동 복구본 발견",
+            Content = $"{candidate.Document.Name} · rev {candidate.Document.Revision}\n{candidate.LastWriteTimeUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss}\n복구하면 현재 시작 문서 대신 이 작업을 엽니다.",
+            PrimaryButtonText = "복구",
+            SecondaryButtonText = "폐기",
+            CloseButtonText = "현재 문서 유지",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        ContentDialogResult result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            await ReplaceStoreAsync(candidate.Document);
+            await _session.DiscardRecoveryAsync(candidate.Document.DocumentId);
+            WiringCanvas.ResetView();
+            StatusText.Text = $"자동 복구본을 열었습니다: {candidate.Document.Name}";
+        }
+        else if (result == ContentDialogResult.Secondary)
+        {
+            await _session.DiscardRecoveryAsync(candidate.Document.DocumentId);
+            StatusText.Text = "자동 복구본을 폐기했습니다.";
+        }
     }
 
     private async void Open_Click(object sender, RoutedEventArgs e)
@@ -340,7 +417,20 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
     }
 
     private void WiringCanvas_ConductorEditRequested(object? sender, ConductorEditRequest request)
-        => _commands.Apply(request);
+    {
+        ConnectionAssessmentV5? assessment = _commands.Apply(request);
+        if (assessment is null)
+        {
+            return;
+        }
+
+        StatusText.Text = assessment.Disposition switch
+        {
+            ConnectionDispositionV5.Blocked => $"결선 변경 차단 [{assessment.Code}] {assessment.Message}",
+            ConnectionDispositionV5.Warning => $"경고 후 결선 변경 [{assessment.Code}] {assessment.Message}",
+            _ => "전선 끝단을 다시 연결했습니다.",
+        };
+    }
 
     private void QuickInsertFlyout_Opened(object sender, object e)
     {
@@ -408,19 +498,27 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             return;
         }
 
-        int wireNumber = Store.Document.Conductors.Length + 1;
-        _commands.AddConductor(new ConductorV5(
+        string wireNumber = WireNumberAllocator.Next(Store.Document);
+        var conductor = new ConductorV5(
             $"wire-{Guid.NewGuid():N}",
             terminals.Start,
             terminals.End,
             terminals.Waypoints,
-            $"W{wireNumber:000}",
-            "#EF4444",
+            wireNumber,
+            assessment.SuggestedColor,
             0.75,
             false)
         {
+            WireNumber = wireNumber,
             DiagnosticOverride = assessment.RequiresDiagnosticOverride,
-        });
+        };
+        ConnectionAssessmentV5 committed = _commands.AddConductor(conductor);
+        if (committed.Disposition == ConnectionDispositionV5.Blocked)
+        {
+            StatusText.Text = $"결선 차단 [{committed.Code}] {committed.Message}";
+            return;
+        }
+
         StatusText.Text = assessment.Disposition == ConnectionDispositionV5.Warning
             ? $"경고 후 결선 [{assessment.Code}] {assessment.Message}"
             : $"{terminals.Start.Key} ↔ {terminals.End.Key} 전선을 만들었습니다.";
@@ -583,6 +681,20 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
         }
     }
 
+    private void WiringCanvas_ConductorBatchColorRequested(
+        object? sender,
+        (string[] ConductorIds, string Color) request)
+    {
+        _commands.ChangeConductorColors(request.ConductorIds, request.Color);
+        StatusText.Text = $"선택한 전선 {request.ConductorIds.Length}개의 색상을 한 작업으로 변경했습니다.";
+    }
+
+    private void WiringCanvas_ConductorBatchDeleteRequested(object? sender, string[] conductorIds)
+    {
+        _commands.RemoveConductors(conductorIds);
+        StatusText.Text = $"선택한 전선 {conductorIds.Length}개와 케이블 참조를 한 작업으로 삭제했습니다.";
+    }
+
     private void WiringCanvas_DeviceMoveRequested(
         object? sender,
         (string DeviceId, double X, double Y) move)
@@ -668,7 +780,17 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
     {
         if (!_refreshingInspector && _selection.Kind == CanvasSelectionKind.Conductor)
         {
-            _commands.UpdateConductor(_selection.Id, conductor => conductor with { Label = ConductorLabelBox.Text.Trim() });
+            _commands.UpdateConductor(_selection.Id, conductor => conductor with { WireNumber = ConductorLabelBox.Text.Trim() });
+        }
+    }
+
+    private void ConductorDisplayNameBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_refreshingInspector && _selection.Kind == CanvasSelectionKind.Conductor)
+        {
+            _commands.UpdateConductor(
+                _selection.Id,
+                conductor => conductor with { Label = ConductorDisplayNameBox.Text.Trim() });
         }
     }
 
@@ -681,7 +803,31 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             return;
         }
 
-        _commands.UpdateConductor(_selection.Id, conductor => conductor with { Color = ConductorColorBox.Text.ToUpperInvariant() });
+        _commands.UpdateConductor(
+            _selection.Id,
+            conductor => WireRouteEditor.ChangeColor(conductor, ConductorColorBox.Text.ToUpperInvariant()));
+    }
+
+    private void ConductorAutomaticColorBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (_refreshingInspector || _selection.Kind != CanvasSelectionKind.Conductor)
+        {
+            return;
+        }
+
+        _commands.UpdateConductor(_selection.Id, conductor =>
+        {
+            if (ConductorAutomaticColorBox.IsChecked != true)
+            {
+                return conductor with { ManualColor = true };
+            }
+
+            ConnectionAssessmentV5 assessment = _connectionAssessment.AssessConductor(
+                Store.Document,
+                conductor,
+                conductor.Id);
+            return conductor with { ManualColor = false, Color = assessment.SuggestedColor };
+        });
     }
 
     private void ConductorGaugeBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
@@ -700,9 +846,16 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
     {
         if (!_refreshingInspector && _selection.Kind == CanvasSelectionKind.Conductor)
         {
-            _commands.UpdateConductor(
-                _selection.Id,
-                conductor => conductor with { RouteLocked = ConductorLockedBox.IsChecked == true });
+            ConductorV5 conductor = Store.Document.Conductors.Single(item => item.Id == _selection.Id);
+            if (ConductorLockedBox.IsChecked == conductor.RouteLocked)
+            {
+                return;
+            }
+
+            _commands.Apply(new ConductorEditRequest(
+                ConductorEditKind.ToggleRouteLock,
+                conductor.Id,
+                Waypoints: WiringCanvas.GetRenderedRoute(conductor.Id)));
         }
     }
 
@@ -792,8 +945,10 @@ public sealed partial class WorkbenchShell : Page, IAsyncDisposable
             if (inspector.Conductor is { } conductor)
             {
                 ConductorPropertiesPanel.Visibility = Visibility.Visible;
-                ConductorLabelBox.Text = conductor.Label;
+                ConductorDisplayNameBox.Text = conductor.Label;
+                ConductorLabelBox.Text = conductor.WireNumber;
                 ConductorColorBox.Text = conductor.Color;
+                ConductorAutomaticColorBox.IsChecked = !conductor.ManualColor;
                 ConductorGaugeBox.Value = conductor.GaugeMm2;
                 ConductorLockedBox.IsChecked = conductor.RouteLocked;
                 ConductorEndpointsText.Text = $"{conductor.Start.Key} ↔ {conductor.End.Key}";
