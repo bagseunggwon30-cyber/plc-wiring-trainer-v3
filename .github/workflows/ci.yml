@@ -34,8 +34,27 @@ jobs:
           [xml]$coverage = Get-Content $coveragePath.FullName
           $lineRate = [double]$coverage.coverage.'line-rate'
           $branchRate = [double]$coverage.coverage.'branch-rate'
-          if ($lineRate -lt 0.7954) { throw "Core line coverage regressed: $lineRate < 0.7954" }
-          if ($branchRate -lt 0.7441) { throw "Core branch coverage regressed: $branchRate < 0.7441" }
+          if ($lineRate -lt 0.8450) { throw "Core line coverage regressed: $lineRate < 0.8450" }
+          if ($branchRate -lt 0.7700) { throw "Core branch coverage regressed: $branchRate < 0.7700" }
+          $criticalClasses = @(
+            @{ Name = 'PlcWiringTrainer.Core.Workbench.WorkbenchStore'; Line = 0.81; Branch = 0.57 },
+            @{ Name = 'PlcWiringTrainer.Core.Wiring.ConnectionAssessmentService'; Line = 0.81; Branch = 0.73 },
+            @{ Name = 'PlcWiringTrainer.Core.Validation.CircuitValidationService'; Line = 0.78; Branch = 0.78 }
+          )
+          foreach ($expected in $criticalClasses) {
+            $class = $coverage.coverage.packages.package.classes.class |
+              Where-Object name -eq $expected.Name |
+              Select-Object -First 1
+            if (-not $class) { throw "Critical coverage class is missing: $($expected.Name)" }
+            $classLine = [double]$class.'line-rate'
+            $classBranch = [double]$class.'branch-rate'
+            if ($classLine -lt $expected.Line) {
+              throw "Critical class line coverage regressed: $($expected.Name) $classLine < $($expected.Line)"
+            }
+            if ($classBranch -lt $expected.Branch) {
+              throw "Critical class branch coverage regressed: $($expected.Name) $classBranch < $($expected.Branch)"
+            }
+          }
           "Core coverage: line={0:P2}, branch={1:P2}" -f $lineRate, $branchRate
       - run: dotnet build PlcWiringTrainer.slnx -c Release --no-restore
       - run: dotnet build native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 --no-restore
@@ -86,8 +105,9 @@ jobs:
             artifacts/publish/win-x64/SHA256SUMS.txt
 
   windows-ui:
-    if: vars.PLCW_UI_RUNNER_ENABLED == 'true'
-    runs-on: [self-hosted, windows, plc-wiring-ui, display-1920x1080-dpi100]
+    needs: verify
+    environment: isolated-ui
+    runs-on: [self-hosted, windows, x64, plc-wiring-ui, interactive, hyperv, display-1920x1080-dpi100]
     timeout-minutes: 90
     concurrency:
       group: plc-wiring-interactive-ui
@@ -96,14 +116,23 @@ jobs:
       PLCW_POINTER_UI_TESTS: 1
       PLCW_DISPLAY_PROFILE: display-1920x1080-dpi100
       PLCW_UI_EVIDENCE_ROOT: ${{ github.workspace }}\artifacts\ui-evidence
-      PLCW_NATIVE_EXE: ${{ github.workspace }}\artifacts\publish\win-x64\PlcWiringTrainer.exe
+      PLCW_NATIVE_EXE: ${{ github.workspace }}\artifacts\tested-release\PlcWiringTrainer.exe
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - run: dotnet restore PlcWiringTrainer.slnx
-      - run: dotnet publish native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts\publish\win-x64 --no-restore
+      - uses: actions/download-artifact@v6
+        with:
+          name: PlcWiringTrainer-4.3.0-win-x64
+          path: artifacts\download
+      - name: Extract and verify the exact portable artifact
+        shell: pwsh
+        run: |
+          Expand-Archive artifacts\download\PlcWiringTrainer-4.3.0-win-x64.zip artifacts\tested-release
+          .\scripts\ci\Verify-PortableManifest.ps1 -PublishRoot artifacts\tested-release
+          .\scripts\ci\Assert-InteractiveSession.ps1 -Width 1920 -Height 1080 -Dpi 96
       - name: Run isolated native UI suite ten times
         shell: pwsh
         run: |
@@ -149,6 +178,15 @@ jobs:
               Set-Content (Join-Path $env:PLCW_UI_EVIDENCE_ROOT 'residual-processes.txt')
             throw 'Residual PlcWiringTrainer processes remain after native UI verification'
           }
+      - name: Verify UI evidence completeness
+        if: success()
+        shell: pwsh
+        run: |
+          .\scripts\ci\Assert-UiEvidence.ps1 `
+            -EvidenceRoot $env:PLCW_UI_EVIDENCE_ROOT `
+            -MinimumRuns 10 `
+            -DisplayProfile $env:PLCW_DISPLAY_PROFILE `
+            -PortableZip artifacts\download\PlcWiringTrainer-4.3.0-win-x64.zip
       - name: Upload native UI evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -159,7 +197,8 @@ jobs:
             artifacts/TestResults/UiRun*/**
 
   windows-ui-dpi-matrix:
-    if: vars.PLCW_UI_RUNNER_ENABLED == 'true'
+    needs: verify
+    environment: isolated-ui
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -170,7 +209,7 @@ jobs:
           - display-1280x720-dpi150
           - display-1920x1080-dpi125
           - display-1920x1080-dpi150
-    runs-on: [self-hosted, windows, plc-wiring-ui, "${{ matrix.profile }}"]
+    runs-on: [self-hosted, windows, x64, plc-wiring-ui, interactive, hyperv, "${{ matrix.profile }}"]
     timeout-minutes: 45
     concurrency:
       group: plc-wiring-interactive-ui
@@ -179,16 +218,40 @@ jobs:
       PLCW_POINTER_UI_TESTS: 1
       PLCW_DISPLAY_PROFILE: ${{ matrix.profile }}
       PLCW_UI_EVIDENCE_ROOT: ${{ github.workspace }}\artifacts\ui-evidence\${{ matrix.profile }}
-      PLCW_NATIVE_EXE: ${{ github.workspace }}\artifacts\publish\win-x64\PlcWiringTrainer.exe
+      PLCW_NATIVE_EXE: ${{ github.workspace }}\artifacts\tested-release\PlcWiringTrainer.exe
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - run: dotnet restore PlcWiringTrainer.slnx
-      - run: dotnet publish native\PlcWiringTrainer.App\PlcWiringTrainer.App.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained true -o artifacts\publish\win-x64 --no-restore
+      - uses: actions/download-artifact@v6
+        with:
+          name: PlcWiringTrainer-4.3.0-win-x64
+          path: artifacts\download
+      - name: Extract and verify the exact portable artifact
+        shell: pwsh
+        run: |
+          Expand-Archive artifacts\download\PlcWiringTrainer-4.3.0-win-x64.zip artifacts\tested-release
+          .\scripts\ci\Verify-PortableManifest.ps1 -PublishRoot artifacts\tested-release
+          $profile = '${{ matrix.profile }}'
+          if ($profile -notmatch '^display-(\d+)x(\d+)-dpi(100|125|150)$') {
+            throw "Invalid display profile: $profile"
+          }
+          $dpi = switch ([int]$Matches[3]) { 100 { 96 } 125 { 120 } 150 { 144 } }
+          .\scripts\ci\Assert-InteractiveSession.ps1 `
+            -Width ([int]$Matches[1]) -Height ([int]$Matches[2]) -Dpi $dpi
       - name: Run native UI flow at configured display profile
         run: dotnet test native\PlcWiringTrainer.UiTests\PlcWiringTrainer.UiTests.csproj -c Release -p:Platform=x64 --no-restore --logger "trx;LogFileName=ui-${{ matrix.profile }}.trx" --results-directory artifacts\TestResults\UiMatrix
+      - name: Verify display-profile evidence completeness
+        if: success()
+        shell: pwsh
+        run: |
+          .\scripts\ci\Assert-UiEvidence.ps1 `
+            -EvidenceRoot $env:PLCW_UI_EVIDENCE_ROOT `
+            -MinimumRuns 1 `
+            -DisplayProfile $env:PLCW_DISPLAY_PROFILE `
+            -PortableZip artifacts\download\PlcWiringTrainer-4.3.0-win-x64.zip
       - name: Upload display-profile evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -197,3 +260,51 @@ jobs:
           path: |
             artifacts/ui-evidence/**
             artifacts/TestResults/UiMatrix/**
+
+  windows-portable:
+    needs: verify
+    environment: isolated-ui
+    runs-on: [self-hosted, windows, x64, plc-wiring-portable, interactive, hyperv, clean-snapshot, no-dev-sdk, display-1920x1080-dpi100]
+    timeout-minutes: 30
+    concurrency:
+      group: plc-wiring-clean-portable
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v6
+        with:
+          name: PlcWiringTrainer-4.3.0-win-x64
+          path: artifacts\download
+      - name: Extract and verify the exact portable artifact
+        shell: pwsh
+        run: |
+          Expand-Archive artifacts\download\PlcWiringTrainer-4.3.0-win-x64.zip artifacts\tested-release
+          .\scripts\ci\Verify-PortableManifest.ps1 -PublishRoot artifacts\tested-release
+          .\scripts\ci\Assert-InteractiveSession.ps1 -Width 1920 -Height 1080 -Dpi 96
+      - name: Verify shortcut, autosave recovery, clean exit, and isolated data root
+        shell: pwsh
+        run: |
+          .\scripts\ci\Verify-CleanPortable.ps1 `
+            -Executable artifacts\tested-release\PlcWiringTrainer.exe `
+            -DataRoot artifacts\portable-data `
+            -EvidenceRoot artifacts\portable-evidence `
+            -PortableZip artifacts\download\PlcWiringTrainer-4.3.0-win-x64.zip
+      - name: Upload clean portable evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-portable-evidence
+          path: artifacts/portable-evidence/**
+
+  release-gate:
+    if: always()
+    needs: [verify, windows-ui, windows-ui-dpi-matrix, windows-portable]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject missing, skipped, cancelled, or failed verification
+        shell: bash
+        run: |
+          test "${{ needs.verify.result }}" = "success"
+          test "${{ needs.windows-ui.result }}" = "success"
+          test "${{ needs.windows-ui-dpi-matrix.result }}" = "success"
+          test "${{ needs.windows-portable.result }}" = "success"
